@@ -229,6 +229,66 @@ app.get('/api/health/deep', async (_req, res) => {
 });
 
 // ============================================================
+// ROUTES: Hive Control (Kill Switch)
+// ============================================================
+
+app.post('/api/hive/halt', async (_req, res) => {
+  console.log('[QUEEN] ⚠️  HIVE HALT TRIGGERED — stopping all nodes');
+  activity.log({ type: 'hive_halt', reason: 'operator triggered' });
+
+  // Cancel all running workflows
+  for (const [id, run] of runningWorkflows) {
+    run.status = 'halted';
+    activity.log({ type: 'workflow_halted', workflow_id: id });
+  }
+  runningWorkflows.clear();
+
+  // Reject all pending approvals
+  for (const appr of approvals.pending()) {
+    approvals.reject(appr.id, 'Hive halt — all pending approvals rejected');
+  }
+
+  // Send HALT to every online node (set contribution to 0, drop tasks)
+  const results = [];
+  for (const [nodeId, node] of nodes) {
+    node.status = 'halted';
+    const addr = node.addr || node.config?.addr;
+    if (!addr) { results.push({ node_id: nodeId, status: 'no_addr' }); continue; }
+
+    const nodeUrl = `http://${addr.replace(/^:/, 'localhost')}`;
+    try {
+      await fetch(`${nodeUrl}/contribution`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: 0 }),
+        signal: AbortSignal.timeout(3000),
+      });
+      results.push({ node_id: nodeId, status: 'halted' });
+    } catch (err) {
+      results.push({ node_id: nodeId, status: 'unreachable', error: err.message });
+    }
+  }
+
+  // Sync LiteLLM to remove all local endpoints
+  try { await syncLitellmConfig(); } catch { /* best effort */ }
+
+  console.log(`[QUEEN] Hive halted. ${results.filter(r => r.status === 'halted').length}/${results.length} nodes stopped.`);
+  res.json({ halted: true, nodes: results, workflows_cancelled: 0, approvals_rejected: approvals.pending().length });
+});
+
+app.post('/api/hive/resume', (_req, res) => {
+  console.log('[QUEEN] Hive resuming — nodes will re-register via heartbeat');
+  activity.log({ type: 'hive_resume' });
+
+  for (const [_nodeId, node] of nodes) {
+    if (node.status === 'halted') node.status = 'online';
+  }
+
+  scheduleLitellmSync();
+  res.json({ resumed: true });
+});
+
+// ============================================================
 // ROUTES: Node Registry
 // ============================================================
 

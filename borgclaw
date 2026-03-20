@@ -260,9 +260,31 @@ cmd_help() {
 # DISPATCH
 # ============================================================
 
+cmd_halt() {
+  warn "⚠️  HIVE HALT — stopping all nodes and cancelling all work"
+  local response
+  response=$(curl -s -X POST "http://localhost:${QUEEN_PORT}/api/hive/halt" 2>/dev/null)
+  if [ $? -eq 0 ]; then
+    ok "Hive halted."
+    echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
+  else
+    err "Queen unreachable — cannot halt remotely. Kill processes manually:"
+    echo "  pkill -f 'node.*server.js'   # Kill Queen"
+    echo "  pkill -f 'the-claw'          # Kill local Claw"
+  fi
+}
+
+cmd_resume() {
+  info "Resuming hive operations..."
+  curl -s -X POST "http://localhost:${QUEEN_PORT}/api/hive/resume" | python3 -m json.tool 2>/dev/null
+  ok "Hive resumed. Nodes will re-register via heartbeat."
+}
+
 case "${1:-help}" in
   start)     cmd_start ;;
   stop)      cmd_stop ;;
+  halt)      cmd_halt ;;
+  resume)    cmd_resume ;;
   status)    cmd_status ;;
   dashboard) cmd_dashboard ;;
   nodes)     cmd_nodes ;;
