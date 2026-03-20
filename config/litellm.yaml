@@ -143,5 +143,9 @@ router_settings:
 litellm_settings:
   max_budget: 55          # Hard monthly cap across all Tier 4 usage (USD)
   budget_duration: monthly
+  cache: true
+  cache_params:
+    type: "local"         # In-process, zero new services. Catches identical prompts.
+    ttl: 3600             # 1 hour — morning briefings, repeated scans skip the LLM
   success_callback: []
   failure_callback: []
