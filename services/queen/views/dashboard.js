@@ -36,12 +36,13 @@ export default function renderDashboard(data) {
   }
 
   const nodeRows = nodes.length === 0
-    ? `<tr><td colspan="6" class="empty-row">── NO NODES REGISTERED ── run bootstrap.sh on a machine to join the hive</td></tr>`
+    ? `<tr><td colspan="8" class="empty-row">── NO NODES REGISTERED ── run bootstrap.sh on a machine to join the hive</td></tr>`
     : nodes.map(n => `<tr class="data-row">
-        <td>${statusDot(n.status)} <span class="node-id">${escHtml(n.node_id || 'unknown')}</span></td>
+        <td>${statusDot(n.status)} <span class="node-id">${escHtml(n.node_id || 'unknown')}</span>${n.hostname ? `<br><span class="dim" style="font-size:9px">${escHtml(n.hostname)}</span>` : ''}</td>
         <td>${escHtml(n.role || '—')}</td>
         <td class="dim">${escHtml(n.profile || '—')}</td>
         <td>${statusDot(n.status)} ${escHtml(n.status)}</td>
+        <td class="dim" style="font-size:10px">${n.ip ? escHtml(n.ip) : '—'}${n.connection_speed ? `<br><span style="color:var(--cyan);font-size:9px">${escHtml(n.connection_speed)}</span>` : ''}</td>
         <td class="dim">${escHtml(n.age || n.last_heartbeat || 'never')}</td>
         <td class="caps">${Array.isArray(n.capabilities) ? n.capabilities.map(c => `<span class="cap-tag">${escHtml(c)}</span>`).join(' ') : '—'}</td>
       </tr>`).join('');
@@ -793,6 +794,7 @@ input[type="range"].dial:disabled {
             <th>ROLE</th>
             <th>PROFILE</th>
             <th>STATUS</th>
+            <th>ADDRESS</th>
             <th>LAST HB</th>
             <th>CAPABILITIES</th>
           </tr>

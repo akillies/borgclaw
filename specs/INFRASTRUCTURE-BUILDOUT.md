@@ -1,8 +1,8 @@
-# AK-OS Local Infrastructure Buildout
+# Local Infrastructure Buildout
 ## "Project Assimilator" — The Home AI Cluster Blueprint
 **Created:** 2026-03-14 | **Status:** Research + Design Complete, Ready to Spike
 
-> **The vision:** AK-OS is Jarvis (always-on operational layer). The Ansible is Cerebro (sense-making layer). The home cluster makes Jarvis literal — running 24/7 on hardware Alexander already owns, dispatching to cloud Cerebro (Claude) only when deep reasoning is needed. A USB installer ("The Assimilator") can turn any machine at home into a new node in minutes.
+> **The vision:** A personal AI OS is the always-on operational layer. The home cluster makes it literal — running 24/7 on hardware you already own, dispatching to cloud APIs only when deep reasoning is needed. A USB installer ("The Assimilator") can turn any machine at home into a new node in minutes.
 
 ---
 
@@ -11,7 +11,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    LAYER 3: ORCHESTRATION                     │
-│         Paperclip / LangGraph / Egregore Spine               │
+│         Paperclip / LangGraph / Agent Spine                   │
 │   Agent definitions, task routing, budgets, audit trail       │
 │   "The Board of Directors"                                    │
 ├─────────────────────────────────────────────────────────────┤
@@ -23,7 +23,7 @@
 │   LAYER 1: COMPUTE   │                                       │
 │                      │                                       │
 │  ┌─────────────┐    │    ┌─────────────┐                    │
-│  │  MAC MINI   │    │    │   RYZEN     │    ┌──────────┐   │
+│  │  MAC MINI   │    │    │   GPU TOWER │    ┌──────────┐   │
 │  │  M4 Pro     │    │    │   + 3070    │    │  CLOUD   │   │
 │  │  24GB RAM   │    │    │   32GB RAM  │    │  Claude  │   │
 │  │             │    │    │             │    │  API     │   │
@@ -39,7 +39,8 @@
 
          ┌──────────────────────────────────┐
          │        SHARED STATE LAYER         │
-         │    akos/ folder (Markdown files)  │
+         │    knowledge base folder           │
+         │    (Markdown files)               │
          │    Git sync ↔ Google Drive sync   │
          │    Same files, any node reads     │
          └──────────────────────────────────┘
@@ -47,15 +48,15 @@
 
 ### What each layer does:
 
-**Layer 1 — Compute nodes.** Each machine runs Ollama (or vLLM on the Ryzen). They expose OpenAI-compatible HTTP endpoints on the LAN. They don't know about each other. They just serve models.
+**Layer 1 — Compute nodes.** Each machine runs Ollama (or vLLM on the GPU tower). They expose OpenAI-compatible HTTP endpoints on the LAN. They don't know about each other. They just serve models.
 
 **Layer 2 — Gateway.** A single endpoint (`http://llm-gateway:8000`) that all agents talk to. Routes requests based on `model` name:
 - `model="fast"` → Mac Mini (7B, instant response, cheap)
-- `model="deep"` → Ryzen/3070 (14B, heavier reasoning)
+- `model="deep"` → GPU tower (14B, heavier reasoning)
 - `model="frontier"` → Claude API (full context, writing, foresight)
 - `model="embed"` → whichever node runs the embedding model
 
-**Layer 3 — Orchestration.** The brain. Defines agents, assigns tasks, tracks budgets, maintains audit trails. This is where Paperclip's governance model (or LangGraph/Egregore) lives. Agents are defined as folders with JSON configs and skill files — the same pattern AK-OS skills already follow.
+**Layer 3 — Orchestration.** The brain. Defines agents, assigns tasks, tracks budgets, maintains audit trails. This is where Paperclip's governance model (or LangGraph) lives. Agents are defined as folders with JSON configs and skill files — the same pattern knowledge-base skills already follow.
 
 ---
 
@@ -84,7 +85,7 @@ Step 3: Test it works
 ─────────────────────
   curl http://localhost:11434/api/chat -d '{
     "model": "qwen2.5:7b",
-    "messages": [{"role": "user", "content": "Hello from AK-OS"}]
+    "messages": [{"role": "user", "content": "Hello from BorgClaw"}]
   }'
 
   If you get a response, your first node is live.
@@ -120,15 +121,15 @@ Step 5: Pull an embedding model (for future RAG)
   Now you have local embeddings for vector search later.
 ```
 
-**✅ After Phase A:** You have a local LLM running 24/7 on your Mac Mini. It can answer questions, call tools, and generate embeddings. Total cost: $0. Total time: 30 minutes.
+**After Phase A:** You have a local LLM running 24/7 on your Mac Mini. It can answer questions, call tools, and generate embeddings. Total cost: $0. Total time: 30 minutes.
 
 ---
 
-### Phase B: "Two Brains" — Add the Ryzen Node
+### Phase B: "Two Brains" — Add the GPU Tower Node
 **Time: 1 hour. Cost: $0.**
 
 ```
-Step 6: Install Ollama on Ryzen (Windows or WSL2)
+Step 6: Install Ollama on GPU tower (Windows or WSL2)
 ─────────────────────────────────────────────────
   Windows: Download installer from https://ollama.com/download/windows
   WSL2: Same curl command as Mac
@@ -149,7 +150,7 @@ Step 8: Expose Ollama to the LAN
     OLLAMA_HOST=0.0.0.0:11434
 
   Restart Ollama. Now any machine on your home network can
-  reach it at http://<ryzen-ip>:11434
+  reach it at http://<tower-ip>:11434
 
 Step 9: Do the same on Mac Mini
 ───────────────────────────────
@@ -161,7 +162,7 @@ Step 9: Do the same on Mac Mini
 Step 10: Test cross-node communication
 ──────────────────────────────────────
   From the Mac Mini:
-    curl http://<ryzen-ip>:11434/api/chat -d '{
+    curl http://<tower-ip>:11434/api/chat -d '{
       "model": "qwen2.5:14b-instruct-q4_K_M",
       "messages": [{"role": "user", "content": "Explain quantum decoherence in 2 sentences"}]
     }'
@@ -169,7 +170,7 @@ Step 10: Test cross-node communication
   If you get a response, your two nodes can talk.
 ```
 
-**✅ After Phase B:** Two LLM nodes on your LAN. Fast model on Mac, deep model on Ryzen. They can talk to each other. Total new cost: $0.
+**After Phase B:** Two LLM nodes on your LAN. Fast model on Mac, deep model on tower. They can talk to each other. Total new cost: $0.
 
 ---
 
@@ -189,8 +190,8 @@ Step 12: Configure routing
       server 127.0.0.1:11434;
   }
 
-  upstream ryzen_llm {
-      server <ryzen-ip>:11434;
+  upstream tower_llm {
+      server <tower-ip>:11434;
   }
 
   server {
@@ -203,7 +204,7 @@ Step 12: Configure routing
 
       # Explicit deep reasoning route
       location /deep/ {
-          proxy_pass http://ryzen_llm/;
+          proxy_pass http://tower_llm/;
       }
   }
 
@@ -224,14 +225,14 @@ Step 14: Test the gateway
     "messages": [{"role": "user", "content": "quick test"}]
   }'
 
-  # Deep route (Ryzen):
+  # Deep route (tower):
   curl http://localhost:8000/deep/api/chat -d '{
     "model": "qwen2.5:14b-instruct-q4_K_M",
     "messages": [{"role": "user", "content": "deep test"}]
   }'
 ```
 
-**✅ After Phase C:** Single endpoint at `http://mac-mini:8000`. Any agent, any tool, any script on your network talks to one URL. The gateway decides where it goes. Total cost still: $0.
+**After Phase C:** Single endpoint at `http://mac-mini:8000`. Any agent, any tool, any script on your network talks to one URL. The gateway decides where it goes. Total cost still: $0.
 
 ---
 
@@ -250,9 +251,9 @@ Step 15: Install Paperclip on Mac Mini
   → Dashboard at http://localhost:3100 (React UI)
   → Embedded PostgreSQL auto-created. No setup.
 
-Step 16: Define AK-OS as a "company" in Paperclip
-──────────────────────────────────────────────────
-  Create agents that map to AK-OS functions:
+Step 16: Define your personal AI OS as a "company" in Paperclip
+──────────────────────────────────────────────────────────────────
+  Create agents that map to your operating system's functions:
 
   AGENT: jarvis-router
     Role: "Chief of Staff"
@@ -265,12 +266,12 @@ Step 16: Define AK-OS as a "company" in Paperclip
     Role: "Chief Intelligence Officer"
     Model: frontier (Claude API)
     Job: Deep research. Signal analysis. Foresight synthesis.
-         Boundary Layer drafting. Ansible methodology work.
+         Content platform drafting. Methodology work.
     Budget: $X/month (API costs)
 
   AGENT: ops-handler
     Role: "Operations Manager"
-    Model: deep (Ryzen, 14B)
+    Model: deep (GPU tower, 14B)
     Job: Code generation. File operations. Data processing.
          Template filling. Structured output.
     Budget: Unlimited (local)
@@ -278,14 +279,14 @@ Step 16: Define AK-OS as a "company" in Paperclip
   AGENT: comms-drafter
     Role: "Communications Director"
     Model: frontier (Claude API)
-    Job: Draft emails, LinkedIn posts, follow-ups.
-         Requires Alexander's voice (needs full context).
+    Job: Draft emails, social posts, follow-ups.
+         Requires voice/brand context (needs full context).
     Budget: $X/month
 
   AGENT: sentinel
     Role: "Night Watch"
     Model: fast (Mac Mini)
-    Job: Runs 24/7. Monitors Gmail for expert network opps.
+    Job: Runs 24/7. Monitors inbox for opportunities.
          Checks calendar for upcoming meetings needing prep.
          Fires alerts when something needs attention.
     Budget: Unlimited (local, always on)
@@ -294,7 +295,7 @@ Step 17: Define skill folders
 ─────────────────────────────
   Each agent gets a folder:
 
-  akos/agents/
+  knowledge-base/agents/
   ├── jarvis-router/
   │   ├── agent.json          ← role, model, budget, triggers
   │   ├── instructions.md     ← system prompt / personality
@@ -322,7 +323,7 @@ Step 17: Define skill folders
           ├── expert-network-monitor.json
           └── stall-detector.json
 
-  This IS the AK-OS skill-folder pattern, just formalized
+  This IS the knowledge-base skill-folder pattern, just formalized
   with JSON configs that any orchestrator can discover.
 
 Step 18: Wire agents to the gateway
@@ -334,7 +335,7 @@ Step 18: Wire agents to the gateway
   The orchestrator (Paperclip) handles the rest.
 ```
 
-**✅ After Phase D:** You have a multi-agent system running on your home network. Agents are defined as folders. Orchestration tracks budgets and audit trails. Jarvis runs 24/7 on the Mac Mini for free. Cerebro (Claude) is called only when needed.
+**After Phase D:** You have a multi-agent system running on your home network. Agents are defined as folders. Orchestration tracks budgets and audit trails. Jarvis runs 24/7 on the Mac Mini for free. Cloud APIs are called only when needed.
 
 ---
 
@@ -345,13 +346,13 @@ Step 18: Wire agents to the gateway
 Step 19: Create the Assimilator script
 ───────────────────────────────────────
   A single bash script on a USB drive (or hosted on your LAN)
-  that turns any machine into an AK-OS node:
+  that turns any machine into a BorgClaw node:
 
   #!/bin/bash
-  # AK-OS ASSIMILATOR v1.0
+  # BORGCLAW ASSIMILATOR v1.0
   # Plug in. Run. Machine joins the hive.
 
-  echo "🔮 AK-OS ASSIMILATOR"
+  echo "BORGCLAW ASSIMILATOR"
   echo "===================="
 
   # Detect hardware
@@ -408,7 +409,7 @@ Step 19: Create the Assimilator script
   HOSTNAME=$(hostname)
   IP=$(hostname -I 2>/dev/null | awk '{print $1}' || ipconfig getifaddr en0)
 
-  cat > /tmp/akos-node-registration.json << EOF
+  cat > /tmp/borgclaw-node-registration.json << EOF
   {
     "node": "$HOSTNAME",
     "ip": "$IP",
@@ -422,21 +423,21 @@ Step 19: Create the Assimilator script
   EOF
 
   echo ""
-  echo "✅ NODE ASSIMILATED"
+  echo "NODE ASSIMILATED"
   echo "   Host: $HOSTNAME ($IP:11434)"
   echo "   Profile: $PROFILE"
   echo "   Model: $MODEL"
   echo ""
   echo "Next: Add this node to the gateway config."
-  echo "Registration file: /tmp/akos-node-registration.json"
+  echo "Registration file: /tmp/borgclaw-node-registration.json"
   echo ""
-  echo "Test: curl http://$IP:11434/api/chat -d '{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello from AK-OS\"}]}'"
+  echo "Test: curl http://$IP:11434/api/chat -d '{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello from BorgClaw\"}]}'"
 
 Step 20: Put it on a USB drive
 ──────────────────────────────
   USB drive contents:
 
-  AKOS-ASSIMILATOR/
+  BORGCLAW-ASSIMILATOR/
   ├── assimilate.sh           ← The script above
   ├── assimilate.bat          ← Windows wrapper (calls WSL or downloads Ollama)
   ├── README.md               ← "Plug in. Run assimilate.sh. Done."
@@ -448,22 +449,22 @@ Step 20: Put it on a USB drive
       └── register-node.sh    ← Auto-update nginx upstream with new node
 ```
 
-**✅ After Phase E:** You have a USB drive. Plug it into any machine in your house. Run one script. It detects the hardware, installs Ollama, pulls the right model for that machine's capabilities, and registers itself with the gateway. 5 minutes, zero thinking.
+**After Phase E:** You have a USB drive. Plug it into any machine in your house. Run one script. It detects the hardware, installs Ollama, pulls the right model for that machine's capabilities, and registers itself with the gateway. 5 minutes, zero thinking.
 
 ---
 
-## HOW THIS MAPS TO AK-OS
+## HOW THIS MAPS TO A PERSONAL AI OS
 
-| AK-OS Concept | Local Infrastructure Equivalent |
+| AI OS Concept | Local Infrastructure Equivalent |
 |---------------|--------------------------------|
 | Jarvis (operational layer) | Mac Mini always-on + sentinel agent + Paperclip orchestration |
 | Cerebro (sense-making) | Claude API, called by jarvis-router when deep reasoning needed |
-| Shared state | `akos/` folder, git-synced across nodes, Drive-synced to cloud |
-| Skill folders | `akos/agents/<name>/skills/` — discoverable by any orchestrator |
-| Law Two (draft-then-approve) | Paperclip governance: agents can't act without board (Alexander) approval |
+| Shared state | knowledge base folder, git-synced across nodes, Drive-synced to cloud |
+| Skill folders | `agents/<name>/skills/` — discoverable by any orchestrator |
+| Law Two (draft-then-approve) | Paperclip governance: agents can't act without operator approval |
 | Law Five (direct tooling) | Local models = no cloud dependency for routine tasks |
-| Portability | Assimilator USB = any machine joins in 5 minutes. akos/ folder is the brain, nodes are disposable |
-| Energy-aware routing | Gateway routes by task type: quick → Mac (free, instant), deep → Ryzen, frontier → Claude (costs money) |
+| Portability | Assimilator USB = any machine joins in 5 minutes. knowledge base folder is the brain, nodes are disposable |
+| Energy-aware routing | Gateway routes by task type: quick → Mac (free, instant), deep → tower, frontier → Claude (costs money) |
 
 ---
 
@@ -472,7 +473,7 @@ Step 20: Put it on a USB drive
 | Component | Monthly Cost |
 |-----------|-------------|
 | Mac Mini running 24/7 | ~$5-8 electricity |
-| Ryzen on-demand | ~$2-3 electricity (only when called) |
+| GPU tower on-demand | ~$2-3 electricity (only when called) |
 | Ollama | $0 (open source) |
 | nginx | $0 |
 | Paperclip | $0 (open source, self-hosted) |
@@ -496,12 +497,12 @@ These are Layer 3 (orchestration) and integration problems, not infrastructure p
 
 ## SEQUENCE: WHAT TO DO FIRST
 
-The minimum viable Jarvis is Phase A + B + C. That's a Saturday afternoon project:
+The minimum viable setup is Phase A + B + C. That's a Saturday afternoon project:
 
 1. Install Ollama on Mac Mini (10 min)
 2. Pull qwen2.5:7b (5 min download)
 3. Test it works (2 min)
-4. Install Ollama on Ryzen (10 min)
+4. Install Ollama on GPU tower (10 min)
 5. Pull qwen2.5:14b (10 min download)
 6. Expose both to LAN (5 min)
 7. Install nginx, configure routing (30 min)

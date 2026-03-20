@@ -1,5 +1,5 @@
 # Content Publish Pipeline — Workflow DAG Template
-# Trigger: Fizzy task with labels [content, boundary-layer]
+# Trigger: Fizzy task with labels [content, newsletter]
 # Duration: ~30-60 min (mostly LLM processing + human approval gates)
 # Agents: Cerebro → Comms-Drafter → Ops-Handler (parallel branches after draft)
 #
@@ -10,12 +10,12 @@
 
 name: content-publish-pipeline
 version: "1.0"
-description: End-to-end Boundary Layer article from signal to published + distributed
+description: End-to-end content platform article from signal to published + distributed
 trigger:
   type: fizzy_label
   match:
     - content
-    - boundary-layer
+    - newsletter  # Configure: match your content platform label
 
 # Variables available to all steps from the triggering task
 input_schema:
@@ -32,7 +32,7 @@ steps:
       topic: "{{input.topic}}"
       signals: "{{input.signals}}"
       context_collections:
-        - ak-os-core
+        - knowledge-base
         - master-context
         - memory
       web_search: true
@@ -46,20 +46,20 @@ steps:
   - id: draft_article
     agent: comms-drafter
     action: write_article
-    description: "Write the Boundary Layer article in Alexander's voice."
+    description: "Write the content platform article in the operator's voice."
     depends_on: [research]
     inputs:
       brief: "{{research.research_brief}}"
       voice_rules: "memory/context/voice-and-brand-rules.md"
-      style_guide: "db/Alexander_Kline_Voice_Style_Guide_v3.md"
-      format: boundary-layer-article
+      style_guide: "{{KNOWLEDGE_BASE_PATH}}/voice-style-guide.md"
+      format: newsletter-article  # Configure: your content format template
       target_length: 1500-2500 words
     outputs:
       - article_draft    # Markdown article ready for review
       - title_options    # 3-5 title options (short, punchy, per voice rules)
     timeout: 10m
     retry: 1
-    requires_approval: true   # Alexander reviews the article before anything else proceeds
+    requires_approval: true   # Operator reviews the article before anything else proceeds
 
   # --- After article approval, these three run in PARALLEL ---
 
@@ -117,7 +117,7 @@ steps:
   - id: publish
     agent: ops-handler
     action: publish_to_substack
-    description: "Publish the article to Substack (Boundary Layer)."
+    description: "Publish the article to the content platform."
     depends_on: [draft_article, create_assets]
     inputs:
       article: "{{draft_article.article_draft}}"
@@ -149,7 +149,7 @@ steps:
     depends_on: [draft_podcast_script]
     inputs:
       script: "{{draft_podcast_script.podcast_script}}"
-      voice: alexander-clone  # When available, else default ElevenLabs
+      voice: "{{YOUR_VOICE_ID}}"  # Configure: set your ElevenLabs voice ID, or use "default" for the platform default
     outputs:
       - audio_file
     timeout: 10m
@@ -158,7 +158,7 @@ steps:
   - id: update_entities
     agent: ops-handler
     action: update_knowledge_base
-    description: "Update AK-OS entity files: content registry, signals used, project status."
+    description: "Update knowledge base entity files: content registry, signals used, project status."
     depends_on: [publish]
     inputs:
       published_url: "{{publish.published_url}}"
@@ -170,8 +170,8 @@ steps:
     requires_approval: false
 
 # Approval gates summary:
-# Gate 1: Article draft (Alexander reviews full article)
-# Gate 2: Social posts (Alexander reviews platform-specific versions)
-# Gate 3: Podcast script (Alexander reviews spoken version)
+# Gate 1: Article draft (operator reviews full article)
+# Gate 2: Social posts (operator reviews platform-specific versions)
+# Gate 3: Podcast script (operator reviews spoken version)
 # Gate 4: Publish to Substack (final go/no-go)
 # Gate 5: Distribute to social (final go/no-go)

@@ -1,12 +1,12 @@
 # Prompt Template: Relationship Nudge Email
 
-You are drafting a brief reconnection email from Alexander Kline to a contact whose relationship is decaying.
+You are drafting a brief reconnection email from the owner to a contact whose relationship is decaying.
 
 ## Input Variables
 - `{{contact}}` — Contact details (name, org, tier, last interaction)
 - `{{last_interaction}}` — Date and summary of last touchpoint
 - `{{prior_threads}}` — Recent email threads for context
-- `{{voice_rules}}` — Alexander's voice and brand rules
+- `{{voice_rules}}` — the owner's voice and brand rules
 
 ## Output Format
 
@@ -20,7 +20,7 @@ Subject: [Short, specific, not generic — reference something real]
 ```
 
 ## Tone Rules
-- Write as Alexander, in his voice: casual professional, direct, warm
+- Write as the owner, in his voice: casual professional, direct, warm
 - Short. 3-5 sentences max. Respect their inbox.
 - Reference something SPECIFIC from the last interaction or their recent work
 - Never guilt-trip ("I know it's been a while")
@@ -39,21 +39,21 @@ Subject: [Short, specific, not generic — reference something real]
 
 ## Examples by Contact Type
 
-### Revenue Contact (e.g., Guidepoint)
+### Revenue Contact (e.g., [revenue contact])
 Subject: Quick thought on [specific topic from last conversation]
 
 [Reference the specific topic they consulted on]
-[Share a relevant insight or article Alexander found]
+[Share a relevant insight or article the owner found]
 [Lightweight close: "Happy to jump on a call if useful."]
 
-### Creative Collaborator (e.g., Mo Hirtle)
+### Creative Collaborator (e.g., a shared-project collaborator)
 Subject: [Reference to shared project]
 
 [Share progress or a new angle on the shared work]
 [Ask a genuine question about their perspective]
 [Natural close]
 
-### Strategic Contact (e.g., WFS connection)
+### Strategic Contact (e.g., [strategic org] connection)
 Subject: [Reference to shared interest area]
 
 [Note something relevant in their domain]

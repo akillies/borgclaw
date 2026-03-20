@@ -1,13 +1,14 @@
 {
   "name": "comms-drafter",
   "role": "Communications Director",
-  "description": "Drafts emails, LinkedIn posts, Boundary Layer articles, follow-ups, pitches. Must write in Alexander's voice. Requires full brand context and style guide. NEVER sends — always queues for approval.",
+  "description": "Drafts emails, social posts, content platform articles, follow-ups, pitches. Must write in the operator's voice. Requires full brand context and style guide. NEVER sends — always queues for approval.",
   "compute": {
     "node": "cloud",
     "preference": "frontier",
-    "model_profile": "claude-sonnet-4-6",
-    "fallback": "claude-opus-4-6",
-    "note": "Voice fidelity requires frontier model — local models cannot match Alexander's tone"
+    "model_profile": "voice-critical",
+    "litellm_model": "voice-critical",
+    "fallback": "frontier",
+    "note": "Routes through LiteLLM: 'voice-critical'=claude-sonnet-4-6. Voice fidelity requires frontier model — local models cannot match the operator's tone."
   },
   "budget": {
     "type": "cloud",
@@ -25,20 +26,21 @@
     "can_modify_state": false,
     "requires_approval": ["EVERYTHING — this agent ONLY drafts, NEVER sends or publishes"],
     "approval_queue": "comms-review",
-    "note": "Law Two is absolute here. Every output goes to Alexander's approval queue."
+    "note": "Law Two is absolute here. Every output goes to the operator's approval queue."
   },
   "triggers": {
     "routed_from": "jarvis-router",
-    "scheduled": ["weekly-content-draft", "tuesday-boundary-layer"],
+    "scheduled": ["weekly-content-draft", "tuesday-newsletter"],
     "event": ["follow_up_needed", "email_draft_request", "content_request"]
   },
   "context_files": [
     "memory/context/voice-and-brand-rules.md",
-    "db/Alexander_Kline_Voice_Style_Guide_v3.md",
-    "db/AK_OS_Brand_Context.md",
-    "db/ak-os/entities/people.md",
-    "db/ak-os/STATE.md"
+    "{{KNOWLEDGE_BASE_PATH}}/voice-style-guide.md",
+    "{{KNOWLEDGE_BASE_PATH}}/brand-context.md",
+    "{{KNOWLEDGE_BASE_PATH}}/entities/people.md",
+    "{{KNOWLEDGE_BASE_PATH}}/STATE.md"
   ],
+  "_tools_note": "Declarative capability descriptions — not implemented MCP endpoints yet. Phase D implementation target. Approval queue maps to Gmail draft (current) or fizzy.do task (when self-hosted).",
   "tools": [
     "read_knowledge_base",
     "create_draft_email",
@@ -62,9 +64,9 @@
       "No smarmy tone",
       "No turnaround branding",
       "No over-indexing on AI — multidisciplinary is core",
-      "No WFS references publicly yet",
-      "No Ansible name publicly",
-      "Innovation is his word",
+      "[CUSTOMIZE] Add your confidentiality rules here",
+      "[CUSTOMIZE] Add your proprietary IP rules here",
+      "[CUSTOMIZE] Add your core brand word here",
       "Prose over bullets",
       "Casual professional, direct, warm, occasionally dry humor"
     ]

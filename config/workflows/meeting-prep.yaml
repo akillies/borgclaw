@@ -44,7 +44,7 @@ steps:
         - capability: web_search
           query: "{{attendee.name}} {{attendee.org}} LinkedIn"
           limit: 3
-      cross_reference: "db/ak-os/entities/people.md"
+      cross_reference: "{{KNOWLEDGE_BASE_PATH}}/entities/people.md"
     outputs: [attendee_profiles]
     timeout_seconds: 120
 
@@ -70,7 +70,7 @@ steps:
     params:
       scan_type: decisions_relevant_to
       filter: "{{meeting_title}}"
-      source: "db/ak-os/entities/decisions.md"
+      source: "{{KNOWLEDGE_BASE_PATH}}/entities/decisions.md"
     outputs: [relevant_decisions]
 
   - id: format_prep_doc
@@ -101,7 +101,7 @@ steps:
     depends_on: [format_prep_doc]
     params:
       channel: gmail_draft
-      to: "alexanderkline13@gmail.com"
+      to: "{{YOUR_EMAIL}}"  # Configure: set your delivery email address
       subject: "Meeting Prep: {{meeting_title}}"
       body: "{{prep_document}}"
     outputs: [delivery_confirmation]

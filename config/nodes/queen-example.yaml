@@ -51,25 +51,25 @@ services:
 
 qmd:
   collections:
-    - path: ~/akos/db/ak-os
-      name: ak-os-core
-    - path: ~/akos/db/ak-os/entities
+    - path: ~/borgclaw/knowledge
+      name: knowledge-base
+    - path: ~/borgclaw/knowledge/entities
       name: entities
-    - path: ~/akos/db/ak-os/projects/borgclaw
+    - path: ~/borgclaw/knowledge/borgclaw
       name: borgclaw
-    - path: ~/akos/db
+    - path: ~/borgclaw/knowledge/context
       name: master-context
-    - path: ~/akos/memory
+    - path: ~/borgclaw/memory
       name: memory
   context_annotations:
-    - collection: ak-os-core
-      annotation: "AK-OS operating system: ontology, workflows, state, architecture"
+    - collection: knowledge-base
+      annotation: "Your personal AI OS: ontology, workflows, state, architecture"
     - collection: entities
       annotation: "Entity registries: people, projects, patterns, decisions, signals, financial"
     - collection: borgclaw
       annotation: "BorgClaw infrastructure: specs, research, config, agent definitions"
     - collection: master-context
-      annotation: "Deep context: Alexander's identity, voice, brand, IP, master context docs"
+      annotation: "Deep context: the operator's identity, voice, brand, IP, master context docs"
     - collection: memory
       annotation: "Session-persistent memory: voice rules, corrections, learned patterns"
 

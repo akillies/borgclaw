@@ -26,6 +26,7 @@
     "scheduled": ["nightly-backup", "drive-sync"],
     "event": ["code_request", "data_processing_request", "file_operation"]
   },
+  "_tools_note": "Declarative capability descriptions — not implemented MCP endpoints yet. Phase D implementation target. Bash/file tools map to Cowork built-ins. git_operations maps to bash. generate_embeddings/vector_search map to QMD + LanceDB.",
   "tools": [
     "read_file",
     "write_file",
@@ -41,7 +42,7 @@
   "mcps": [
     {
       "name": "google_workspace_cli",
-      "purpose": "Drive sync, Gmail send (on behalf of Alexander with approval)",
+      "purpose": "Drive sync, Gmail send (on behalf of the operator with approval)",
       "tools": ["drive_upload", "drive_download", "gmail_send"],
       "note": "gmail_send ALWAYS requires board approval"
     },

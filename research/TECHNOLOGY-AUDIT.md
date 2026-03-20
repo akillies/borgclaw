@@ -143,7 +143,7 @@ This saves WEEKS of development.
 
 ## DECISION 3: ORCHESTRATION LAYER
 
-### The Question: Paperclip vs LangGraph/Egregore vs custom?
+### The Question: Paperclip vs LangGraph/custom vs custom?
 
 ### What We Assumed: Paperclip
 ### What the Research Says: **Paperclip is a good fit, but know its boundaries.**
@@ -165,7 +165,7 @@ This saves WEEKS of development.
 | **Agent model** | "Employees" with roles, budgets, approval chains | Nodes in a directed graph with edges as routing logic |
 | **State** | PostgreSQL | PostgresSaver or custom checkpointer |
 | **Best for** | Multi-agent coordination with human governance | Complex multi-step workflows with branching logic |
-| **AK-OS fit** | Law Two (draft-then-approve), budget tracking, audit trail | Ansible methodology workflows, signal pipeline |
+| **Host system fit** | Law Two (draft-then-approve), budget tracking, audit trail | Methodology workflows, signal pipeline |
 | **Maturity** | 2 weeks old | 1+ year, well-documented |
 
 ### REVISED RECOMMENDATION
@@ -178,7 +178,7 @@ Paperclip = "Who does what" (organizational layer)
   ├── Budget tracking per agent
   ├── Board approval for actions (Law Two)
   ├── Audit trail
-  └── Dashboard for Alexander to monitor everything
+  └── Dashboard for the operator to monitor everything
 
 LangGraph = "How tasks flow" (workflow layer)
   ├── Morning briefing pipeline (scan → synthesize → draft → send)
@@ -208,13 +208,13 @@ Key findings:
 - **Syncthing + Git repos = corruption risk.** Multiple reports of repo corruption when Syncthing syncs a working git directory across machines running simultaneously. The `.git` directory gets race conditions.
 - **Bare git repo + Syncthing = works.** Syncthing a bare repo (not a working directory) is reliable. But adds complexity.
 - **Git pull/push on a schedule = most reliable.** Simple cron job: `git add -A && git commit -m "auto" && git push`. Other nodes pull periodically.
-- **For AK-OS specifically:** The knowledge base is Markdown files that change slowly (not code with constant saves). Conflict risk is low. Git is the right tool.
+- **For knowledge bases specifically:** The files are Markdown that change slowly (not code with constant saves). Conflict risk is low. Git is the right tool.
 
 ### REVISED RECOMMENDATION
 
 ```
 Primary: Git (private GitHub repo)
-  ├── Version history (critical for AK-OS — Law Zero, never delete)
+  ├── Version history (critical — Law Zero, never delete)
   ├── Conflict resolution (merge, not overwrite)
   ├── Works offline
   ├── Queen runs auto-commit + push every 15 min
@@ -260,8 +260,8 @@ that don't belong in git.
 **For frontier (cloud API):**
 | Model | When |
 |-------|------|
-| Claude Sonnet | Writing in Alexander's voice, Boundary Layer drafts |
-| Claude Opus | Deep foresight synthesis, Ansible methodology, complex analysis |
+| Claude Sonnet | Writing in the operator's voice, content platform drafts |
+| Claude Opus | Deep foresight synthesis, complex analysis |
 
 ### REVISED RECOMMENDATION
 
@@ -331,7 +331,7 @@ Don't hardcode models. The Assimilator should:
 - A bash script works on macOS and Linux immediately
 - Windows needs a `.bat` wrapper that calls WSL2 or PowerShell
 - A Go binary is better for distribution but adds a build step and complexity
-- For dogfooding (Alexander's own machines), bash is perfect
+- For dogfooding (operator's own machines), bash is perfect
 - For open-source distribution to others, eventually compile to Go
 
 ### REVISED RECOMMENDATION
@@ -602,8 +602,8 @@ Every heartbeat (60s), each node reports to the Queen:
   },
   "cost_estimate": {
     "power_kwh_today": 1.8,
-    "power_cost_today_cad": 0.22,
-    "power_cost_month_cad": 6.60
+    "power_cost_today_local": 0.22,
+    "power_cost_month_local": 6.60
   }
 }
 ```
@@ -637,7 +637,7 @@ The Queen's web dashboard shows:
 │  └─────────────────┘  └─────────────────┘           │
 │                                                       │
 │  ┌─────────────────┐  ┌─────────────────┐           │
-│  │ ⚫ macbook (off)  │  │ 🟣 claude-api    │           │
+│  │ ⚫ laptop (off)   │  │ 🟣 claude-api    │           │
 │  │ Last seen: 2h    │  │ Frontier · Cloud │           │
 │  │                  │  │ Budget: $14/$50  │           │
 │  └─────────────────┘  │ Reqs today: 12   │           │
@@ -645,13 +645,13 @@ The Queen's web dashboard shows:
 │                                                       │
 │  ── HIVE TOTALS ──────────────────────────────       │
 │  Tokens today: 52,400 (91% local, 9% cloud)          │
-│  Power cost today: $0.30 CAD                          │
+│  Power cost today: $0.30                              │
 │  Cloud cost today: $2.10 USD                          │
 │  Total estimated monthly: $9.00 power + $14 API       │
 └─────────────────────────────────────────────────────┘
 ```
 
-The slider (contribution dial) is interactive — Alexander can drag it from his phone via Tailscale and throttle any node in real time. "Ryzen is running hot and Evander's gaming? Slide it to eco." "Need a heavy research pass? Slide everything to max."
+The slider (contribution dial) is interactive — the operator can drag it from their phone via Tailscale and throttle any node in real time. "Ryzen is running hot and someone's gaming? Slide it to eco." "Need a heavy research pass? Slide everything to max."
 
 ### Electricity Cost Estimation
 
@@ -661,7 +661,7 @@ The Queen calculates approximate electricity cost per node:
 For NVIDIA:
   nvidia-smi reports real-time wattage
   Integrate over time → kWh
-  Multiply by local electricity rate (BC Hydro: ~$0.12/kWh CAD)
+  Multiply by local electricity rate (configurable per region)
 
 For Apple Silicon:
   powermetrics or asitop reports package power
@@ -671,12 +671,12 @@ For CPU-only nodes:
   Estimate from TDP + utilization percentage
 
 Configuration:
-  "electricity_rate_per_kwh": 0.12  // CAD, configurable per region
+  "electricity_rate_per_kwh": 0.12  // configurable per region/currency
 ```
 
 ---
 
-## OPEN QUESTIONS (Need Alexander's Input)
+## OPEN QUESTIONS (Need Operator Input)
 
 1. **LM Studio dependency:** Comfortable recommending a proprietary (but free) tool for Mac nodes? Or strictly open-source only?
 2. **NadirClaw vs custom gateway:** NadirClaw does 90% of routing — use it directly or fork it?

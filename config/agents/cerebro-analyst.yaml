@@ -27,20 +27,20 @@ model_preferences:
 
 context_files:
   always_load:
-    - "db/ak-os/INTEREST-ONTOLOGY.md"
+    - "{{knowledge_base}}/interests.md"
   research_tasks:
-    - "db/ak-os/TOOL-LANDSCAPE.md"
-    - "db/ak-os/CAPABILITY-ROADMAP.md"
+    - "{{knowledge_base}}/tool-landscape.md"
+    - "{{knowledge_base}}/capability-roadmap.md"
   people_tasks:
-    - "db/ak-os/entities/people.md"
+    - "{{knowledge_base}}/people.md"
   project_tasks:
-    - "db/ak-os/entities/projects.md"
+    - "{{knowledge_base}}/projects.md"
 
 signal_scoring:
   dimensions:
-    domain_relevance: "How relevant to Alexander's 11 interest domains?"
+    domain_relevance: "How relevant to your interest domains?"
     cross_domain: "Does this bridge 2+ domains? (Intersection zone bonus)"
-    actionability: "Can Alexander act on this within 30 days?"
+    actionability: "Can the owner act on this within 30 days?"
   threshold: 30  # Domain × Cross-Domain × Actionability
   interest_domains:
     - ai_systems

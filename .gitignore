@@ -1,3 +1,9 @@
+# Internal planning docs (not for public repo)
+.internal/
+
+# Private overlays (personal configs, agent instructions)
+borgclaw-private/
+
 # Node
 node_modules/
 npm-debug.log*
@@ -35,6 +41,11 @@ logs/
 # Build
 dist/
 build/
+
+# Go binaries (The Claw node agent)
+node/the-claw
+node/the-claw-*
+*.exe
 
 # Python
 __pycache__/

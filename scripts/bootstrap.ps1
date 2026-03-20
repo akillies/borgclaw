@@ -19,7 +19,8 @@ param(
 $ErrorActionPreference = "Continue"
 
 # --- Config ---
-$AKOS_DIR = if ($env:AKOS_DIR) { $env:AKOS_DIR } else { "$env:USERPROFILE\akos" }
+$AKOS_DIR = if ($env:AKOS_DIR) { $env:AKOS_DIR } else { "$env:USERPROFILE\borgclaw" }
+$KNOWLEDGE_BASE_PATH = if ($env:KNOWLEDGE_BASE_PATH) { $env:KNOWLEDGE_BASE_PATH } else { "$AKOS_DIR\knowledge" }
 $MIN_RAM_GB = 8
 $MIN_DISK_GB = 10
 $MIN_NODE_MAJOR = 22
@@ -384,7 +385,7 @@ function Pull-OllamaModel($model, $purpose) {
 function Configure-Node {
     Log "Step 9/11: Configuring node..."
 
-    $configDir = "$AKOS_DIR\db\ak-os\projects\borgclaw\config\nodes"
+    $configDir = "$AKOS_DIR\config\nodes"
     New-Item -ItemType Directory -Force -Path $configDir | Out-Null
 
     $hostIP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch "Loopback" } | Select-Object -First 1).IPAddress
@@ -429,16 +430,16 @@ function Index-QMD {
         return
     }
 
-    $dbDir = "$AKOS_DIR\db"
-    if (-not (Test-Path $dbDir)) {
-        Warn "No db\ directory at $dbDir. Skipping QMD indexing."
-        Warn "Clone or copy the AK-OS knowledge base to $dbDir, then run: qmd index"
+    if (-not (Test-Path $KNOWLEDGE_BASE_PATH)) {
+        Warn "No knowledge base directory at $KNOWLEDGE_BASE_PATH. Skipping QMD indexing."
+        Warn "Set KNOWLEDGE_BASE_PATH env var to your knowledge base path, then run: qmd index"
+        Warn "Example: `$env:KNOWLEDGE_BASE_PATH = 'C:\path\to\your\knowledge'; .\bootstrap.ps1"
         return
     }
 
-    Log "  Indexing ak-os-core..."
-    qmd index "$AKOS_DIR\db\ak-os" --name ak-os-core 2>$null
-    if ($LASTEXITCODE -eq 0) { Ok "  ak-os-core indexed" } else { Warn "  ak-os-core indexing failed" }
+    Log "  Indexing knowledge base..."
+    qmd index $KNOWLEDGE_BASE_PATH --name knowledge-base 2>$null
+    if ($LASTEXITCODE -eq 0) { Ok "  knowledge-base indexed" } else { Warn "  knowledge-base indexing failed" }
 }
 
 # ============================================================
@@ -480,7 +481,7 @@ function Show-Summary {
         Write-Host ""
     }
 
-    Write-Host "  Config: $AKOS_DIR\db\ak-os\projects\borgclaw\config\nodes\$($env:COMPUTERNAME.ToLower()).yaml" -ForegroundColor Green
+    Write-Host "  Config: $AKOS_DIR\config\nodes\$($env:COMPUTERNAME.ToLower()).yaml" -ForegroundColor Green
     Write-Host ""
     Write-Host "Bootstrap complete. Welcome to the Collective." -ForegroundColor Green
 }

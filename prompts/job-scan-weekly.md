@@ -1,6 +1,6 @@
 # Prompt Template: Job Scanner Weekly Report
 
-You are formatting Alexander Kline's weekly job market scan results.
+You are formatting the owner's weekly job market scan results.
 
 ## Input Variables
 - `{{opportunities}}` — Scored and ranked job listings
@@ -19,7 +19,7 @@ You are formatting Alexander Kline's weekly job market scan results.
 - **Type:** {{role.type}} (FTE / Contract / Consulting)
 - **Rate/Salary:** {{role.compensation}} | **Location:** {{role.location}}
 - **CSA Score:** C:{{csa.creativity}}/10 S:{{csa.security}}/10 A:{{csa.abundance}}/10 = {{csa.total}}
-- **Why it fits:** [1-2 sentences connecting to Alexander's positioning]
+- **Why it fits:** [1-2 sentences connecting to the owner's positioning]
 - **Link:** {{role.url}}
 - **Action:** [Apply / Research more / Network in / Skip]
 
@@ -34,9 +34,9 @@ You are formatting Alexander Kline's weekly job market scan results.
 [table rows]
 
 ## Expert Network Status
-- **Guidepoint:** [Last contact date. Status. Action needed?]
-- **GLG:** [Status]
-- **AlphaSights:** [Status]
+- **[revenue contact]:** [Last contact date. Status. Action needed?]
+- **[expert-network-1]:** [Status]
+- **[expert-network-2]:** [Status]
 
 ## This Week's Numbers
 - New roles matching criteria: {{count}}
@@ -45,13 +45,13 @@ You are formatting Alexander Kline's weekly job market scan results.
 ```
 
 ## CSA Scoring Reference
-- **Creativity:** Does this feed Alexander's creative identity and cross-domain work?
+- **Creativity:** Does this feed the owner's creative identity and cross-domain work?
 - **Security:** Does this improve financial stability? Rate vs $125/hr floor.
 - **Abundance:** Does this open scale, network, or future opportunities?
 
 ## Rules
 - Be honest about fit. Don't oversell mediocre roles.
-- If Guidepoint has been silent 60+ days: flag as CRITICAL.
+- If [revenue contact] has been silent 60+ days: flag as CRITICAL.
 - If income is below $2,700/month floor: lead with highest-security opportunities.
 - Include expert network status even if no new activity — the absence IS the signal.
 - ATS optimization note: if a role looks good but needs resume tailoring, say so.

@@ -1,12 +1,14 @@
 {
   "name": "cerebro-analyst",
   "role": "Chief Intelligence Officer",
-  "description": "Deep research, signal analysis, foresight synthesis. The sense-making layer. Needs full AK-OS context and frontier-grade reasoning. This is the Ansible's brain.",
+  "description": "Deep research, signal analysis, foresight synthesis. The sense-making layer. Needs full knowledge base context and frontier-grade reasoning. This is the intelligence core.",
   "compute": {
     "node": "cloud",
     "preference": "frontier",
-    "model_profile": "claude-opus-4-6",
-    "fallback": "claude-sonnet-4-6"
+    "model_profile": "frontier",
+    "litellm_model": "frontier",
+    "fallback": "voice-critical",
+    "_note": "Routes through LiteLLM: 'frontier'=claude-opus-4-6, 'voice-critical'=claude-sonnet-4-6. Change providers in config/litellm.yaml with zero agent code changes."
   },
   "budget": {
     "type": "cloud",
@@ -29,14 +31,15 @@
     "event": ["meeting_prep_needed", "deep_research_request"]
   },
   "context_files": [
-    "db/ak-os/INTEREST-ONTOLOGY.md",
-    "db/ak-os/entities/signals.md",
-    "db/ak-os/entities/projects.md",
-    "db/ak-os/entities/patterns.md",
-    "db/ak-os/entities/people.md",
-    "db/ak-os/STATE.md",
-    "db/AK_Master_Context_2026.md"
+    "{{KNOWLEDGE_BASE_PATH}}/interests.md",
+    "{{KNOWLEDGE_BASE_PATH}}/entities/signals.md",
+    "{{KNOWLEDGE_BASE_PATH}}/entities/projects.md",
+    "{{KNOWLEDGE_BASE_PATH}}/entities/patterns.md",
+    "{{KNOWLEDGE_BASE_PATH}}/entities/people.md",
+    "{{KNOWLEDGE_BASE_PATH}}/STATE.md",
+    "{{KNOWLEDGE_BASE_PATH}}/master-context.md"
   ],
+  "_tools_note": "Declarative capability descriptions — not implemented MCP endpoints yet. Phase D implementation target. Each maps to a Cowork built-in tool or future Queen API call.",
   "tools": [
     "web_search",
     "web_fetch",

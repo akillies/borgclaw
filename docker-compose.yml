@@ -1,34 +1,53 @@
-# BorgClaw Docker Compose — Tower Node Services
+# BorgClaw Docker Compose — Middleware Stack
 # Run: docker compose up -d
 #
-# MODULARITY: Each service is independently replaceable.
-# - Fizzy → any task board with MCP (Linear, Notion, etc.)
-# - NATS → any message bus (Redis Streams, RabbitMQ, etc.)
-# - ntfy → any push notification service (Pushover, Gotify, etc.)
+# WHAT THIS STARTS (persistent services):
+#   - NATS JetStream   port 4222  — event bus, agent coordination backbone
+#   - ntfy             port 2586  — push notifications + approval action buttons
+#   - LiteLLM          port 4000  — model-agnostic proxy (single endpoint for all providers)
 #
-# NOTE: n8n deliberately excluded. Workflow orchestration is
-# handled by agent DAGs (config/workflows/*.yaml), not a
-# separate automation platform. Revisit if agent DAGs prove
-# insufficient for complex multi-step automations.
+# WHAT RUNS ON THE HOST (not Docker — installed by bootstrap.sh):
+#   - Ollama           port 11434 — LLM server (MLX on Mac, CUDA on NVIDIA)
+#   - NadirClaw        port 8856  — smart router (simple→local, complex→cloud)
+#                                   install: pip install nadirclaw
+#                                   start:   nadirclaw --port 8856 --backend http://localhost:4000
+#   - Queen service    port 9090  — node registry
+#                                   start:   cd services/queen && npm install && node server.js
+#
+# WHAT NEEDS SEPARATE SETUP (not in this compose):
+#   - Fizzy task board — sign up at fizzy.do OR self-host (Rails app, separate deployment)
+#                        connect agents via: FIZZY_TOKEN=<your-token> npx @silky/fizzy-mcp
+#
+# MODULARITY: Every service is independently swappable.
+#   NATS → Redis Streams or RabbitMQ
+#   ntfy → Pushover or Gotify
+#   LiteLLM → direct provider SDKs (but why would you)
+#
+# WHY NO n8n: Workflow orchestration is handled by agent DAGs (config/workflows/*.yaml)
+#   executed via LangGraph. n8n adds 500MB+ and complexity for workflows agents handle natively.
+#   Add n8n back if you need 400+ integration nodes for last-mile delivery.
 
 version: "3.8"
 
 services:
+
   # ============================================================
-  # NATS — Message bus for inter-node communication
-  # Queen and Worker nodes communicate via NATS JetStream.
+  # NATS JetStream — Event bus + streaming + KV store
+  # Every agent action emits a typed event here.
+  # Agents query recent events before acting (temporal coordination).
+  # Subjects: events.agent.*, events.task.*, events.node.*, events.approval.*
   # ============================================================
   nats:
     image: nats:2.10-alpine
     container_name: borgclaw-nats
     ports:
       - "4222:4222"     # Client connections
-      - "8222:8222"     # HTTP monitoring
+      - "8222:8222"     # HTTP monitoring dashboard
     command: >
       --jetstream
       --store_dir /data
-      --max_mem_store 256MB
-      --max_file_store 1GB
+      --max_mem_store 512MB
+      --max_file_store 2GB
     volumes:
       - nats-data:/data
     restart: unless-stopped
@@ -39,36 +58,41 @@ services:
       retries: 3
 
   # ============================================================
-  # Fizzy — Kanban task management with MCP
-  # Replaces: Trello, Notion boards, Linear for personal task tracking
-  # MCP endpoint exposes: list_cards, create_card, update_card, move_card
+  # LiteLLM — Model-agnostic proxy (THE routing abstraction layer)
+  # Agents call ONE OpenAI-compatible endpoint: http://localhost:4000
+  # LiteLLM routes to: Ollama (local) → Gemini → Qwen → Kimi → Sonnet → Opus
+  # Provider changes = edit config/litellm.yaml. Zero agent code changes.
+  # NadirClaw sits IN FRONT of this (on host), classifies simple/complex first.
   # ============================================================
-  fizzy:
-    image: node:22-alpine
-    container_name: borgclaw-fizzy
-    working_dir: /app
-    command: npx @silky/fizzy-mcp
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: borgclaw-litellm
     ports:
-      - "3100:3100"
-    environment:
-      - FIZZY_DATA_DIR=/data
-      - FIZZY_PORT=3100
+      - "4000:4000"
     volumes:
-      - fizzy-data:/data
+      - ./config/litellm.yaml:/app/config.yaml:ro
+    command: --config /app/config.yaml --port 4000
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
+      - QWEN_API_KEY=${QWEN_API_KEY:-}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     depends_on:
       nats:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
 
   # ============================================================
-  # ntfy — Push notifications
-  # Sends alerts to Alexander's phone when CRITICAL patterns trigger.
-  # Replaces: Pushover, custom email alerts
+  # ntfy — Self-hosted push notifications
+  # Sends approval requests to your phone with action buttons:
+  # [Approve] [Reject] [View Draft] — tap to trigger Queen API.
+  # Topics: borgclaw-approvals, borgclaw-alerts, borgclaw-signals
   # ============================================================
   ntfy:
     image: binwiederhier/ntfy:latest
@@ -92,8 +116,6 @@ services:
 
 volumes:
   nats-data:
-    driver: local
-  fizzy-data:
     driver: local
   ntfy-cache:
     driver: local

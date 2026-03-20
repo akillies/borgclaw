@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BorgClaw + AK-OS — Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #050505;
+    color: #c8c8c8;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    min-height: 100vh;
+    padding: 32px;
+  }
+
+  /* ─── HEADER ─────────────────────────────────────────── */
+  .header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .laser {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #00ff88;
+    opacity: 0.6;
+    letter-spacing: 0;
+    margin-bottom: 10px;
+  }
+  .title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #888;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #444;
+    letter-spacing: 2px;
+  }
+
+  /* ─── GRID ────────────────────────────────────────────── */
+  .diagram {
+    display: grid;
+    grid-template-columns: 1fr 2fr 1.2fr;
+    grid-template-rows: auto auto auto auto auto;
+    gap: 16px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  /* ─── CARD BASE ───────────────────────────────────────── */
+  .card {
+    background: #0d0d0d;
+    border: 1px solid #1e1e1e;
+    border-radius: 6px;
+    padding: 14px 16px;
+    position: relative;
+  }
+  .card:hover {
+    border-color: #2a2a2a;
+  }
+  .card-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #444;
+    margin-bottom: 12px;
+  }
+  .card-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: #00ff88;
+    margin-bottom: 4px;
+  }
+  .card-sub {
+    font-size: 11px;
+    color: #666;
+    line-height: 1.5;
+  }
+  .port {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: #555;
+    background: #0a0a0a;
+    border: 1px solid #1a1a1a;
+    border-radius: 3px;
+    padding: 1px 5px;
+    display: inline-block;
+    margin-top: 2px;
+  }
+  .status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 5px;
+  }
+  .dot-green  { background: #00ff88; box-shadow: 0 0 6px #00ff8866; }
+  .dot-yellow { background: #fbbf24; box-shadow: 0 0 6px #fbbf2466; }
+  .dot-blue   { background: #60a5fa; box-shadow: 0 0 6px #60a5fa66; }
+  .dot-gray   { background: #444; }
+
+  /* ─── CONNECTOR ARROWS ────────────────────────────────── */
+  .arrow-down {
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #2a2a2a;
+    padding: 2px 0;
+    line-height: 1;
+  }
+  .arrow-label {
+    font-size: 9px;
+    color: #333;
+    letter-spacing: 1px;
+  }
+
+  /* ─── LAYER LABELS ────────────────────────────────────── */
+  .layer-label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #2a2a2a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ─── SPECIFIC LAYER COLORS ───────────────────────────── */
+  .layer-user     { border-color: #1a2a1a; }
+  .layer-agents   { border-color: #1a1e2a; }
+  .layer-routing  { border-color: #2a1a1a; }
+  .layer-infra    { border-color: #1a1a2a; }
+  .layer-compute  { border-color: #1e1a2a; }
+  .layer-cloud    { border-color: #2a2a1a; }
+
+  .accent-green  { border-left: 2px solid #00ff88; }
+  .accent-blue   { border-left: 2px solid #60a5fa; }
+  .accent-purple { border-left: 2px solid #a78bfa; }
+  .accent-orange { border-left: 2px solid #fb923c; }
+  .accent-yellow { border-left: 2px solid #fbbf24; }
+  .accent-red    { border-left: 2px solid #f87171; }
+  .accent-teal   { border-left: 2px solid #2dd4bf; }
+
+  /* ─── FULL-WIDTH ROWS ─────────────────────────────────── */
+  .span-all  { grid-column: 1 / -1; }
+  .span-left { grid-column: 1 / 3; }
+  .span-right{ grid-column: 3 / 4; }
+
+  /* ─── SECTION DIVIDER ─────────────────────────────────── */
+  .divider {
+    grid-column: 1 / -1;
+    border-top: 1px solid #111;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 6px 0 2px;
+  }
+  .divider-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #2a2a2a;
+    white-space: nowrap;
+  }
+  .divider-line {
+    flex: 1;
+    border-top: 1px dashed #151515;
+  }
+
+  /* ─── AGENT GRID ──────────────────────────────────────── */
+  .agent-grid {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  .agent-card {
+    background: #0a0a0f;
+    border: 1px solid #1a1a2a;
+    border-radius: 5px;
+    padding: 12px;
+  }
+  .agent-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #60a5fa;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .agent-role {
+    font-size: 10px;
+    color: #666;
+    margin-bottom: 6px;
+    line-height: 1.4;
+  }
+  .agent-compute {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: #444;
+  }
+
+  /* ─── NODE GRID ───────────────────────────────────────── */
+  .node-grid {
+    grid-column: 1 / 3;
+    display: grid;
+    grid-template-columns: 1fr 1fr 0.7fr;
+    gap: 10px;
+  }
+  .node-card {
+    background: #0a0a0a;
+    border: 1px solid #1e1e1e;
+    border-radius: 5px;
+    padding: 12px;
+  }
+  .node-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #00ff88;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .node-spec {
+    font-size: 10px;
+    color: #555;
+    margin-bottom: 8px;
+  }
+  .model-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 2px 0;
+    border-bottom: 1px solid #0f0f0f;
+  }
+  .model-slot {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    color: #444;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    width: 52px;
+  }
+  .model-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: #888;
+    flex: 1;
+  }
+  .model-size {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    color: #333;
+    text-align: right;
+  }
+
+  /* ─── CLOUD TIER ──────────────────────────────────────── */
+  .cloud-tier {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .cloud-row {
+    background: #0a0a08;
+    border: 1px solid #1a1a10;
+    border-radius: 4px;
+    padding: 8px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .cloud-model {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: #888;
+  }
+  .cloud-cost {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: #fbbf24;
+  }
+  .cloud-use {
+    font-size: 9px;
+    color: #444;
+    text-align: right;
+    max-width: 100px;
+  }
+
+  /* ─── MIDDLEWARE ROW ──────────────────────────────────── */
+  .middleware-grid {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  .mw-card {
+    background: #080810;
+    border: 1px solid #12122a;
+    border-radius: 5px;
+    padding: 10px 12px;
+  }
+  .mw-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #a78bfa;
+    font-weight: 600;
+    margin-bottom: 3px;
+  }
+  .mw-desc {
+    font-size: 10px;
+    color: #555;
+    line-height: 1.4;
+  }
+
+  /* ─── AK-OS LAYER ─────────────────────────────────────── */
+  .akos-grid {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  .feed-list {
+    list-style: none;
+    margin-top: 4px;
+  }
+  .feed-list li {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: #555;
+    padding: 2px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ─── LEGEND ──────────────────────────────────────────── */
+  .legend {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 20px;
+    padding: 10px 0 0;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: #444;
+  }
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  /* ─── ROUTING SECTION ─────────────────────────────────── */
+  .routing-grid {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.5fr;
+    gap: 10px;
+  }
+
+  /* ─── FLOW ARROWS ─────────────────────────────────────── */
+  .flow {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 4px 0;
+  }
+  .flow-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #1e1e1e, transparent);
+  }
+  .flow-node {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: #2a2a2a;
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+
+  /* ─── USB CARD ────────────────────────────────────────── */
+  .usb-card {
+    background: repeating-linear-gradient(
+      45deg,
+      #0a0a0a,
+      #0a0a0a 4px,
+      #0c0c0c 4px,
+      #0c0c0c 8px
+    );
+    border: 1px dashed #1e1e1e;
+    border-radius: 5px;
+    padding: 12px;
+    text-align: center;
+  }
+  .usb-icon {
+    font-size: 18px;
+    margin-bottom: 6px;
+  }
+  .usb-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: #fb923c;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+  .usb-sub {
+    font-size: 9px;
+    color: #444;
+    line-height: 1.4;
+  }
+  .badge {
+    display: inline-block;
+    background: #1a0a00;
+    border: 1px solid #fb923c33;
+    color: #fb923c;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    padding: 1px 5px;
+    border-radius: 2px;
+    margin-top: 4px;
+    letter-spacing: 1px;
+  }
+  .badge-p2 {
+    background: #0a001a;
+    border-color: #a78bfa33;
+    color: #a78bfa;
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="laser">◉━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━►</div>
+  <div class="title">BorgClaw + AK-OS — System Architecture</div>
+  <div class="subtitle">March 18, 2026 · Your Machines · Your Models · Your Rules</div>
+</div>
+
+<div class="diagram">
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  LAYER 0 — AK-OS (The Brain)                          -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <div class="divider span-all">
+    <span class="divider-text">AK-OS — The Brain</span>
+    <div class="divider-line"></div>
+    <span class="divider-text" style="color:#00ff8833">LAYER 0</span>
+  </div>
+
+  <div class="akos-grid">
+    <div class="card accent-green">
+      <div class="card-title">Core Memory</div>
+      <div class="card-label">AK-OS Entity Graph</div>
+      <div class="card-sub" style="margin-top:6px">
+        <ul class="feed-list">
+          <li><span class="status-dot dot-green"></span>CLAUDE.md — session bootstrap</li>
+          <li><span class="status-dot dot-green"></span>STATE.md — live dashboard</li>
+          <li><span class="status-dot dot-green"></span>entities/ — 6 registries</li>
+          <li><span class="status-dot dot-green"></span>INTEREST-ONTOLOGY.md</li>
+          <li><span class="status-dot dot-green"></span>LEARNINGS.md</li>
+          <li><span class="status-dot dot-green"></span>memory/ — voice + brand rules</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card accent-blue">
+      <div class="card-title">Live Feeds</div>
+      <div class="card-label">Connected Inputs</div>
+      <ul class="feed-list" style="margin-top:8px">
+        <li><span class="status-dot dot-green"></span>Gmail (MCP)</li>
+        <li><span class="status-dot dot-green"></span>Google Calendar (MCP)</li>
+        <li><span class="status-dot dot-green"></span>Google Drive (MCP, read)</li>
+        <li><span class="status-dot dot-green"></span>Web Search</li>
+        <li><span class="status-dot dot-yellow"></span>Apple Notes (unstable)</li>
+        <li><span class="status-dot dot-gray"></span>GitHub (not connected)</li>
+        <li><span class="status-dot dot-gray"></span>LinkedIn (not connected)</li>
+      </ul>
+    </div>
+
+    <div class="card accent-purple">
+      <div class="card-title">Scheduled Tasks</div>
+      <div class="card-label">Autonomous Loops</div>
+      <ul class="feed-list" style="margin-top:8px">
+        <li><span class="status-dot dot-green"></span>8:30 AM — Morning brief</li>
+        <li><span class="status-dot dot-green"></span>Mon 9 AM — Network radar</li>
+        <li><span class="status-dot dot-green"></span>Mon 10 AM — Job scanner</li>
+        <li><span class="status-dot dot-green"></span>Tue 9 AM — Content drafter</li>
+        <li><span class="status-dot dot-green"></span>Fri 11 AM — Self-improve scan</li>
+      </ul>
+    </div>
+
+    <div class="card accent-orange">
+      <div class="card-title">Projects (Active)</div>
+      <div class="card-label">Current Workstreams</div>
+      <ul class="feed-list" style="margin-top:8px">
+        <li><span class="status-dot dot-green"></span>Pocket Technician ($125/hr)</li>
+        <li><span class="status-dot dot-yellow"></span>Boundary Layer (content)</li>
+        <li><span class="status-dot dot-yellow"></span>BorgClaw (this build)</li>
+        <li><span class="status-dot dot-yellow"></span>Ansible (fork TBD)</li>
+        <li><span class="status-dot dot-gray"></span>Cervical ebook (98% stalled)</li>
+        <li><span class="status-dot dot-gray"></span>DSV / Expert networks</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- FLOW -->
+  <div class="flow">
+    <div class="flow-line"></div>
+    <div class="flow-node">↓ requests routed through ↓</div>
+    <div class="flow-line"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  LAYER 1 — AGENTS                                     -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <div class="divider span-all">
+    <span class="divider-text">BorgClaw — Agent Layer</span>
+    <div class="divider-line"></div>
+    <span class="divider-text" style="color:#60a5fa33">LAYER 1</span>
+  </div>
+
+  <div class="agent-grid">
+    <div class="agent-card" style="border-color:#00ff8822;">
+      <div class="agent-name">⬡ jarvis-router</div>
+      <div class="agent-role">Chief of Staff.<br>Triage + routing. Always-on.</div>
+      <div class="agent-compute"><span class="status-dot dot-green"></span>local · $0/mo</div>
+    </div>
+    <div class="agent-card" style="border-color:#60a5fa22;">
+      <div class="agent-name">⬡ cerebro-analyst</div>
+      <div class="agent-role">Deep research + foresight synthesis. Ansible brain.</div>
+      <div class="agent-compute"><span class="status-dot dot-blue"></span>cloud · ~$20-40/mo</div>
+    </div>
+    <div class="agent-card" style="border-color:#a78bfa22;">
+      <div class="agent-name">⬡ comms-drafter</div>
+      <div class="agent-role">Writing in your voice. Emails, posts, articles. Never sends.</div>
+      <div class="agent-compute"><span class="status-dot dot-blue"></span>cloud · ~$5-15/mo</div>
+    </div>
+    <div class="agent-card" style="border-color:#fb923c22;">
+      <div class="agent-name">⬡ ops-handler</div>
+      <div class="agent-role">Code, data, files, structured output. GPU node workhorse.</div>
+      <div class="agent-compute"><span class="status-dot dot-green"></span>local GPU · $0/mo</div>
+    </div>
+    <div class="agent-card" style="border-color:#2dd4bf22;">
+      <div class="agent-name">⬡ sentinel</div>
+      <div class="agent-role">24/7 monitor. Inbox, calendar, stalls, alerts.</div>
+      <div class="agent-compute"><span class="status-dot dot-green"></span>local · $0/mo</div>
+    </div>
+  </div>
+
+  <!-- FLOW -->
+  <div class="flow">
+    <div class="flow-line"></div>
+    <div class="flow-node">↓ every request classified by ↓</div>
+    <div class="flow-line"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  LAYER 2 — ROUTING                                    -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <div class="divider span-all">
+    <span class="divider-text">BorgClaw — Routing Layer</span>
+    <div class="divider-line"></div>
+    <span class="divider-text" style="color:#f8717133">LAYER 2</span>
+  </div>
+
+  <div class="routing-grid">
+    <div class="card accent-red">
+      <div class="card-title">Binary Router</div>
+      <div class="card-label">NadirClaw</div>
+      <div class="card-sub" style="margin-top:6px">Classifies every prompt: simple → local, complex → cloud<br><br>~10ms latency · ~94% accuracy<br>40-70% cost reduction</div>
+      <div style="margin-top:8px"><span class="port">:8856</span> <span class="port">OpenAI-compatible</span></div>
+      <div style="margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:8px;color:#333">pip install nadirclaw[dashboard]</div>
+    </div>
+
+    <div class="card accent-yellow">
+      <div class="card-title">Model-Agnostic Proxy</div>
+      <div class="card-label">LiteLLM v1.82.1</div>
+      <div class="card-sub" style="margin-top:6px">Single OpenAI-compatible endpoint. Swap providers via config. Budget cap enforced per agent.</div>
+      <div style="margin-top:8px"><span class="port">:4000</span> <span class="port">38.6K ★</span></div>
+      <div style="margin-top:8px">
+        <div style="font-size:9px;color:#444;font-family:'JetBrains Mono',monospace">→ local: Ollama / LM Studio</div>
+        <div style="font-size:9px;color:#444;font-family:'JetBrains Mono',monospace">→ cloud: Gemini / GPT-4o / Claude</div>
+      </div>
+    </div>
+
+    <div class="card accent-blue" style="background:#080812">
+      <div class="card-title">Queen Orchestrator</div>
+      <div class="card-label">Queen Service (Node.js)</div>
+      <div class="card-sub" style="margin-top:6px">Node registry · Heartbeat monitor · Capability lookup · Dashboard · Config API · USB generator</div>
+      <div style="margin-top:8px"><span class="port">:9090</span> <span class="port">~400 lines</span></div>
+      <div style="margin-top:6px">
+        <div style="font-size:9px;color:#444">POST /api/hive/generate-usb</div>
+        <div style="font-size:9px;color:#444">GET  /dashboard</div>
+        <div style="font-size:9px;color:#444">POST /api/nodes/register</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOW -->
+  <div class="flow">
+    <div class="flow-line"></div>
+    <div class="flow-node">↓ coordinated through ↓</div>
+    <div class="flow-line"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  LAYER 3 — MIDDLEWARE                                  -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <div class="divider span-all">
+    <span class="divider-text">BorgClaw — Middleware Layer</span>
+    <div class="divider-line"></div>
+    <span class="divider-text" style="color:#a78bfa33">LAYER 3</span>
+  </div>
+
+  <div class="middleware-grid">
+    <div class="mw-card">
+      <div class="mw-name">NATS JetStream</div>
+      <div class="port" style="margin-bottom:6px">:4222</div>
+      <div class="mw-desc">Event bus + KV store. Every agent action emits typed event. Temporal coordination. Replaces Redis — JetStream KV is sufficient.</div>
+    </div>
+    <div class="mw-card">
+      <div class="mw-name">QMD</div>
+      <div class="port" style="margin-bottom:6px">MCP server</div>
+      <div class="mw-desc">@tobilu/qmd · 3-layer search over AK-OS markdown: BM25 + vector (nomic-embed-text:v2) + LLM rerank (Qwen3-Reranker-0.6B).</div>
+    </div>
+    <div class="mw-card">
+      <div class="mw-name">ntfy</div>
+      <div class="port" style="margin-bottom:6px">:2586</div>
+      <div class="mw-desc">Self-hosted push notifications to your phone. Approval action buttons — sentinel fires alerts, you approve or reject from lock screen.</div>
+    </div>
+    <div class="mw-card" style="border-style:dashed;opacity:0.7">
+      <div class="mw-name" style="color:#a78bfa88">mem0</div>
+      <span class="badge badge-p2">PHASE 2</span>
+      <div class="mw-desc" style="margin-top:6px">Cross-session agent memory. 48K stars, SOC 2. pip install mem0ai. Agents remember context across conversations.</div>
+    </div>
+  </div>
+
+  <!-- FLOW -->
+  <div class="flow">
+    <div class="flow-line"></div>
+    <div class="flow-node">↓ runs on ↓</div>
+    <div class="flow-line"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  LAYER 4 — COMPUTE                                    -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <div class="divider span-all">
+    <span class="divider-text">BorgClaw — Compute Layer</span>
+    <div class="divider-line"></div>
+    <span class="divider-text" style="color:#00ff8833">LAYER 4</span>
+  </div>
+
+  <div class="node-grid">
+
+    <!-- Mac Mini -->
+    <div class="node-card" style="border-color:#00ff8822;">
+      <div class="node-name">⬡ Mac Mini M4 Pro</div>
+      <div class="node-spec">QUEEN NODE · 24GB unified · ~$0/mo</div>
+      <div class="model-row">
+        <div class="model-slot">router</div>
+        <div class="model-name">phi4-mini</div>
+        <div class="model-size">3.8B · 3.5GB</div>
+      </div>
+      <div class="model-row">
+        <div class="model-slot">general</div>
+        <div class="model-name">qwen3:8b</div>
+        <div class="model-size">8B · 5.5GB</div>
+      </div>
+      <div class="model-row">
+        <div class="model-slot">synthesis</div>
+        <div class="model-name">gemma3:27b</div>
+        <div class="model-size">27B · 18GB · 128K ctx</div>
+      </div>
+      <div class="model-row">
+        <div class="model-slot">code</div>
+        <div class="model-name">qwen2.5-coder:14b</div>
+        <div class="model-size">14B · 9.5GB</div>
+      </div>
+      <div class="model-row" style="border:none">
+        <div class="model-slot">embed</div>
+        <div class="model-name">nomic-embed-text:v2</div>
+        <div class="model-size">475M MoE</div>
+      </div>
+      <div style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:8px;color:#2a4a2a">Ollama v0.18.2 · Metal · hot-swap</div>
+    </div>
+
+    <!-- Ryzen -->
+    <div class="node-card" style="border-color:#fb923c22;">
+      <div class="node-name" style="color:#fb923c">⬡ Ryzen / RTX 3070</div>
+      <div class="node-spec">WORKER NODE · 8GB VRAM · ~$0/mo</div>
+      <div class="model-row">
+        <div class="model-slot">general</div>
+        <div class="model-name">phi4-mini</div>
+        <div class="model-size">3.8B · 3.5GB</div>
+      </div>
+      <div class="model-row">
+        <div class="model-slot">code</div>
+        <div class="model-name">qwen2.5-coder:7b</div>
+        <div class="model-size">7B · 4.5GB</div>
+      </div>
+      <div class="model-row" style="border:none">
+        <div class="model-slot">embed</div>
+        <div class="model-name">nomic-embed-text:v2</div>
+        <div class="model-size">475M MoE</div>
+      </div>
+      <div style="margin-top:16px;font-family:'JetBrains Mono',monospace;font-size:8px;color:#2a2a1a">⚠ 14B+ models exceed 8GB VRAM.</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#2a2a1a">Route reasoning → Mac Mini or cloud.</div>
+      <div style="margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:8px;color:#2a3a2a">Ollama v0.18.2 · CUDA · hot-swap</div>
+    </div>
+
+    <!-- USB -->
+    <div class="usb-card">
+      <div class="usb-icon">🔌</div>
+      <div class="usb-label">USB Assimilator</div>
+      <div class="usb-sub">Any machine.<br>One script.<br>Joins the hive.</div>
+      <div style="margin-top:8px">
+        <div class="badge">PHASE E — BUILD NOW</div>
+      </div>
+      <div style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:8px;color:#333;text-align:left">bootstrap.sh<br>queen-address.json<br>hive-token</div>
+    </div>
+
+  </div>
+
+  <!-- Cloud -->
+  <div class="card accent-yellow" style="background:#08080a; grid-column:3;">
+    <div class="card-title">Cloud Overflow · LiteLLM</div>
+    <div class="card-label" style="margin-bottom:8px">Hard cap: $55/mo</div>
+    <div class="cloud-tier">
+      <div class="cloud-row">
+        <div>
+          <div class="cloud-model">gemini-2.0-flash</div>
+          <div class="cloud-use">fast cloud, default overflow</div>
+        </div>
+        <div class="cloud-cost">$0.00003</div>
+      </div>
+      <div class="cloud-row">
+        <div>
+          <div class="cloud-model">gpt-4o-mini</div>
+          <div class="cloud-use">fast cloud fallback</div>
+        </div>
+        <div class="cloud-cost">$0.00006</div>
+      </div>
+      <div class="cloud-row">
+        <div>
+          <div class="cloud-model">gpt-4o</div>
+          <div class="cloud-use">mid-tier reasoning</div>
+        </div>
+        <div class="cloud-cost">$0.005</div>
+      </div>
+      <div class="cloud-row" style="border-color:#2a2010">
+        <div>
+          <div class="cloud-model" style="color:#a78bfa">claude-sonnet-4-6</div>
+          <div class="cloud-use">voice-critical writing</div>
+        </div>
+        <div class="cloud-cost">$0.003</div>
+      </div>
+      <div class="cloud-row" style="border-color:#2a2010;opacity:0.7">
+        <div>
+          <div class="cloud-model" style="color:#f87171">claude-opus-4-6</div>
+          <div class="cloud-use">frontier · last resort</div>
+        </div>
+        <div class="cloud-cost">$0.015</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  LEGEND                                               -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+
+  <div class="divider span-all" style="margin-top:8px">
+    <span class="divider-text">Legend + Watchlist</span>
+    <div class="divider-line"></div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#00ff88"></div>Running / confirmed</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div>Built, needs wiring</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f87171"></div>Phase E — build next</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div>Phase 2 — after USB</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#444"></div>Not connected yet</div>
+    <div style="flex:1"></div>
+    <div class="legend-item" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#333">
+      Watching: vllm-mlx · Bifrost · Pydantic AI v2 · DeepSeek R2
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="span-all" style="text-align:center;padding-top:16px;border-top:1px solid #0f0f0f;margin-top:8px">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#222;letter-spacing:2px">
+      BORGCLAW v0.1 · MIT · 2026-03-18 · AUTORESEARCH LOOP ACTIVE
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#1a1a1a;margin-top:4px;letter-spacing:1px">
+      Absorb what is useful. Discard what is not. Add what is essentially your own.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

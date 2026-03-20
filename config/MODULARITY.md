@@ -1,7 +1,7 @@
 # AK-OS Modularity Manifesto
 ## Nothing is permanent. Everything is a slot.
 
-> "Nothing is definite, right? It's all modular — we swap things out and replace them or upgrade components when something better comes along. That's part of the philosophy." — Alexander Kline, 2026-03-15
+> "Nothing is definite, right? It's all modular — we swap things out and replace them or upgrade components when something better comes along. That's part of the philosophy." — BorgClaw design principle, 2026
 
 ---
 
@@ -18,11 +18,11 @@ Every component in AK-OS is a **slot**, not a **commitment**. What matters is th
 ### Agents query capabilities, not tools
 ```
 # WRONG: Agent hardcodes the tool
-result = gmail_mcp.search_messages("from:guidepoint")
+result = gmail_mcp.search_messages("from:key-contact")
 
 # RIGHT: Agent queries the registry for a capability
 tool = registry.resolve("search_messages")
-result = tool.execute("from:guidepoint")
+result = tool.execute("from:key-contact")
 ```
 
 When Gmail MCP is replaced by gws CLI, the registry updates. Agents don't change.
@@ -37,7 +37,7 @@ Every component is defined in a YAML config. To swap a component:
 No code changes. No rebuild. No deploy. Just config + install + reload.
 
 ### The evaluation pipeline is continuous
-Signal Radar scans weekly for better tools. The self-improvement system proposes swaps when it detects a component that scores higher on the 5-principle check (Agnostic, Modular, Portable, Extensible, Self-Improving). But swaps still require Alexander's approval (Law Two) unless they're in the autonomous zone.
+Signal Radar scans weekly for better tools. The self-improvement system proposes swaps when it detects a component that scores higher on the 5-principle check (Agnostic, Modular, Portable, Extensible, Self-Improving). But swaps still require the operator's approval (Law Two) unless they're in the autonomous zone.
 
 ## What's Swappable (Everything)
 
@@ -77,8 +77,8 @@ Signal Radar detects better tool
     → Added to TOOL-LANDSCAPE.md with status: 🗺️ Mapped
     → If score > current tool: promoted to 🔍 Evaluating
     → Spike test on isolated node (Docker or worktree)
-    → If passes: proposal to Alexander (Law Two)
-    → If approved: config update + install + reload
+    → If passes: proposal to the operator (Law Two)
+    → If approved by operator: config update + install + reload
     → Old tool moved to Parked in TOOL-LANDSCAPE.md (Law Zero: never delete)
     → Experiment log updated with before/after metrics
 ```

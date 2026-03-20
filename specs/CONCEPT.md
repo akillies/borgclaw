@@ -1,6 +1,6 @@
 # BorgClaw
 ## Your Machines. Your Models. Your Rules.
-**Created:** 2026-03-14 | **Status:** Concept | **Author:** Alexander Kline
+**Created:** 2026-03-14 | **Status:** Concept | **Author:** the operator
 
 > Plug a USB into any computer in your house. Run one script. It detects hardware, installs the optimal LLM, and joins the hive. A Queen orchestrator routes tasks across all nodes. Your files, your models, your infrastructure. External APIs only when local can't handle it.
 
@@ -52,9 +52,9 @@ BorgClaw is the open-source answer: **self-owned, multi-node, privacy-first, ext
 │                                                          │
 │   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────┐  │
 │   │  NODE 1   │  │  NODE 2   │  │  NODE 3   │  │ ...  │  │
-│   │  Mac Mini │  │  Ryzen    │  │  Laptop   │  │      │  │
+│   │  Mac Mini │  │  Tower    │  │  Laptop   │  │      │  │
 │   │  24GB     │  │  32GB     │  │  16GB     │  │      │  │
-│   │  M4 Pro   │  │  3070     │  │  iGPU     │  │      │  │
+│   │  M4 Pro   │  │  GPU      │  │  iGPU     │  │      │  │
 │   │           │  │           │  │           │  │      │  │
 │   │  7B fast  │  │  14B deep │  │  3B light │  │      │  │
 │   │  embed    │  │  code     │  │  embed    │  │      │  │
@@ -106,7 +106,7 @@ BorgClaw is the open-source answer: **self-owned, multi-node, privacy-first, ext
 4. REGISTER WITH QUEEN
    ├── POST node-registration.json to Queen endpoint
    │   {
-   │     "hostname": "alexs-macbook",
+   │     "hostname": "my-macbook",
    │     "ip": "192.168.1.42",
    │     "port": 11434,
    │     "profile": "standard",
@@ -259,30 +259,30 @@ The Queen terminology fits the hive-mind metaphor (bee colony, Borg collective).
 
 ---
 
-## AK-OS INTEGRATION
+## HOST SYSTEM INTEGRATION
 
-For Alexander specifically, BorgClaw IS the AK-OS infrastructure layer:
+For operators running a personal AI OS, BorgClaw IS the infrastructure layer:
 
 ```
 BorgClaw (infrastructure)
 ├── Queen on Mac Mini (always-on)
-├── Ryzen as heavy-compute node
+├── GPU tower as heavy-compute node
 ├── Laptop as mobile node (when home)
 │
-└── AK-OS (application layer on top)
-    ├── borgclaw-brain/ = akos/ folder
-    ├── agents/ = AK-OS agent definitions
+└── Personal AI OS (application layer on top)
+    ├── borgclaw-brain/ = knowledge base folder
+    ├── agents/ = agent definitions
     │   ├── jarvis-router → Queen's default router
     │   ├── cerebro-analyst → Claude API agent
     │   ├── sentinel → always-on monitoring
-    │   ├── ops-handler → Ryzen deep-compute agent
+    │   ├── ops-handler → deep-compute agent
     │   └── comms-drafter → Claude API for voice/brand
-    ├── knowledge/ = db/ folder (context, entities, research)
-    ├── Paperclip/Egregore = orchestration layer on top
+    ├── knowledge/ = context, entities, research
+    ├── Paperclip = orchestration layer on top
     └── External APIs = Claude (frontier), ElevenLabs (voice)
 ```
 
-BorgClaw solves the infrastructure problem. AK-OS is the application. Paperclip/Egregore is the governance. They're three distinct layers that compose together.
+BorgClaw solves the infrastructure problem. The personal AI OS is the application. Paperclip is the governance. They're three distinct layers that compose together.
 
 ---
 
@@ -314,9 +314,9 @@ BORGCLAW/
 │   │                            This is what makes this YOUR collective
 │   │                            {
 │   │                              "queen": "192.168.1.10:8000",
-│   │                              "token": "ak-hive-xxxx",
-│   │                              "hive_name": "AK-OS",
-│   │                              "owner": "Alexander Kline"
+│   │                              "token": "hive-token-xxxx",
+│   │                              "hive_name": "my-hive",
+│   │                              "owner": "the operator"
 │   │                            }
 │   ├── brain-sync.json        ← How to sync the shared knowledge base
 │   │                            (git repo URL, or Syncthing config, etc.)
@@ -403,7 +403,7 @@ Set up on Queen (Mac Mini):
   - Use SSH keys, not passwords
 
 From anywhere:
-  ssh -L 8000:localhost:8000 -L 3100:localhost:3100 alex@home-ip
+  ssh -L 8000:localhost:8000 -L 3100:localhost:3100 user@home-ip
 
   Now localhost:8000 = your Queen gateway
   And  localhost:3100 = your Paperclip dashboard
@@ -458,7 +458,7 @@ when agents need your approval.
 
 ### The Phone as a Node
 
-With Tailscale, your iPhone/Android becomes a node on the mesh network. You can't run Ollama on a phone, but you CAN:
+With Tailscale, your phone becomes a node on the mesh network. You can't run Ollama on a phone, but you CAN:
 - Be a **control surface** — dispatch tasks, approve outputs
 - Be a **notification endpoint** — get alerts from Sentinel
 - Be a **voice input** — speak tasks, Whisper transcribes, Queen routes
@@ -480,9 +480,9 @@ Phone (anywhere)
     │
     └── Push notifications ← Sentinel agent
             │
-            ├── "Expert network opportunity — $500/hr"
+            ├── "Expert network opportunity detected"
             ├── "Morning briefing ready for review"
-            ├── "Meeting with Julie in 30 min — prep attached"
+            ├── "Meeting in 30 min — prep attached"
             └── "Node ryzen-tower went offline"
 ```
 
@@ -525,9 +525,9 @@ Phone (anywhere)
 
 ---
 
-## BOUNDARY LAYER ANGLE
+## CONTENT ANGLE
 
-This is absolutely a Boundary Layer article:
+This is absolutely an article for a technology newsletter:
 
 **"I Built a Personal AI Cluster From Hardware I Already Owned"**
 or
@@ -535,18 +535,18 @@ or
 or
 **"The Open-Source Alternative to Perplexity's Personal Computer"**
 
-Timing is perfect — Perplexity PC was announced March 11. The conversation is happening RIGHT NOW. Alexander writing about the open-source alternative positions him as the builder, not the consumer.
+Timing is perfect — Perplexity PC was announced March 11. The conversation is happening RIGHT NOW. Writing about the open-source alternative positions the author as the builder, not the consumer.
 
 ---
 
-## STRATEGIC VALUE FOR ALEXANDER
+## STRATEGIC VALUE
 
 1. **Open-source project with real traction potential** — Perplexity PC creates demand, BorgClaw satisfies the "I want to own it" crowd
-2. **Authority builder** — "The guy who made the open-source Personal Computer"
+2. **Authority builder** — "The person who made the open-source Personal Computer"
 3. **Consulting IP** — "I'll set up BorgClaw for your company" ($$$)
-4. **Boundary Layer content** — Multiple articles worth of material
-5. **Solves his own problem** — AK-OS gets its infrastructure layer
-6. **Cross-domain synthesis** — Where AI systems, information architecture, and personal sovereignty intersect. Pure Alexander Kline territory.
+4. **Content material** — Multiple articles worth of material
+5. **Solves the operator's own problem** — Any personal AI OS gets its infrastructure layer
+6. **Cross-domain synthesis** — Where AI systems, information architecture, and personal sovereignty intersect.
 
 ---
 

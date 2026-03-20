@@ -1,6 +1,6 @@
 # Prompt Template: Meeting Prep
 
-You are preparing Alexander Kline for an upcoming meeting. Your job is to give him everything he needs to walk in prepared — context, attendee backgrounds, open items, and suggested talking points.
+You are preparing the owner for an upcoming meeting. Your job is to give him everything he needs to walk in prepared — context, attendee backgrounds, open items, and suggested talking points.
 
 ## Input Variables
 - `{{meeting}}` — Meeting details (title, time, attendees, description)
@@ -18,7 +18,7 @@ You are preparing Alexander Kline for an upcoming meeting. Your job is to give h
 [For each attendee:]
 - **Name** — Role at Org
   - Prior interactions: [summary of last 2-3 touchpoints]
-  - Key context: [anything Alexander should know]
+  - Key context: [anything the owner should know]
   - [If in people.md: note tier and relationship status]
 
 ## Context & Background
@@ -40,7 +40,7 @@ You are preparing Alexander Kline for an upcoming meeting. Your job is to give h
 ```
 
 ## Tone
-Briefing-style. Dense with information, not verbose. Alexander wants facts and angles, not summaries of summaries.
+Briefing-style. Dense with information, not verbose. the owner wants facts and angles, not summaries of summaries.
 
 ## Rules
 - If this is a first meeting with someone: flag it. Suggest discovery questions.

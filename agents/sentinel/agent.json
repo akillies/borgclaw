@@ -28,6 +28,7 @@
     ],
     "event": ["high_priority_email", "meeting_in_30min", "node_offline", "budget_warning"]
   },
+  "_tools_note": "Declarative capability descriptions — not implemented MCP endpoints yet. Phase D implementation target. send_notification maps to ntfy MCP. check_node_health maps to Queen API /api/status.",
   "tools": [
     "read_knowledge_base",
     "update_signal_registry",
@@ -42,10 +43,10 @@
       "purpose": "Monitor for expert network opps, client emails, financial notifications",
       "tools": ["search_messages", "read_message"],
       "queries": [
-        "from:guidepoint OR from:glg",
+        "from:key-contact OR from:network-provider",
         "from:gumroad OR from:stripe",
         "subject:urgent OR subject:time-sensitive",
-        "from:julie WFS"
+        "from:community-contact subject:community-name"
       ]
     },
     {
@@ -54,22 +55,24 @@
       "tools": ["list_events"]
     },
     {
-      "name": "ntfy_or_pushover",
-      "purpose": "Push notifications to Alexander's phone",
+      "name": "ntfy",
+      "purpose": "Push notifications to your phone with approval action buttons",
+      "endpoint": "http://localhost:2586",
+      "topics": ["borgclaw-approvals", "borgclaw-alerts", "borgclaw-signals"],
       "tools": ["send_push"],
-      "status": "PLANNED — need to set up ntfy.sh or Pushover"
+      "status": "running — started by docker-compose.yml (port 2586)"
     }
   ],
   "alert_rules": {
     "expert_network_email": {
-      "trigger": "Email from Guidepoint/GLG with opportunity",
+      "trigger": "Email from expert network provider with opportunity",
       "action": "Immediate push notification + queue for cerebro-analyst prep",
       "priority": "critical",
       "respect_quiet_hours": false
     },
     "meeting_prep": {
       "trigger": "Calendar event in 30 minutes with external attendees",
-      "action": "Route to cerebro-analyst for prep, notify Alexander",
+      "action": "Route to cerebro-analyst for prep, notify the operator",
       "priority": "high",
       "respect_quiet_hours": true
     },

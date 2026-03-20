@@ -4,7 +4,7 @@
 # Agents: Sentinel, Cerebro, Comms-Drafter, Ops-Handler
 #
 # PURPOSE: Detect decaying relationships before they go cold.
-# Alexander's blind-spot pattern: "conversation-needed-followup"
+# Blind-spot pattern: "conversation-needed-followup"
 # This workflow operationalizes the fix.
 
 name: relationship-nudge
@@ -20,26 +20,30 @@ variables:
     tier_1_days: 30    # Family, close collaborators
     tier_2_days: 60    # Active professional network
     tier_3_days: 90    # Extended network, weak ties
+  # Configure: replace these with your own critical contacts.
+  # Each entry surfaces in pattern detection and nudge drafting.
+  # Fields: name, org (optional), tier (1/2/3), last_known_gap (optional),
+  #         revenue_impact (optional), context (optional freetext).
   critical_contacts:
-    - name: "Kate Montgomery"
-      org: "Guidepoint"
+    - name: "{{CONTACT_NAME_1}}"
+      org: "{{CONTACT_ORG_1}}"
       tier: 2
-      last_known_gap: "60+ days unanswered"
-      revenue_impact: "$375+/hr expert network rate"
-    - name: "Julie Simon"
-      org: "World Future Society"
+      last_known_gap: "set if there is a known unanswered thread"
+      revenue_impact: "set if this contact has direct revenue relevance"
+    - name: "{{CONTACT_NAME_2}}"
+      org: "{{CONTACT_ORG_2}}"
       tier: 2
-    - name: "Mo Hirtle"
+    - name: "{{CONTACT_NAME_3}}"
       tier: 1
-      context: "Ansible design collaborator"
-    - name: "Jeff Gomez"
-      org: "Starlight Runner"
+      context: "describe relationship context here"
+    - name: "{{CONTACT_NAME_4}}"
+      org: "{{CONTACT_ORG_4}}"
       tier: 2
-      context: "Signal Corps IP architecture"
-    - name: "Seth Earley"
-      org: "Earley Information Science"
+      context: "describe relationship context here"
+    - name: "{{CONTACT_NAME_5}}"
+      org: "{{CONTACT_ORG_5}}"
       tier: 2
-      context: "EIS collaboration"
+      context: "describe relationship context here"
 
 steps:
   # --- SCAN PHASE (parallel) ---
@@ -53,7 +57,7 @@ steps:
           queries_per_contact: true
           query_template: "from:{{contact.email}} OR to:{{contact.email}}"
           limit_per_contact: 5
-      cross_reference: "db/ak-os/entities/people.md"
+      cross_reference: "{{KNOWLEDGE_BASE_PATH}}/entities/people.md"
     outputs: [email_recency_map]
     timeout_seconds: 120
 
@@ -74,7 +78,7 @@ steps:
     params:
       patterns:
         - id: conversation-needed-followup
-          description: "Contact has sent message with no reply from Alexander"
+          description: "Contact has sent message with no reply from the operator"
           scan: "search_messages: is:unread OR (from:{{contact}} -reply)"
           severity_if_tier_1: CRITICAL
           severity_if_tier_2: WARN
@@ -126,9 +130,9 @@ steps:
         - "Short. 3-5 sentences max for email nudges."
         - "No guilt language. No 'I know it's been a while.'"
         - "If revenue contact: frame as value offering, not asking."
-      max_nudges: 5  # Don't overwhelm Alexander with 15 drafts
+      max_nudges: 5  # Don't overwhelm the operator with 15 drafts
     outputs: [nudge_drafts]
-    approval: required  # Alexander chooses which to send
+    approval: required  # Operator chooses which to send
 
   # --- FORMAT & DELIVER ---
 
@@ -152,7 +156,7 @@ steps:
     depends_on: [format_weekly_report]
     params:
       channel: gmail_draft
-      to: "alexanderkline13@gmail.com"
+      to: "{{YOUR_EMAIL}}"  # Configure: set your delivery email address
       subject: "Network Health: Week of {{trigger.date_formatted}}"
       body: "{{weekly_network_report}}"
     outputs: [delivery_confirmation]
@@ -162,7 +166,7 @@ steps:
     action: file_update
     depends_on: [build_health_report]
     params:
-      file: "db/ak-os/entities/people.md"
+      file: "{{KNOWLEDGE_BASE_PATH}}/entities/people.md"
       update_type: merge_recency_data
       data: "{{health_report}}"
     approval: auto  # Internal data update, no external impact

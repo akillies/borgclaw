@@ -1,30 +1,36 @@
 {
   "_comment": "Hardware profile to model mapping. When better models come out, update this file. No code changes needed.",
   "_modularity": "Every model entry is swappable. Ollama and LM Studio are interchangeable runtimes. If a new runtime appears (vLLM, llama.cpp server, etc.), add it as a runtime option.",
-  "_last_updated": "2026-03-15",
+  "_qmd_note": "Fields marked 'indexed_by: qmd' indicate models QMD uses internally for its 3-layer search pipeline (BM25 + vector + LLM rerank). QMD manages these internally — they are NOT separately addressable API endpoints. Run 'qmd index <dir>' to build the search index; QMD pulls these models automatically via Ollama.",
+  "_litellm_note": "API routing for all cloud models goes through LiteLLM (port 4000). See config/litellm.yaml for the full routing table.",
+  "_last_updated": "2026-03-18",
 
   "profiles": {
     "mac-apple-silicon-24gb": {
       "description": "Apple Silicon Mac with 24GB+ unified memory. MLX optimized.",
-      "runtime": "lm-studio",
-      "runtime_alternatives": ["ollama"],
+      "runtime": "ollama",
+      "runtime_alternatives": ["lm-studio"],
+      "_runtime_note": "Ollama v0.18.2+ auto-detects Metal. LM Studio 0.4.6 has continuous batching for higher throughput. Either works.",
+      "_memory_note": "Only one large model loads at a time. Ollama hot-swaps automatically. Total budget: 24GB.",
       "models": {
-        "general": { "name": "qwen3-8b-mlx", "params": "8B", "quant": "Q4_K_M", "vram_gb": 5.5 },
-        "reasoning": { "name": "qwen3-14b-mlx", "params": "14B", "quant": "Q4_K_M", "vram_gb": 9.5 },
-        "code": { "name": "qwen2.5-coder-7b-mlx", "params": "7B", "quant": "Q4_K_M", "vram_gb": 4.5 },
-        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
-        "reranker": { "name": "Qwen3-Reranker-0.6B", "managed_by": "qmd" },
-        "query_expansion": { "name": "qmd-query-expansion-1.7B", "managed_by": "qmd" }
+        "router":    { "name": "phi4-mini",          "params": "3.8B", "quant": "Q4_K_M", "vram_gb": 3.5,  "use_for": "Fast triage/routing — stays loaded, ~15-30 tok/s, leaves RAM for larger models" },
+        "general":   { "name": "qwen3:8b",            "params": "8B",   "quant": "Q4_K_M", "vram_gb": 5.5,  "use_for": "General assistant, email drafts, summaries" },
+        "synthesis": { "name": "gemma3:27b",          "params": "27B",  "quant": "Q5_K_M", "vram_gb": 18.0, "use_for": "Long-context research synthesis (128K context), deep analysis. LMSys Elo 1339, top 10 globally." },
+        "code":      { "name": "qwen2.5-coder:14b",   "params": "14B",  "quant": "Q4_K_M", "vram_gb": 9.5,  "use_for": "Code generation, #1 ranked local coding model 2026, 80+ languages" },
+        "embedding": { "name": "nomic-embed-text:v2", "params": "475M (MoE, activates 305M)", "indexed_by": "qmd", "use_for": "Vector embeddings. 1.6B contrastive pairs, 100 languages, Matryoshka dims 768→256." },
+        "reranker":  { "name": "Qwen3-Reranker-0.6B", "indexed_by": "qmd", "use_for": "QMD 3rd-layer reranking" },
+        "query_expansion": { "note": "QMD handles query expansion internally — no separate model required." }
       }
     },
     "nvidia-8gb-32gb-ram": {
       "description": "NVIDIA GPU 8GB VRAM + 32GB system RAM. CUDA optimized.",
       "runtime": "ollama",
+      "_vram_ceiling": "8GB VRAM hard cap. All models must fit at Q4_K_M. 7B models use 4.5-5.5GB, leaving 2.5-3.5GB for context. DO NOT load 14B+ models — they will OOM crash.",
       "models": {
-        "general": { "name": "qwen3:8b", "params": "8B", "quant": "Q4_K_M", "vram_gb": 5.5 },
-        "reasoning": { "name": "qwen3:14b", "params": "14B", "quant": "Q4_K_M", "vram_gb": 9.5 },
-        "code": { "name": "qwen2.5-coder:7b", "params": "7B", "quant": "Q4_K_M", "vram_gb": 4.5 },
-        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" }
+        "general": { "name": "phi4-mini",        "params": "3.8B", "quant": "Q4_K_M", "vram_gb": 3.5, "use_for": "Ops, structured output, triage. Best reasoning-per-parameter in sub-5B class. Safe 4.5GB headroom for context." },
+        "code":    { "name": "qwen2.5-coder:7b", "params": "7B",   "quant": "Q4_K_M", "vram_gb": 4.5, "use_for": "Code generation on worker node. Codestral Q4_K_M also viable." },
+        "embedding": { "name": "nomic-embed-text:v2", "indexed_by": "qmd" },
+        "_reasoning_note": "14B+ models EXCEED 8GB VRAM. Route reasoning tasks to mac-apple-silicon-24gb node or cloud-overflow profile. Queen capability lookup handles this automatically."
       }
     },
     "mac-apple-silicon-16gb": {
@@ -34,8 +40,8 @@
       "models": {
         "general": { "name": "qwen3-8b-mlx", "params": "8B", "quant": "Q4_K_M", "vram_gb": 5.5 },
         "code": { "name": "qwen2.5-coder-7b-mlx", "params": "7B", "quant": "Q4_K_M", "vram_gb": 4.5 },
-        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
-        "reranker": { "name": "Qwen3-Reranker-0.6B", "managed_by": "qmd" },
+        "embedding": { "name": "embedding-gemma-300M", "indexed_by": "qmd" },
+        "reranker": { "name": "Qwen3-Reranker-0.6B", "indexed_by": "qmd" },
         "_note": "No 14B reasoning model — not enough RAM with other services running."
       }
     },
@@ -44,7 +50,7 @@
       "runtime": "ollama",
       "models": {
         "general": { "name": "qwen3:4b", "params": "4B", "quant": "Q4_K_M", "vram_gb": 3 },
-        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
+        "embedding": { "name": "embedding-gemma-300M", "indexed_by": "qmd" },
         "_note": "8GB M1 MacBook Air. Can search and run tiny models. Not a power node."
       }
     },
@@ -54,7 +60,7 @@
       "runtime_note": "LM Studio requires Apple Silicon. This node uses Ollama CPU-only.",
       "models": {
         "general": { "name": "qwen3:4b", "params": "4B", "quant": "Q4_K_M", "vram_gb": 0 },
-        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
+        "embedding": { "name": "embedding-gemma-300M", "indexed_by": "qmd" },
         "_note": "CPU inference only. 3-6 tokens/sec. Fine for batch jobs, painful for interactive. Consider Satellite role."
       }
     },
@@ -63,7 +69,7 @@
       "runtime": "ollama",
       "models": {
         "general": { "name": "qwen3:4b", "params": "4B", "quant": "Q4_K_M", "vram_gb": 3 },
-        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
+        "embedding": { "name": "embedding-gemma-300M", "indexed_by": "qmd" },
         "_note": "Limited VRAM. 4B model fits. 7B+ will spill to RAM and slow down badly."
       }
     },
@@ -72,7 +78,7 @@
       "runtime": "ollama",
       "models": {
         "general": { "name": "qwen3:4b", "params": "4B", "quant": "Q4_K_M", "vram_gb": 0 },
-        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" }
+        "embedding": { "name": "embedding-gemma-300M", "indexed_by": "qmd" }
       }
     },
     "cpu-only-8gb": {
@@ -80,7 +86,7 @@
       "runtime": "ollama",
       "models": {
         "general": { "name": "qwen3:1.7b", "params": "1.7B", "quant": "Q4_K_M", "vram_gb": 0 },
-        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
+        "embedding": { "name": "embedding-gemma-300M", "indexed_by": "qmd" },
         "_note": "Barely functional for inference. Better as search-only Satellite (QMD only, no LLM)."
       }
     },
@@ -88,7 +94,7 @@
       "description": "No LLM inference. QMD search node only. For very low-spec machines.",
       "runtime": "none",
       "models": {
-        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
+        "embedding": { "name": "embedding-gemma-300M", "indexed_by": "qmd" },
         "_note": "This node only runs QMD for local search. All LLM requests route to other nodes or cloud."
       }
     },

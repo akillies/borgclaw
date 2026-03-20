@@ -26,16 +26,16 @@ steps:
             - "ollama new models"
             - "LM Studio update"
           limit: 5
-      cross_reference: "db/ak-os/projects/borgclaw/config/mcps/registry.yaml"
+      cross_reference: "config/mcps/registry.yaml"
     outputs: [new_tools]
 
   - id: check_capability_gaps
     agent: sentinel
     action: pattern_scan
     params:
-      source: "db/ak-os/projects/borgclaw/config/mcps/registry.yaml"
+      source: "config/mcps/registry.yaml"
       scan_type: unfilled_capabilities
-      check_against: "db/ak-os/CAPABILITY-ROADMAP.md"
+      check_against: "{{knowledge_base}}/capability-roadmap.md"
     outputs: [gap_analysis]
 
   - id: check_model_updates
@@ -49,7 +49,7 @@ steps:
             - "small language model benchmark 2026"
             - "MLX compatible models new"
           limit: 10
-      cross_reference: "db/ak-os/projects/borgclaw/config/models.json"
+      cross_reference: "config/models.json"
     outputs: [model_updates]
 
   - id: format_report
@@ -71,7 +71,7 @@ steps:
     action: deliver
     params:
       channel: gmail_draft
-      to: "alexanderkline13@gmail.com"
+      to: "[CONFIGURE_YOUR_EMAIL]"
       subject: "Self-Improvement Scan: {{trigger.date_formatted}}"
       body: "{{report}}"
 

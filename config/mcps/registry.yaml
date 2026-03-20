@@ -1,4 +1,4 @@
-# AK-OS MCP & Tool Registry
+# BorgClaw MCP & Tool Registry
 # Master inventory of all connected tools, their capabilities, and status.
 #
 # MODULARITY PRINCIPLE: Every entry here is a slot, not a commitment.

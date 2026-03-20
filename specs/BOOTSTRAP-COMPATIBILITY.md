@@ -11,7 +11,7 @@ These are non-negotiable. If a machine doesn't meet these, bootstrap.sh exits wi
 | Requirement | Floor | Why |
 |------------|-------|-----|
 | RAM | 8 GB | QMD models alone need ~2GB in memory. Ollama needs headroom. Below 8GB, nothing runs usefully. |
-| Disk | 10 GB free | QMD models (~2GB) + Ollama models (~4-8GB) + AK-OS files (~500MB) + Docker images (~2-3GB) |
+| Disk | 10 GB free | QMD models (~2GB) + Ollama models (~4-8GB) + knowledge base files (~500MB) + Docker images (~2-3GB) |
 | Node.js | 22.0.0+ | QMD requires Node.js ≥22. Non-negotiable — it uses modern ESM features and node-llama-cpp bindings. |
 | Python | 3.10+ | LangGraph, mem0 (Phase 2), various scripts. 3.10 is the floor for current package compatibility. |
 | Git | 2.x | Knowledge base sync. Any modern git works. |
@@ -221,7 +221,7 @@ Three open bugs as of March 2026:
 ### QMD Global Install
 npm global installs (`npm install -g`) can break QMD's bin wrapper due to symlink resolution.
 
-**Workaround:** Install locally in the akos directory: `cd ~/akos && npm install @tobilu/qmd` and add `./node_modules/.bin` to PATH.
+**Workaround:** Install locally in the borgclaw directory: `cd ~/borgclaw && npm install @tobilu/qmd` and add `./node_modules/.bin` to PATH.
 
 **Bootstrap should:** Try global first. If `qmd --version` fails, fall back to local install.
 
@@ -308,9 +308,9 @@ The current models.json has 4 profiles. Based on this research, we need:
    - If Worker: connect to Queen, start heartbeat
 
 8. INDEX KNOWLEDGE BASE (QMD)
-   - qmd collection add ~/akos/db/ak-os --name ak-os-core
-   - qmd collection add ~/akos/db --name master-context
-   - qmd collection add ~/akos/memory --name memory
+   - qmd collection add ~/knowledge-base --name kb-core
+   - qmd collection add ~/knowledge-base/entities --name entities
+   - qmd collection add ~/memory --name memory
    - Add context annotations
 
 9. SET UP SCHEDULED TASKS
@@ -333,4 +333,4 @@ The current models.json has 4 profiles. Based on this research, we need:
 
 ---
 
-*This spec covers every machine Alexander might plug the flash drive into — from a 2018 Intel MacBook to a fresh RTX 5090 tower. The bootstrap should be maximally permissive (try everything) and minimally surprising (clear messages about what works and what doesn't).*
+*This spec covers every machine an operator might plug the flash drive into — from a 2018 Intel MacBook to a fresh RTX 5090 tower. The bootstrap should be maximally permissive (try everything) and minimally surprising (clear messages about what works and what doesn't).*

@@ -25,15 +25,15 @@ model_preferences:
 
 context_files:
   always_load:
-    - "db/ak-os/entities/patterns.md"
+    - "{{knowledge_base}}/patterns.md"
   relationship_scans:
-    - "db/ak-os/entities/people.md"
+    - "{{knowledge_base}}/people.md"
   financial_scans:
-    - "db/ak-os/entities/financial.md"
+    - "{{knowledge_base}}/financial.md"
   project_scans:
-    - "db/ak-os/entities/projects.md"
+    - "{{knowledge_base}}/projects.md"
   decision_scans:
-    - "db/ak-os/entities/decisions.md"
+    - "{{knowledge_base}}/decisions.md"
 
 blind_spot_patterns:
   - id: almost-done-trap
@@ -51,7 +51,7 @@ blind_spot_patterns:
 
   - id: expert-network-dead-zone
     description: "Expert network contacts going cold"
-    contacts: ["Guidepoint", "GLG", "AlphaSights"]
+    contacts: ["[CUSTOMIZE]"]  # Add your revenue-critical contacts
     threshold_days: 14
     severity: CRITICAL  # Direct revenue impact
 
@@ -75,7 +75,7 @@ blind_spot_patterns:
 severity_levels:
   INFO: "Log only. Include in weekly report."
   WARN: "Include in daily briefing. Suggest action."
-  CRITICAL: "Flag immediately. Jarvis surfaces to Alexander."
+  CRITICAL: "Flag immediately. Jarvis surfaces to the owner."
 
 cadence:
   daily_quick: "08:25 AM — before morning briefing"

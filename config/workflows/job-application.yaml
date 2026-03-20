@@ -52,8 +52,9 @@ steps:
     action: query
     params:
       sources:
+        # Configure: replace with your expert network providers and key referral contacts
         - capability: search_messages
-          query: "from:(kate OR guidepoint OR glg OR alphasights) newer_than:7d"
+          query: "from:(key-contact OR expert-network-1 OR expert-network-2) newer_than:7d"
           limit: 10
         - capability: search_messages
           query: "(referral OR recommend OR thought of you) newer_than:14d"
@@ -71,7 +72,7 @@ steps:
       input: "{{raw_listings}} + {{referral_signals}}"
       scoring:
         csa_alignment:
-          creativity: "Does this feed Alexander's creative identity and cross-domain work?"
+          creativity: "Does this feed the operator's creative identity and cross-domain work?"
           security: "Does this improve financial stability? Rate vs floor."
           abundance: "Does this open scale, network, or future opportunities?"
         weights:
@@ -82,7 +83,7 @@ steps:
           csa_abundance: 0.15
           csa_security: 0.10
       deduplicate: true
-      exclude_applied: "db/ak-os/entities/decisions.md#job-applications"
+      exclude_applied: "{{KNOWLEDGE_BASE_PATH}}/entities/decisions.md#job-applications"
     outputs: [ranked_opportunities]
 
   # --- CHECK FOR STALE APPLICATIONS ---
@@ -93,7 +94,7 @@ steps:
     depends_on: []
     params:
       scan_type: stale_applications
-      source: "db/ak-os/entities/decisions.md"
+      source: "{{KNOWLEDGE_BASE_PATH}}/entities/decisions.md"
       thresholds:
         no_response_days: 14
         interview_followup_days: 3
@@ -114,7 +115,7 @@ steps:
         - top_opportunities_this_week   # Top 5, scored
         - network_referral_signals      # Warm leads
         - stale_application_followups   # Needs action
-        - expert_network_status         # Guidepoint, GLG, etc.
+        - expert_network_status         # Configure: your expert network providers
       tone: direct_actionable
     outputs: [weekly_report]
     approval: none  # Internal report
@@ -125,7 +126,7 @@ steps:
     depends_on: [format_report]
     params:
       channel: gmail_draft
-      to: "alexanderkline13@gmail.com"
+      to: "{{YOUR_EMAIL}}"  # Configure: set your delivery email address
       subject: "Job Scanner: Week of {{trigger.date_formatted}}"
       body: "{{weekly_report}}"
     outputs: [delivery_confirmation]
@@ -154,12 +155,12 @@ on_demand_actions:
           context:
             company: "{{company_intel}}"
             role: "{{manual.role_title}}"
-            master_context: "db/AK_Master_Context_2026.md"
+            master_context: "{{KNOWLEDGE_BASE_PATH}}/master-context.md"
             voice_rules: "memory/context/voice-and-brand-rules.md"
           output_format: bullet_points
           ats_optimized: true
         outputs: [tailored_points]
-        approval: required  # Alexander reviews before submitting
+        approval: required  # Operator reviews before submitting
 
       - id: draft_cover_letter
         agent: comms-drafter
@@ -173,7 +174,7 @@ on_demand_actions:
             voice_rules: "memory/context/voice-and-brand-rules.md"
           constraints:
             - "Identity: leader, not builder"
-            - "Innovation is his word"
+            - "[CUSTOMIZE] Your primary brand word"
             - "Multidisciplinary is core positioning"
             - "No turnaround branding"
             - "ATS-friendly formatting"

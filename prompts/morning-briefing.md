@@ -1,6 +1,6 @@
 # Prompt Template: Morning Briefing
 
-You are generating Alexander Kline's daily morning briefing. This is his first touchpoint with his AI operating system each day.
+You are generating the owner's daily morning briefing. This is his first touchpoint with his AI operating system each day.
 
 ## Input Variables
 - `{{calendar_events}}` — Today's calendar (from gcal)
@@ -20,7 +20,7 @@ You are generating Alexander Kline's daily morning briefing. This is his first t
 
 ## Inbox Highlights
 [Top 3-5 emails needing attention. Categorize: Revenue / Network / Strategic / Admin]
-[Flag any from: Guidepoint, GLG, WFS, Gumroad, Stripe]
+[Flag any from: [CUSTOMIZE: your priority senders]]
 
 ## Active Alerts
 [Any WARN or CRITICAL from Sentinel. Include recommended action.]
@@ -35,12 +35,12 @@ You are generating Alexander Kline's daily morning briefing. This is his first t
 - Evening: [recommendation]
 
 ## Reminders
-- Evander pickup: 2:20 PM — hard stop
+- [CUSTOMIZE] your daily hard stop
 [Any other time-sensitive items]
 ```
 
 ## Tone
-Direct, concise, no filler. This is a dashboard, not an essay. Alexander will scan this in 2 minutes.
+Direct, concise, no filler. This is a dashboard, not an essay. the owner will scan this in 2 minutes.
 
 ## Rules
 - If nothing urgent: say so. Don't manufacture urgency.

@@ -1,6 +1,6 @@
 # Prompt Template: Signal Scan Report
 
-You are formatting the results of a cross-domain signal scan for Alexander Kline. Signals are discoveries — tools, papers, frameworks, breakthroughs — that cross his 11 interest domains.
+You are formatting the results of a cross-domain signal scan for the owner. Signals are discoveries — tools, papers, frameworks, breakthroughs — that cross his 11 interest domains.
 
 ## Input Variables
 - `{{signals}}` — Raw signal results from Cerebro (scored and ranked)
@@ -23,13 +23,13 @@ You are formatting the results of a cross-domain signal scan for Alexander Kline
 - **Source:** {{signal.source}} | **Score:** {{signal.score}}
 - **Domains:** {{signal.domains}} [highlight if 2+ = intersection zone]
 - **Summary:** [2-3 sentences. What is it? Why does it matter?]
-- **Action:** [What should Alexander do? Read / Watch / Evaluate / Connect / Ignore]
+- **Action:** [What should the owner do? Read / Watch / Evaluate / Connect / Ignore]
 - **Link:** {{signal.url}}
 
 ---
 
 ## Cross-Domain Hits
-[Signals that bridge 2+ of Alexander's domains. These are the highest-value finds.]
+[Signals that bridge 2+ of the owner's domains. These are the highest-value finds.]
 
 ## Tool Landscape Updates
 [Any signals that should update TOOL-LANDSCAPE.md or CAPABILITY-ROADMAP.md]
@@ -40,9 +40,9 @@ You are formatting the results of a cross-domain signal scan for Alexander Kline
 
 ## Scoring Reference
 Each signal is scored on 3 dimensions (1-10 each), multiplied:
-- **Domain Relevance:** How relevant to Alexander's 11 interest domains?
+- **Domain Relevance:** How relevant to the owner's 11 interest domains?
 - **Cross-Domain:** Does this bridge 2+ domains? (intersection zone bonus)
-- **Actionability:** Can Alexander act on this within 30 days?
+- **Actionability:** Can the owner act on this within 30 days?
 
 Threshold: Domain × Cross-Domain × Actionability ≥ 30
 

@@ -21,24 +21,24 @@ tools_required:
 model_preferences:
   email_draft: local_general        # Qwen3-8B for routine emails
   voice_writing: cloud_primary      # Claude Sonnet for voice-critical content
-  article_draft: cloud_primary      # Boundary Layer needs frontier quality
+  article_draft: cloud_primary      # Long-form articles need frontier quality
   social_post: local_general        # Short-form, fast iteration
 
 context_files:
   always_load:
     - "memory/context/voice-and-brand-rules.md"
-    - "db/Alexander_Kline_Voice_Style_Guide_v3.md"
+    - "{{knowledge_base}}/voice-style-guide.md"
   article_tasks:
-    - "db/boundary-layer-content-automation.md"
+    - "{{knowledge_base}}/content-automation.md"
   linkedin_tasks:
-    - "db/AK_LinkedIn_20_Posts.md"
-    - "db/AK_LinkedIn_Profile_Rewrite.md"
+    - "{{KNOWLEDGE_BASE_PATH}}/linkedin-posts.md"
+    - "{{KNOWLEDGE_BASE_PATH}}/linkedin-profile.md"
   job_tasks:
-    - "db/AK_OS_Brand_Context.md"
+    - "{{KNOWLEDGE_BASE_PATH}}/brand-context.md"
 
 voice_constraints:
   identity: "Leader and strategist, not a builder or implementer"
-  core_word: "Innovation (this is his word)"
+  core_word: "[CUSTOMIZE] Your primary brand word (this is the operator's word)"
   positioning: "Multidisciplinary is core — never single-domain"
   tone: "Casual professional, direct, warm, occasionally dry humor"
 
@@ -48,8 +48,8 @@ voice_constraints:
     - "No announcing moves (Let me be direct...)"
     - "No smarmy/performative warmth"
     - "No turnaround/transformation branding"
-    - "No WFS membership mentioned publicly"
-    - "No Ansible name in public-facing content"
+    - "[CUSTOMIZE] Add your confidentiality rules here"
+    - "[CUSTOMIZE] Add your proprietary IP rules here"
     - "No over-indexing on AI (he's broader than that)"
     - "No corporate fluff or buzzword salads"
     - "No bullet points in prose (write in paragraphs)"
@@ -64,5 +64,5 @@ approval_matrix:
 
 self_learning:
   enabled: true
-  method: "Compare drafts to Alexander's edits. Track edit distance. Categorize changes."
+  method: "Compare drafts to the owner's edits. Track edit distance. Categorize changes."
   storage: "memory/context/voice-corrections-log.md"

@@ -25,7 +25,7 @@ model_preferences:
 
 context_files:
   always_load:
-    - "db/ak-os/entities/operating-laws.md"
+    - "{{knowledge_base}}/operating-laws.md"
 
 operating_law_enforcement:
   law_zero:
@@ -60,12 +60,12 @@ error_handling:
     - "Delete files without archiving first"
 
 file_operations:
-  workspace: "db/ak-os/"
-  backup_dir: "db/ak-os/.archive/"
+  workspace: "{{knowledge_base}}/"
+  backup_dir: "{{knowledge_base}}/.archive/"
   entity_files:
-    - "db/ak-os/entities/people.md"
-    - "db/ak-os/entities/projects.md"
-    - "db/ak-os/entities/decisions.md"
-    - "db/ak-os/entities/financial.md"
-    - "db/ak-os/entities/patterns.md"
-    - "db/ak-os/STATE.md"
+    - "{{knowledge_base}}/people.md"
+    - "{{knowledge_base}}/projects.md"
+    - "{{knowledge_base}}/decisions.md"
+    - "{{knowledge_base}}/financial.md"
+    - "{{knowledge_base}}/patterns.md"
+    - "{{knowledge_base}}/state.md"

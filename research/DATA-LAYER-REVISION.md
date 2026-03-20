@@ -5,7 +5,7 @@
 
 ## THE INSIGHT
 
-Tobi Lütke (Shopify CEO, 15.5K stars, MIT, pushed 2 days ago) built QMD — and it's exactly what AK-OS needs. Not a vector database. Not a context database platform. A **local search engine for your markdown files** with three-layer retrieval:
+Tobi Lütke (Shopify CEO, 15.5K stars, MIT, pushed 2 days ago) built QMD — and it's exactly what the host system needs. Not a vector database. Not a context database platform. A **local search engine for your markdown files** with three-layer retrieval:
 
 1. **BM25** (keyword, instant) — "find the file that says 'Fizzy'"
 2. **Vector search** (semantic, local embeddings) — "find files about task management"
@@ -67,9 +67,9 @@ User/Agent query: "how does the content pipeline work?"
 ```bash
 qmd context add qmd://notes "Personal notes and ideas"
 qmd context add qmd://meetings "Meeting transcripts"
-qmd context add qmd://docs/ak-os "AK-OS operating system files"
-qmd context add qmd://docs/ak-os/entities "Entity registries: people, projects, patterns, decisions"
-qmd context add qmd://docs/ak-os/projects/borgclaw "BorgClaw infrastructure project"
+qmd context add qmd://docs/knowledge-base "Host system operating files"
+qmd context add qmd://docs/knowledge-base/entities "Entity registries: people, projects, patterns, decisions"
+qmd context add qmd://docs/knowledge-base/projects/borgclaw "BorgClaw infrastructure project"
 ```
 
 Each context annotation is returned with matching results. This means agents don't just get a chunk — they get the chunk PLUS "this came from the BorgClaw project specs" which helps them use the context correctly. This is what our YAML context rules were trying to do, but QMD does it natively with a tree structure.
@@ -102,36 +102,36 @@ OpenViking wins on: session compression / self-evolving context.
 
 ---
 
-## HOW QMD MAPS TO AK-OS
+## HOW QMD MAPS TO THE HOST SYSTEM
 
-### Collections = AK-OS File Structure
+### Collections = Knowledge Base File Structure
 ```bash
-qmd collection add ~/akos/db/ak-os --name ak-os-core
-qmd collection add ~/akos/db/ak-os/entities --name entities
-qmd collection add ~/akos/db/ak-os/projects/borgclaw --name borgclaw
-qmd collection add ~/akos/db --name master-context
-qmd collection add ~/akos/memory --name memory
+qmd collection add ~/knowledge-base --name kb-core
+qmd collection add ~/knowledge-base/entities --name entities
+qmd collection add ~/knowledge-base/projects/borgclaw --name borgclaw
+qmd collection add ~/knowledge-base --name master-context
+qmd collection add ~/memory --name memory
 ```
 
-### Context = Our Tier System
+### Context = Tier System
 ```bash
-qmd context add qmd://ak-os-core "AK-OS operating system: ontology, workflows, state, capabilities"
+qmd context add qmd://kb-core "Host system: ontology, workflows, state, capabilities"
 qmd context add qmd://entities "Entity registries: people, projects, patterns, decisions, financial"
 qmd context add qmd://borgclaw "BorgClaw infrastructure: specs, research, agents, config"
-qmd context add qmd://master-context "Deep context: Alexander's identity, voice, brand, methodology IP"
+qmd context add qmd://master-context "Deep context: operator identity, voice, brand, methodology IP"
 qmd context add qmd://memory "Session-persistent knowledge: voice rules, corrections, learnings"
 ```
 
 ### Agent Usage (via MCP)
 ```
-Agent: "I need context about Alexander's voice for writing"
-  → qmd query "Alexander voice style writing rules" --json -n 5
-  → Returns: voice-and-brand-rules.md, Alexander_Kline_Voice_Style_Guide_v3.md
+Agent: "I need context about the operator's voice for writing"
+  → qmd query "operator voice style writing rules" --json -n 5
+  → Returns: voice-and-brand-rules.md, Voice_Style_Guide.md
   → With context: "from memory/ — session-persistent voice rules"
 
-Agent: "What's the status of the Kate Montgomery relationship?"
-  → qmd query "Kate Montgomery relationship status" --json -n 3
-  → Returns: people.md (Kate section), patterns.md (conversation-needed-followup)
+Agent: "What's the status of the key contact relationship?"
+  → qmd query "key contact relationship status" --json -n 3
+  → Returns: people.md (relevant section), patterns.md (conversation-needed-followup)
   → With context: "from entities/ — people registry"
 ```
 
@@ -154,7 +154,7 @@ Agent: "What's the status of the Kate Montgomery relationship?"
 Tobi literally used Karpathy's autoresearch pattern to train the qmd-query-expansion model:
 > "Before going to bed I told my pi to make a version of [autoresearch] for the qmd query-expansion model with the goal of highest quality score and speed. Woke up to a 0.8B model scoring 19% higher than the previous 1.6B model after 37 experiments in 8 hours."
 
-This is exactly what we're doing with AK-OS's Self-Improvement System. The tools we're discovering are all converging on the same patterns.
+This is exactly what BorgClaw's Self-Improvement System is designed to do. The tools we're discovering are all converging on the same patterns.
 
 ---
 
@@ -162,19 +162,19 @@ This is exactly what we're doing with AK-OS's Self-Improvement System. The tools
 
 ### Phase 1: QMD (replaces LanceDB + nomic-embed + context rules)
 - `npm install -g @tobilu/qmd`
-- Index AK-OS markdown files as collections
+- Index knowledge base markdown files as collections
 - Add context annotations for the tier system
 - Use MCP server for agent access
 - **Why:** Lower overhead, better search quality (3-layer), built-in MCP, MIT, zero custom code for retrieval
 
 ### Phase 2: mem0 (adds cross-session memory)
 - `pip install mem0ai`
-- User memory = Alexander's preferences/corrections
+- User memory = operator preferences/corrections
 - Agent memory = per-agent learned behaviors
 - **Why:** QMD is search, not memory. mem0 is memory, not search. They complement.
 
 ### Phase 3: Maybe Nothing Else
-- QMD + mem0 may be sufficient indefinitely for AK-OS's scale
+- QMD + mem0 may be sufficient indefinitely for this scale
 - OpenViking is worth watching but adds significant overhead
 - memvid is interesting for extreme portability but QMD's SQLite is already portable enough
 - Revisit only if retrieval quality degrades or dataset grows 10x+
@@ -189,7 +189,7 @@ This is exactly what we're doing with AK-OS's Self-Improvement System. The tools
 | **Proposed: QMD + mem0** | ~2GB (3 GGUF models) + mem0 overhead | ~100MB index | ~0 lines for search | QMD (npm), mem0 (pip) |
 | **OpenViking** | ~2-4GB (VLM + embedding) | ~200MB+ | ~50 lines config | Python + Go + Rust server |
 
-QMD uses more RAM for models (~2GB) but eliminates all custom retrieval code. On the Mac Mini M4 Pro with 24GB, 2GB for search models is trivial — especially since the models stay loaded and are shared across all agent queries.
+QMD uses more RAM for models (~2GB) but eliminates all custom retrieval code. On a Mac Mini M4 Pro with 24GB, 2GB for search models is trivial — especially since the models stay loaded and are shared across all agent queries.
 
 ---
 

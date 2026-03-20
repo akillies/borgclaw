@@ -39,9 +39,12 @@ steps:
     description: "Check priority inbox patterns: expert networks, revenue, WFS, key contacts."
     inputs:
       queries:
-        - "from:guidepoint OR from:glg"           # Expert networks
-        - "from:gumroad OR from:stripe"            # Revenue
-        - "from:julie subject:WFS"                 # WFS
+        # Configure: replace with your expert network provider domains
+        - "from:important-contact OR from:key-network"   # Expert networks — set to your providers
+        # Configure: replace with your revenue platform domains
+        - "from:gumroad OR from:stripe"            # Revenue — adjust to your payment processors
+        # Configure: replace with queries for your professional communities
+        - "from:community-contact subject:community-name"  # Professional community — set your own
         - "is:unread is:important"                 # Unread important
       since: yesterday
       tool: gmail_search_messages
@@ -97,7 +100,7 @@ steps:
       relationships: "{{pattern_scan.relationship_alerts}}"
       finances: "{{pattern_scan.financial_status}}"
       format: morning-briefing-template
-      voice: concise-professional  # Not full Alexander voice — this is internal
+      voice: concise-professional  # Not full operator voice — this is internal
     outputs:
       - briefing_html       # Formatted briefing
     timeout: 3m
@@ -109,8 +112,8 @@ steps:
     description: "Create Gmail draft with the morning briefing."
     depends_on: [format_briefing]
     inputs:
-      to: "alexanderkline13@gmail.com"
-      subject: "AK-OS Morning Brief — {{today_formatted}}"
+      to: "{{YOUR_EMAIL}}"  # Configure: set your delivery email address
+      subject: "Morning Brief — {{today_formatted}}"
       body: "{{format_briefing.briefing_html}}"
       tool: gmail_create_draft    # Swap to gws_send when available
     outputs:
@@ -119,5 +122,5 @@ steps:
     requires_approval: false  # Drafts don't need approval (Law Two: drafts are safe)
 
 # Total approximate time: 5-8 minutes
-# Delivery: Gmail draft waiting when Alexander opens email ~9 AM
+# Delivery: Gmail draft waiting when you open email ~9 AM
 # Future upgrade: When gws is installed, switch deliver action to send instead of draft

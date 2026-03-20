@@ -6,9 +6,9 @@
 
 ## THE QUESTION
 
-Is our data layer (LanceDB + nomic-embed-text) actually sorted? Or are we underinvesting in the layer that matters most — the context layer between Alexander's knowledge and the agents that use it?
+Is our data layer (LanceDB + nomic-embed-text) actually sorted? Or are we underinvesting in the layer that matters most — the context layer between the operator's knowledge and the agents that use it?
 
-Alexander flagged OpenViking (volcengine, 12.6K stars) as something to look at. This audit maps the full landscape.
+The operator flagged OpenViking (volcengine, 12.6K stars) as something to look at. This audit maps the full landscape.
 
 ---
 
@@ -17,7 +17,7 @@ Alexander flagged OpenViking (volcengine, 12.6K stars) as something to look at. 
 ### Current Stack: LanceDB + nomic-embed-text
 - **LanceDB** — embedded vector DB (no server process), disk-based, zero-copy, Apache-2.0
 - **nomic-embed-text** — embedding model via Ollama, runs locally
-- **Context assembly** — rules in MIDDLEWARE-SPEC.md that map task types → which AK-OS files get loaded
+- **Context assembly** — rules in MIDDLEWARE-SPEC.md that map task types → which knowledge base files get loaded
 
 ### What It's Good At
 - Zero infrastructure (library, not service)
@@ -65,16 +65,16 @@ Alexander flagged OpenViking (volcengine, 12.6K stars) as something to look at. 
 ## DEEP DIVE: THE FOUR CONTENDERS
 
 ### 1. mem0 (49.9K stars)
-**What Alexander would use it for:** Persistent memory across Claude sessions. mem0 would remember what Alexander cares about, what he's rejected before, what voice rules he's corrected, what patterns have been detected — across every session, not just within one.
+**What the operator would use it for:** Persistent memory across Claude sessions. mem0 would remember what the operator cares about, what they've rejected before, what voice rules they've corrected, what patterns have been detected — across every session, not just within one.
 
 **Architecture:**
-- Multi-level: User memory (Alexander's preferences), Session memory (current conversation), Agent memory (per-agent learned behaviors)
+- Multi-level: User memory (operator preferences), Session memory (current conversation), Agent memory (per-agent learned behaviors)
 - Graph memory for relationship-aware retrieval
 - Self-hosted via `pip install mem0ai` or hosted platform
 - Supports any LLM (Claude, GPT, local models)
 
-**Fit for AK-OS:**
-- ✅ Solves the "cold start" problem — every session starts with Alexander's full context
+**Fit for the host system:**
+- ✅ Solves the "cold start" problem — every session starts with the operator's full context
 - ✅ Agent memory means Comms-Drafter learns voice preferences, Cerebro learns research patterns
 - ✅ Apache-2.0, self-hosted, Python
 - ⚠️ Still needs a vector store backend (Qdrant, Chroma, or custom) — adds complexity
@@ -83,7 +83,7 @@ Alexander flagged OpenViking (volcengine, 12.6K stars) as something to look at. 
 **Principle check:** Agnostic ✅ | Modular ✅ | Portable ✅ (self-hosted) | Extensible ✅ | Self-improving ✅ (core feature)
 
 ### 2. Letta / MemGPT (21.6K stars)
-**What Alexander would use it for:** Agents that actually remember and learn across sessions. Letta agents have persistent memory blocks that update over time — the agent gets smarter with use.
+**What the operator would use it for:** Agents that actually remember and learn across sessions. Letta agents have persistent memory blocks that update over time — the agent gets smarter with use.
 
 **Architecture:**
 - Memory blocks: structured data (persona, human context) that agents read/write
@@ -91,9 +91,9 @@ Alexander flagged OpenViking (volcengine, 12.6K stars) as something to look at. 
 - CLI tool (`letta`) + full API + SDKs
 - Model-agnostic (recommends Opus 4.5 / GPT-5.2)
 
-**Fit for AK-OS:**
+**Fit for the host system:**
 - ✅ Self-improving memory is THE thing our data layer is missing
-- ✅ Memory blocks map to AK-OS entity files (people.md, patterns.md, etc.)
+- ✅ Memory blocks map to host system entity files (people.md, patterns.md, etc.)
 - ✅ Agents that learn = our Self-Improvement System's Surface 2 (Agent Prompts) built-in
 - ⚠️ Heavier platform — might be overkill for 5 agents + 500K words
 - ⚠️ Primarily a hosted service (Letta API key), self-hosted is secondary path
@@ -102,7 +102,7 @@ Alexander flagged OpenViking (volcengine, 12.6K stars) as something to look at. 
 **Principle check:** Agnostic ✅ | Modular ⚠️ (platform) | Portable ⚠️ (hosted-first) | Extensible ✅ | Self-improving ✅✅ (core thesis)
 
 ### 3. memvid (13.5K stars)
-**What Alexander would use it for:** Replace LanceDB entirely. Package all AK-OS knowledge into a single portable file with instant retrieval. No database, no server, no RAG pipeline.
+**What the operator would use it for:** Replace LanceDB entirely. Package all knowledge base content into a single portable file with instant retrieval. No database, no server, no RAG pipeline.
 
 **Architecture:**
 - Inspired by video encoding — "Smart Frames" (immutable units with timestamps, checksums, metadata)
@@ -111,7 +111,7 @@ Alexander flagged OpenViking (volcengine, 12.6K stars) as something to look at. 
 - Rust core, Python/JS bindings
 - 0.025ms P50 retrieval latency
 
-**Fit for AK-OS:**
+**Fit for the host system:**
 - ✅ Single file = ultimate portability (copy to new machine, done)
 - ✅ Append-only = Law Zero (never delete) built into the data structure
 - ✅ Versioned = can rewind to previous knowledge states
@@ -124,7 +124,7 @@ Alexander flagged OpenViking (volcengine, 12.6K stars) as something to look at. 
 **Principle check:** Agnostic ✅ | Modular ✅ | Portable ✅✅ (single file!) | Extensible ✅ | Self-improving ❌ (storage only)
 
 ### 4. OpenViking (12.6K stars)
-**What Alexander would use it for:** Replace our entire context assembly approach. Instead of "load these files for this task type" (static rules), OpenViking organizes ALL context (memories, resources, skills) as a filesystem. Agents navigate directories to find what they need. Retrieval is observable — you can SEE why something was retrieved.
+**What the operator would use it for:** Replace our entire context assembly approach. Instead of "load these files for this task type" (static rules), OpenViking organizes ALL context (memories, resources, skills) as a filesystem. Agents navigate directories to find what they need. Retrieval is observable — you can SEE why something was retrieved.
 
 **Architecture:**
 - Filesystem paradigm: context organized as dirs/files (not flat vector space)
@@ -134,9 +134,9 @@ Alexander flagged OpenViking (volcengine, 12.6K stars) as something to look at. 
 - Auto session management: compresses conversations, extracts long-term memory
 - Requires VLM (vision-language model) + embedding model
 
-**Fit for AK-OS:**
-- ✅ Filesystem paradigm matches AK-OS perfectly — we already organize knowledge as markdown files in directories
-- ✅ L0/L1/L2 maps to our existing tier system (Tier 1/2/3 context files in CLAUDE.md)
+**Fit for the host system:**
+- ✅ Filesystem paradigm matches the host system perfectly — knowledge is already organized as markdown files in directories
+- ✅ L0/L1/L2 maps to the existing tier system (Tier 1/2/3 context files)
 - ✅ Observable retrieval = solves the black box problem
 - ✅ Auto session compression = cross-session memory
 - ✅ Apache-2.0, Python, self-hosted
@@ -151,7 +151,7 @@ Alexander flagged OpenViking (volcengine, 12.6K stars) as something to look at. 
 
 ## THE REAL QUESTION: WHAT PROBLEM ARE WE ACTUALLY SOLVING?
 
-Alexander nailed it: "context and AI will always be at each other's throats." The data layer isn't a solved problem — it's THE unsolved problem. Every tool here is attacking it from a different angle.
+The operator nailed it: "context and AI will always be at each other's throats." The data layer isn't a solved problem — it's THE unsolved problem. Every tool here is attacking it from a different angle.
 
 Our current approach (LanceDB + nomic-embed + static context rules) works for Phase 1. It's simple, fast, zero infrastructure. But it has three gaps that will bite us:
 
@@ -177,7 +177,7 @@ Don't swap everything at once. Layer improvements as the system matures.
 
 ### Phase 2 (v0.2 → Middleware Integration): Add mem0 for Cross-Session Memory
 - `pip install mem0ai` — Apache-2.0, self-hosted, uses our existing LLM
-- User memory = Alexander's preferences, corrections, voice rules
+- User memory = operator preferences, corrections, voice rules
 - Agent memory = per-agent learned behaviors (what Comms-Drafter has been corrected on)
 - Session memory = conversation summaries that persist
 - Runs alongside LanceDB — mem0 for memory, LanceDB for document retrieval
@@ -209,13 +209,13 @@ Don't swap everything at once. Layer improvements as the system matures.
 
 ## OPEN QUESTION: DOES OPENVIKING OVERLAP WITH BORGCLAW?
 
-OpenViking's description mentions "openclaw" — and their core concept (context database for agents, filesystem paradigm, tiered loading, self-evolving) overlaps significantly with what AK-OS is building. Worth investigating:
+OpenViking's description mentions "openclaw" — and their core concept (context database for agents, filesystem paradigm, tiered loading, self-evolving) overlaps significantly with what BorgClaw is building. Worth investigating:
 
 1. Is OpenViking a context layer we compose INTO BorgClaw? Or a competing architecture?
-2. Their "AGFS" (Agent Filesystem) component — is this similar to our AK-OS markdown structure?
+2. Their "AGFS" (Agent Filesystem) component — is this similar to the host system's markdown structure?
 3. The "openclaw" reference — is there a broader ecosystem here?
 
-This might be a case where we use OpenViking AS our data layer rather than building our own context assembly from scratch. The filesystem paradigm is literally how AK-OS already works (directories of markdown files). OpenViking just adds the retrieval intelligence on top.
+This might be a case where we use OpenViking AS our data layer rather than building our own context assembly from scratch. The filesystem paradigm is literally how the host system already works (directories of markdown files). OpenViking just adds the retrieval intelligence on top.
 
 ---
 

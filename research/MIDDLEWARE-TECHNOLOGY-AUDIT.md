@@ -28,7 +28,7 @@
 **Fizzy** — by 37signals (DHH, Basecamp). Kanban built for agents. 7,208 GitHub stars.
 
 ### CORRECTION: Original pick was Vikunja. Overridden after deeper research.
-The initial research pass missed that Fizzy has a comprehensive REST API with 40+ endpoints, webhooks with signing secrets, an AGENTS.md file (designed for AI agent integration), and a built-in "entropy" system that auto-postpones stale cards — which maps directly to Alexander's "almost-done-trap" pattern.
+The initial research pass missed that Fizzy has a comprehensive REST API with 40+ endpoints, webhooks with signing secrets, an AGENTS.md file (designed for AI agent integration), and a built-in "entropy" system that auto-postpones stale cards — which maps directly to the "almost-done-trap" pattern common in personal AI operating systems.
 
 ### Why Fizzy Over Alternatives
 
@@ -42,7 +42,7 @@ The initial research pass missed that Fizzy has a comprehensive REST API with 40
 
 ### Why Fizzy Specifically
 
-**Social Proof:** 7,208 stars. 1,023 forks. 37signals (creators of Basecamp, HEY, Ruby on Rails). DHH's endorsement. Pushed 2 days ago (Mar 13, 2026). Active community. This passes Alexander's quality bar with room to spare.
+**Social Proof:** 7,208 stars. 1,023 forks. 37signals (creators of Basecamp, HEY, Ruby on Rails). DHH's endorsement. Pushed 2 days ago (Mar 13, 2026). Active community. This passes the quality bar with room to spare.
 
 **AGENTS.md:** 37signals literally wrote a guide for AI agents working with Fizzy. This isn't an afterthought — agent integration is a design goal.
 
@@ -55,7 +55,7 @@ The initial research pass missed that Fizzy has a comprehensive REST API with 40
 - Comments: CRUD + reactions
 - Tags, Users, Notifications, Pins
 
-**Entropy System:** Cards auto-postpone after configurable inactivity period. This is a BUILT-IN stall detector — maps directly to Alexander's "almost-done-trap" pattern. Set entropy to 14 days → stale cards surface automatically.
+**Entropy System:** Cards auto-postpone after configurable inactivity period. This is a BUILT-IN stall detector — maps directly to the "almost-done-trap" pattern common in personal productivity systems. Set entropy to 14 days → stale cards surface automatically.
 
 **Webhook Events:** card_assigned, card_closed, card_postponed, card_auto_postponed, card_board_changed, card_published, card_reopened, card_sent_back_to_triage, card_triaged, comment_created — granular enough for agent triggers.
 
@@ -69,7 +69,7 @@ The initial research pass missed that Fizzy has a comprehensive REST API with 40
 
 ### How It Fits
 ```
-Alexander captures task (Fizzy web / mobile via webhook relay)
+Operator captures task (Fizzy web / mobile via webhook relay)
     → Fizzy webhook fires (signed payload)
     → n8n webhook trigger receives event
     → Jarvis classifies + routes
@@ -124,7 +124,7 @@ Multiple sources confirm this pattern: **n8n handles the plumbing** (webhook tri
 
 ### How It Fits (Content Pipeline Example)
 ```
-Fizzy card: "Publish Boundary Layer article on AI job exposure"
+Fizzy card: "Publish newsletter article on AI job exposure"
     → Webhook → n8n workflow triggers
     → Node 1: Cerebro agent (LangGraph) researches topic
     → Node 2 (parallel):
@@ -133,7 +133,7 @@ Fizzy card: "Publish Boundary Layer article on AI job exposure"
         └── Ops agent generates header image
     → Node 3: Approval gate (ntfy push → wait for response)
     → Node 4 (parallel):
-        ├── n8n publishes to Substack (API integration)
+        ├── n8n publishes to content platform (API integration)
         ├── n8n posts to LinkedIn (API integration)
         └── n8n posts to X (API integration)
     → Node 5: Update Fizzy card → complete
@@ -253,7 +253,7 @@ From Hacker News: "NATS is great because it has pub/sub, streaming (like Kafka),
 Cerebro finds a signal
     → Publishes to NATS subject: events.signal.detected
     → Jarvis (subscriber) picks up, classifies, queues task
-    → Comms-drafter (subscriber) gets notified if Boundary Layer relevant
+    → Comms-drafter (subscriber) gets notified if content-platform relevant
 
 Sentinel detects stalled project
     → Publishes to NATS subject: events.project.stalled
@@ -319,7 +319,7 @@ docker run -d -p 4222:4222 -p 8222:8222 nats -js
 
 ### How It Fits
 ```
-AK-OS markdown files (entities, patterns, signals, etc.)
+Knowledge base markdown files (entities, patterns, signals, etc.)
     → Chunked by section (## headers as natural boundaries)
     → Embedded via nomic-embed-text (local, on Mac Mini)
     → Stored in LanceDB (file on disk, no server)
@@ -336,7 +336,7 @@ Agent picks up task
 ```python
 import lancedb
 
-db = lancedb.connect("/ak-os/vector-store")
+db = lancedb.connect("/knowledge-base/vector-store")
 
 # Index all markdown files on system start
 # Re-index on git pull / file change (NATS event: events.knowledge.updated)
@@ -397,27 +397,27 @@ ollama pull nomic-embed-text
 
 ### Why ntfy Specifically
 - **Action buttons**: Notifications can include "Approve" and "Reject" buttons that hit URLs — perfect for approval workflows
-- **Fine-grained ACLs**: Create dedicated users with write-only access per topic. Agents publish, Alexander reads.
+- **Fine-grained ACLs**: Create dedicated users with write-only access per topic. Agents publish, operator reads.
 - **Topics**: `borgclaw-approvals`, `borgclaw-alerts`, `borgclaw-signals` — subscribe to what matters
 - **REST API**: `curl -d "Article draft ready" ntfy.sh/borgclaw-approvals` — dead simple
-- **Mobile app**: Push notifications on iPhone with action buttons
+- **Mobile app**: Push notifications on phone with action buttons
 
 ### Approval Flow (Concrete)
 ```
 Comms-drafter finishes article draft
-    → Saves to /ak-os/drafts/boundary-layer-ai-jobs.md
+    → Saves to /knowledge-base/drafts/content-platform-ai-jobs.md
     → Creates approval record in Queen
     → Publishes to ntfy topic:
 
-    curl -d "Boundary Layer draft ready: AI Job Exposure Analysis" \
-         -H "Title: ✅ Review Draft" \
+    curl -d "Content platform draft ready: AI Job Exposure Analysis" \
+         -H "Title: Review Draft" \
          -H "Tags: memo,borgclaw" \
          -H "Actions: view, Approve, https://queen.local/api/approve/001; \
                       view, Reject, https://queen.local/api/reject/001; \
                       view, View Draft, https://queen.local/drafts/001" \
          https://ntfy.local/borgclaw-approvals
 
-Alexander's phone buzzes
+Operator's phone buzzes
     → Sees notification with 3 buttons: Approve / Reject / View Draft
     → Taps "View Draft" → opens in browser
     → Taps "Approve" → hits Queen API → workflow proceeds
@@ -437,7 +437,7 @@ import apprise
 apobj = apprise.Apprise()
 apobj.add('ntfy://ntfy.local/borgclaw-approvals')
 apobj.add('mailto://user:pass@gmail.com')
-apobj.notify(title='Draft Ready', body='Boundary Layer article awaiting review')
+apobj.notify(title='Draft Ready', body='Content platform article awaiting review')
 ```
 
 ### Principle Check
@@ -468,7 +468,7 @@ pip install apprise
 | Send email | n8n Gmail node (send, not just draft) | ✅ Solved |
 | Post to LinkedIn | n8n LinkedIn node | ✅ Solved |
 | Post to X/Twitter | n8n Twitter node | ✅ Solved |
-| Publish to Substack | n8n HTTP Request + Substack API | ⚠️ Unofficial API, but n8n can call it |
+| Publish to content platform | n8n HTTP Request + platform API | ⚠️ Unofficial API, but n8n can call it |
 | Push to GitHub | n8n GitHub node | ✅ Solved |
 | Create designs | Canva MCP (already connected) | ✅ Solved |
 | Generate audio (podcast) | n8n + ElevenLabs API | ✅ Solved (ElevenLabs MCP also connected) |
@@ -477,11 +477,11 @@ pip install apprise
 | Create video (CapCut) | n8n HTTP + CapCut API or browser automation | ⚠️ Partial |
 
 ### Key Insight: n8n IS the Last Mile
-This is why n8n is the workflow engine AND the last-mile solution. It doesn't just orchestrate agents — it connects their outputs to the external world through pre-built integration nodes. The same workflow that triggers an agent to draft an article can also publish it to Substack, post social clips, and send a notification.
+This is why n8n is the workflow engine AND the last-mile solution. It doesn't just orchestrate agents — it connects their outputs to the external world through pre-built integration nodes. The same workflow that triggers an agent to draft an article can also publish it, post social clips, and send a notification.
 
 ### Where Custom MCPs Are Still Needed
 1. **Fizzy API** — 40+ endpoints, no MCP yet but REST API is comprehensive
-2. **Substack MCP** — would be useful for direct publishing without n8n
+2. **Content platform MCP** — would be useful for direct publishing without n8n
 3. **ntfy MCP** — trivial to build (it's just HTTP POST)
 
 ### Principle Check
@@ -524,7 +524,7 @@ This is why n8n is the workflow engine AND the last-mile solution. It doesn't ju
 | ntfy | ~20MB | ~50MB | 2586 |
 | **Total middleware** | **~556MB** | **~1.3GB** | — |
 
-On the Mac Mini M4 Pro with 24GB RAM, this is ~2.3% of available memory. Negligible.
+On a Mac Mini M4 Pro with 24GB RAM, this is ~2.3% of available memory. Negligible.
 
 ### Combined with BorgClaw Infrastructure
 | Service | RAM | Port |

@@ -132,12 +132,12 @@ steps:
         hn: "{{scan_hackernews.hn_results}}"
         pubmed: "{{scan_pubmed.pubmed_results}}"
       scoring:
-        domain_relevance: 0-5        # How relevant to Alexander's 11 domains
+        domain_relevance: 0-5        # How relevant to the operator's interest domains
         cross_domain_potential: 0-5   # Does it bridge 2+ domains?
         actionability: 0-5           # Can we USE this, not just know about it?
         threshold: "{{input.threshold | default: 30}}"  # Domain × CrossDomain × Action ≥ 30
-      interest_ontology: "db/ak-os/INTEREST-ONTOLOGY.md"
-      existing_landscape: "db/ak-os/TOOL-LANDSCAPE.md"   # Don't surface what we already know
+      interest_ontology: "{{KNOWLEDGE_BASE_PATH}}/interests.md"
+      existing_landscape: "{{KNOWLEDGE_BASE_PATH}}/tool-landscape.md"   # Don't surface what we already know
     outputs:
       - scored_signals     # All results with scores
       - top_signals        # Filtered to ≥ threshold
@@ -153,7 +153,7 @@ steps:
     description: "Add new tool discoveries to TOOL-LANDSCAPE.md."
     depends_on: [classify]
     inputs:
-      file: "db/ak-os/TOOL-LANDSCAPE.md"
+      file: "{{KNOWLEDGE_BASE_PATH}}/tool-landscape.md"
       entries: "{{classify.tool_candidates}}"
       format: tool-landscape-entry
       status: "🗺️ Mapped"       # New discoveries start as Mapped
@@ -168,7 +168,7 @@ steps:
     description: "Add scored signals to signals.md entity registry."
     depends_on: [classify]
     inputs:
-      file: "db/ak-os/entities/signals.md"
+      file: "{{KNOWLEDGE_BASE_PATH}}/entities/signals.md"
       entries: "{{classify.top_signals}}"
       format: signal-entry
     outputs:
@@ -179,7 +179,7 @@ steps:
   - id: format_report
     agent: comms-drafter
     action: format_signal_report
-    description: "Format the weekly signal radar report for Alexander."
+    description: "Format the weekly signal radar report for the operator."
     depends_on: [classify]
     inputs:
       top_signals: "{{classify.top_signals}}"
@@ -197,7 +197,7 @@ steps:
     description: "Create Gmail draft with the signal radar report."
     depends_on: [format_report, update_tool_landscape, update_signals]
     inputs:
-      to: "alexanderkline13@gmail.com"
+      to: "{{YOUR_EMAIL}}"  # Configure: set your delivery email address
       subject: "Signal Radar — Week of {{today_formatted}}"
       body: "{{format_report.report_html}}"
       tool: gmail_create_draft

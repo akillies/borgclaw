@@ -18,7 +18,8 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
 
 # --- Config ---
-AKOS_DIR="${AKOS_DIR:-$HOME/akos}"
+BORGCLAW_HOME="${BORGCLAW_HOME:-$HOME/borgclaw}"
+KNOWLEDGE_BASE_PATH="${KNOWLEDGE_BASE_PATH:-./knowledge}"
 MIN_RAM_GB=8
 MIN_DISK_GB=10
 MIN_NODE_MAJOR=22
@@ -380,13 +381,13 @@ install_qmd() {
   fi
 
   # Fall back to local install (symlink issues with global)
-  warn "Global install failed. Installing locally in $AKOS_DIR..."
-  mkdir -p "$AKOS_DIR"
-  cd "$AKOS_DIR"
+  warn "Global install failed. Installing locally in $BORGCLAW_HOME..."
+  mkdir -p "$BORGCLAW_HOME"
+  cd "$BORGCLAW_HOME"
   npm install "$QMD_PACKAGE"
 
   # Add to PATH
-  local bin_path="$AKOS_DIR/node_modules/.bin"
+  local bin_path="$BORGCLAW_HOME/node_modules/.bin"
   if ! echo "$PATH" | grep -q "$bin_path"; then
     export PATH="$bin_path:$PATH"
     # Persist in shell config
@@ -396,7 +397,7 @@ install_qmd() {
   fi
 
   if check_command qmd; then
-    ok "QMD installed locally at $AKOS_DIR"
+    ok "QMD installed locally at $BORGCLAW_HOME"
   else
     err "QMD installation failed. You may need build tools."
     err "Run: xcode-select --install (Mac) or: sudo apt install build-essential cmake (Linux)"
@@ -408,38 +409,55 @@ install_qmd() {
 # STEP 8: Pull Models
 # ============================================================
 pull_models() {
-  log "Step 8/11: Pulling models for profile: $PROFILE..."
+  log "Step 8/12: Pulling models for profile: $PROFILE..."
+  log "  Models sourced from config/models.json"
 
-  # Determine which models to pull based on profile
+  # Models aligned with config/models.json post-autoresearch audit
   case "$PROFILE" in
     mac-apple-silicon-24gb)
-      pull_ollama_model "qwen3:8b" "general"
-      pull_ollama_model "qwen3:14b" "reasoning"
-      pull_ollama_model "qwen2.5-coder:7b" "code"
+      # 24GB unified RAM: can hot-swap between these — Ollama loads/unloads automatically
+      # NOTE: Only one 14B+ model loads at a time. phi4-mini stays resident as router.
+      pull_ollama_model "phi4-mini" "router — fast triage, stays loaded (3.5GB)"
+      pull_ollama_model "qwen3:8b" "general assistant (5.5GB)"
+      pull_ollama_model "qwen2.5-coder:14b" "code — #1 ranked local coding 2026 (9.5GB)"
+      # gemma3:27b is 18GB — pull separately after confirming 24GB headroom is clear
+      warn "  gemma3:27b (synthesis, 18GB) skipped — pull manually after other services settle:"
+      warn "  ollama pull gemma3:27b"
+      pull_ollama_model "nomic-embed-text:v2" "embeddings — MoE 475M, 100 languages"
       ;;
     mac-apple-silicon-16gb)
-      pull_ollama_model "qwen3:8b" "general"
-      pull_ollama_model "qwen2.5-coder:7b" "code"
+      pull_ollama_model "phi4-mini" "router/general (3.5GB)"
+      pull_ollama_model "qwen2.5-coder:7b" "code (4.5GB)"
+      pull_ollama_model "nomic-embed-text:v2" "embeddings"
+      ;;
+    mac-apple-silicon-8gb)
+      pull_ollama_model "phi4-mini" "general — only viable model at 8GB (3.5GB)"
+      pull_ollama_model "nomic-embed-text:v2" "embeddings"
       ;;
     nvidia-8gb-32gb-ram)
-      pull_ollama_model "qwen3:8b" "general"
-      pull_ollama_model "qwen3:14b" "reasoning"
-      pull_ollama_model "qwen2.5-coder:7b" "code"
+      # VRAM CEILING: 8GB hard limit. phi4-mini (3.5GB) and qwen2.5-coder:7b (4.5GB) fit.
+      # 14B+ models WILL OOM crash on 8GB VRAM — do not pull them here.
+      pull_ollama_model "phi4-mini" "general ops — best reasoning/param sub-5B (3.5GB)"
+      pull_ollama_model "qwen2.5-coder:7b" "code — safe VRAM fit (4.5GB)"
+      pull_ollama_model "nomic-embed-text:v2" "embeddings"
       ;;
-    nvidia-4gb-legacy|mac-apple-silicon-8gb)
-      pull_ollama_model "qwen3:4b" "general"
+    nvidia-4gb-legacy)
+      pull_ollama_model "phi4-mini" "general — only safe model at 4GB VRAM (3.5GB)"
+      pull_ollama_model "nomic-embed-text:v2" "embeddings"
       ;;
     mac-intel|cpu-only-16gb)
-      pull_ollama_model "qwen3:4b" "general"
+      pull_ollama_model "phi4-mini" "general — CPU inference (3.5GB RAM)"
+      pull_ollama_model "nomic-embed-text:v2" "embeddings"
       ;;
     cpu-only-8gb)
-      pull_ollama_model "qwen3:1.7b" "general"
+      pull_ollama_model "qwen3:1.7b" "general — minimum viable (1.7GB RAM)"
       ;;
     satellite-search-only)
-      log "Satellite role: skipping LLM model pulls (QMD embedding models only)"
+      log "  Satellite role: skipping LLM model pulls"
+      pull_ollama_model "nomic-embed-text:v2" "embeddings for QMD search"
       ;;
     *)
-      pull_ollama_model "qwen3:4b" "general (fallback)"
+      pull_ollama_model "phi4-mini" "general (fallback — safe for any hardware)"
       ;;
   esac
 
@@ -463,7 +481,7 @@ pull_ollama_model() {
 configure_node() {
   log "Step 9/11: Configuring node..."
 
-  mkdir -p "$AKOS_DIR/db/ak-os/projects/borgclaw/config/nodes"
+  mkdir -p "$BORGCLAW_HOME/config/nodes"
 
   local hostname
   if [[ "$OS" == "macos" ]]; then
@@ -477,7 +495,7 @@ configure_node() {
   local display_name
   display_name="$(hostname) (${PROFILE})"
 
-  local config_file="$AKOS_DIR/db/ak-os/projects/borgclaw/config/nodes/${node_id}.yaml"
+  local config_file="$BORGCLAW_HOME/config/nodes/${node_id}.yaml"
 
   cat > "$config_file" << YAML
 # Node Configuration — Auto-generated by bootstrap.sh
@@ -527,41 +545,130 @@ YAML
 }
 
 # ============================================================
-# STEP 10: Index QMD
+# STEP 10: Install Heartbeat Daemon
+# Nodes must send a heartbeat every 30s or the Queen marks them
+# offline after 150s. This installs a persistent background
+# process so the node stays visible after bootstrap exits.
+# ============================================================
+install_heartbeat() {
+  log "Step 10/12: Installing heartbeat daemon..."
+
+  local node_id
+  node_id=$(hostname | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+
+  local queen_host="${QUEEN_IP:-localhost}"
+  [[ "$ROLE" == "queen" ]] && queen_host="localhost"
+  local heartbeat_url="http://${queen_host}:9090/api/nodes/${node_id}/heartbeat"
+  local heartbeat_payload="{\"node_id\":\"${node_id}\",\"role\":\"${ROLE}\",\"profile\":\"${PROFILE}\"}"
+
+  if [[ "$OS" == "macos" ]]; then
+    local plist_dir="$HOME/Library/LaunchAgents"
+    local plist_file="${plist_dir}/io.borgclaw.heartbeat.plist"
+    mkdir -p "$plist_dir"
+
+    cat > "$plist_file" << PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>io.borgclaw.heartbeat</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/curl</string>
+        <string>-s</string>
+        <string>-X</string>
+        <string>POST</string>
+        <string>${heartbeat_url}</string>
+        <string>-H</string>
+        <string>Content-Type: application/json</string>
+        <string>-d</string>
+        <string>${heartbeat_payload}</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>30</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/borgclaw-heartbeat.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/borgclaw-heartbeat.log</string>
+</dict>
+</plist>
+PLIST
+
+    # Unload existing if present, then load fresh
+    launchctl unload "$plist_file" 2>/dev/null || true
+    launchctl load -w "$plist_file"
+    ok "Heartbeat daemon installed (launchd) → $heartbeat_url every 30s"
+    ok "Log: /tmp/borgclaw-heartbeat.log"
+
+  else
+    # Linux: systemd timer
+    local service_content="[Unit]
+Description=BorgClaw Node Heartbeat
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/curl -s -X POST ${heartbeat_url} -H 'Content-Type: application/json' -d '${heartbeat_payload}'"
+
+    local timer_content="[Unit]
+Description=BorgClaw Node Heartbeat Timer
+
+[Timer]
+OnBootSec=10
+OnUnitActiveSec=30
+Unit=borgclaw-heartbeat.service
+
+[Install]
+WantedBy=timers.target"
+
+    echo "$service_content" | sudo tee /etc/systemd/system/borgclaw-heartbeat.service > /dev/null
+    echo "$timer_content"   | sudo tee /etc/systemd/system/borgclaw-heartbeat.timer   > /dev/null
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now borgclaw-heartbeat.timer
+    ok "Heartbeat daemon installed (systemd timer) → $heartbeat_url every 30s"
+  fi
+}
+
+# ============================================================
+# STEP 11: Index QMD
 # ============================================================
 index_qmd() {
-  log "Step 10/11: Indexing QMD collections..."
+  log "Step 11/12: Indexing QMD collections..."
 
   if ! check_command qmd; then
     warn "QMD not found. Skipping indexing."
     return
   fi
 
-  local db_dir="$AKOS_DIR/db"
-  if [[ ! -d "$db_dir" ]]; then
-    warn "No db/ directory found at $db_dir. Skipping QMD indexing."
-    warn "Clone or copy the AK-OS knowledge base to $db_dir first, then run: qmd index"
+  local kb_dir="${KNOWLEDGE_BASE_PATH}"
+  # Resolve relative path against BORGCLAW_HOME if not absolute
+  if [[ "$kb_dir" != /* ]]; then
+    kb_dir="$BORGCLAW_HOME/${kb_dir#./}"
+  fi
+
+  if [[ ! -d "$kb_dir" ]]; then
+    warn "No knowledge base directory found at $kb_dir. Skipping QMD indexing."
+    warn "Set KNOWLEDGE_BASE_PATH to your knowledge base directory, then run: qmd index"
+    warn "Example: KNOWLEDGE_BASE_PATH=/path/to/your/knowledge bash bootstrap.sh"
     return
   fi
 
   # Index collections based on role
   case "$ROLE" in
     queen)
-      log "  Indexing ak-os-core..."
-      qmd index "$AKOS_DIR/db/ak-os" --name ak-os-core 2>/dev/null && ok "  ak-os-core indexed" || warn "  ak-os-core indexing failed"
+      log "  Indexing knowledge base..."
+      qmd index "$kb_dir" --name knowledge-base 2>/dev/null && ok "  knowledge-base indexed" || warn "  knowledge-base indexing failed"
 
-      log "  Indexing entities..."
-      qmd index "$AKOS_DIR/db/ak-os/entities" --name entities 2>/dev/null && ok "  entities indexed" || warn "  entities indexing failed"
-
-      log "  Indexing borgclaw..."
-      qmd index "$AKOS_DIR/db/ak-os/projects/borgclaw" --name borgclaw 2>/dev/null && ok "  borgclaw indexed" || warn "  borgclaw indexing failed"
-
-      log "  Indexing master-context..."
-      qmd index "$AKOS_DIR/db" --name master-context 2>/dev/null && ok "  master-context indexed" || warn "  master-context indexing failed"
+      log "  Indexing config..."
+      qmd index "$BORGCLAW_HOME/config" --name borgclaw-config 2>/dev/null && ok "  borgclaw-config indexed" || warn "  borgclaw-config indexing failed"
       ;;
     worker|satellite)
       log "  Indexing local collections..."
-      qmd index "$AKOS_DIR/db/ak-os" --name ak-os-core 2>/dev/null && ok "  ak-os-core indexed" || warn "  ak-os-core indexing failed"
+      qmd index "$kb_dir" --name knowledge-base 2>/dev/null && ok "  knowledge-base indexed" || warn "  knowledge-base indexing failed"
       ;;
   esac
 
@@ -571,7 +678,7 @@ index_qmd() {
       warn "QMD indexing may have hit Apple Silicon Metal bug."
       warn "Retrying with CPU-only mode..."
       export NODE_LLAMA_CPP_METAL=false
-      qmd index "$AKOS_DIR/db/ak-os" --name ak-os-core 2>/dev/null && ok "  Reindex succeeded (CPU mode)" || err "  Reindex also failed. Check QMD logs."
+      qmd index "$kb_dir" --name knowledge-base 2>/dev/null && ok "  Reindex succeeded (CPU mode)" || err "  Reindex also failed. Check QMD logs."
     fi
   fi
 }
@@ -580,7 +687,7 @@ index_qmd() {
 # STEP 11: Health Check & Summary
 # ============================================================
 health_check() {
-  log "Step 11/11: Running health check..."
+  log "Step 12/12: Running health check..."
 
   echo ""
   echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
@@ -629,13 +736,20 @@ health_check() {
     queen)
       echo "    1. Start Ollama:  ollama serve"
       echo "    2. Start QMD MCP: qmd mcp-server"
-      echo "    3. Start NATS:    docker compose -f $AKOS_DIR/db/ak-os/projects/borgclaw/docker-compose.yml up -d nats"
-      echo "    4. Start Queen:   node $AKOS_DIR/db/ak-os/projects/borgclaw/services/queen/server.js"
+      echo "    3. Start NATS:    docker compose -f $BORGCLAW_HOME/docker-compose.yml up -d nats"
+      # Build capabilities string from detected profile
+      local queen_caps="queen_api,nats_server,scheduled_tasks,qmd_search,mcp_host"
+      [[ "$PROFILE" == mac-apple-silicon* ]] && queen_caps="mlx_inference,${queen_caps}"
+      [[ "$PROFILE" == nvidia* ]] && queen_caps="cuda_inference,${queen_caps}"
+      local queen_node_id
+      queen_node_id=$(hostname | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+      echo "    4. Start Queen:   BORGCLAW_PROFILE=${PROFILE} BORGCLAW_NODE_ID=${queen_node_id} BORGCLAW_CAPABILITIES=${queen_caps} \\"
+      echo "                      node $BORGCLAW_HOME/services/queen/server.js"
       ;;
     worker)
       echo "    1. Start Ollama:  ollama serve"
       echo "    2. Ensure Queen is running at ${QUEEN_IP:-192.168.1.100}:9090"
-      echo "    3. Start Docker:  docker compose -f $AKOS_DIR/db/ak-os/projects/borgclaw/docker-compose.yml up -d"
+      echo "    3. Start Docker:  docker compose -f $BORGCLAW_HOME/docker-compose.yml up -d"
       ;;
     satellite)
       echo "    1. Start QMD:     qmd mcp-server"
@@ -644,8 +758,8 @@ health_check() {
   esac
 
   echo ""
-  echo -e "  ${GREEN}Config file:${NC} $AKOS_DIR/db/ak-os/projects/borgclaw/config/nodes/$(hostname | tr '[:upper:]' '[:lower:]' | tr ' ' '-').yaml"
-  echo -e "  ${GREEN}AKOS dir:${NC}    $AKOS_DIR"
+  echo -e "  ${GREEN}Config file:${NC} $BORGCLAW_HOME/config/nodes/$(hostname | tr '[:upper:]' '[:lower:]' | tr ' ' '-').yaml"
+  echo -e "  ${GREEN}BorgClaw dir:${NC} $BORGCLAW_HOME"
   echo ""
   echo -e "${GREEN}Bootstrap complete. Welcome to the Collective.${NC}"
 }
@@ -653,13 +767,27 @@ health_check() {
 # ============================================================
 # MAIN
 # ============================================================
+banner() {
+  echo -e "${CYAN}"
+  echo '   ◉━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━►'
+  echo ''
+  echo '   ██████╗  ██████╗ ██████╗  ██████╗  ██████╗██╗      █████╗ ██╗    ██╗'
+  echo '   ██╔══██╗██╔═══██╗██╔══██╗██╔════╝ ██╔════╝██║     ██╔══██╗██║    ██║'
+  echo '   ██████╔╝██║   ██║██████╔╝██║  ███╗██║     ██║     ███████║██║ █╗ ██║'
+  echo '   ██╔══██╗██║   ██║██╔══██╗██║   ██║██║     ██║     ██╔══██║██║███╗██║'
+  echo '   ██████╔╝╚██████╔╝██║  ██╗╚██████╔╝╚██████╗███████╗██║  ██║╚███╔███╔╝'
+  echo '   ╚═════╝  ╚═════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝'
+  echo ''
+  echo '             YOUR MACHINES  ·  YOUR MODELS  ·  YOUR RULES'
+  echo ''
+  echo -e "${NC}${BLUE}   We are the Borg. Your biological and technological distinctiveness"
+  echo -e "   will be added to our own. (Ollama. NadirClaw. LangGraph. LiteLLM."
+  echo -e "   NATS JetStream. QMD. ntfy. All assimilated. All serving the hive.)${NC}"
+  echo ''
+}
+
 main() {
-  echo ""
-  echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
-  echo -e "${CYAN}║           BorgClaw Bootstrap — The Assimilator             ║${NC}"
-  echo -e "${CYAN}║           Resistance is futile.                            ║${NC}"
-  echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
-  echo ""
+  banner
 
   detect_hardware       # Step 1
   check_floors          # Step 2
@@ -670,8 +798,9 @@ main() {
   install_qmd           # Step 7
   pull_models           # Step 8
   configure_node        # Step 9
-  index_qmd             # Step 10
-  health_check          # Step 11
+  install_heartbeat     # Step 10
+  index_qmd             # Step 11
+  health_check          # Step 12
 }
 
 main "$@"

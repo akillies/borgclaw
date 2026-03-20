@@ -1,0 +1,147 @@
+# BorgClaw — LiteLLM Routing Config
+# Every agent calls http://localhost:4000 (OpenAI-compatible).
+# LiteLLM routes to the right provider based on model name.
+# Change providers here — zero agent code changes required.
+#
+# ROUTING PHILOSOPHY (thermodynamic governance):
+#   Tier 1 — Local Ollama     (~$0/task)   → 70% of workload
+#   Tier 2 — Cheap cloud      (~$0.00003)  → fast structured tasks
+#   Tier 3 — Mid-tier cloud   (~$0.001)    → complex reasoning
+#   Tier 4 — Frontier API     (~$0.075)    → rare, hard-capped
+#
+# NadirClaw (running on host:8856) makes the simple/complex split first.
+# LiteLLM handles multi-provider routing and failover.
+
+model_list:
+
+  # ─── TIER 1: Local (free) ────────────────────────────────────
+  # Updated 2026-03-18 (autoresearch audit). phi4-mini replaces qwen3:8b as router.
+  # gemma3:27b replaces qwen3:14b for synthesis. qwen2.5-coder:14b replaces 7b on 24GB nodes.
+
+  - model_name: local-router
+    litellm_params:
+      model: ollama/phi4-mini
+      api_base: http://host.docker.internal:11434
+    model_info:
+      tier: 1
+      cost_per_token: 0
+      use_for: [fast-triage, classification, routing-decisions, structured-output]
+      note: "3.8B. Stays resident. ~15-30 tok/s. Best reasoning-per-parameter sub-5B class."
+
+  - model_name: local-general
+    litellm_params:
+      model: ollama/qwen3:8b
+      api_base: http://host.docker.internal:11434
+    model_info:
+      tier: 1
+      cost_per_token: 0
+      use_for: [general-assistant, email-triage, summaries, morning-brief-assembly]
+
+  - model_name: local-synthesis
+    litellm_params:
+      model: ollama/gemma3:27b
+      api_base: http://host.docker.internal:11434
+    model_info:
+      tier: 1
+      cost_per_token: 0
+      use_for: [long-context-research, deep-analysis, signal-synthesis, ansible-local]
+      hardware_requirement: mac-apple-silicon-24gb
+      context_window: 131072
+      note: "27B, 128K context, LMSys Elo 1339. Requires 24GB node. Pull manually: ollama pull gemma3:27b"
+
+  - model_name: local-code
+    litellm_params:
+      model: ollama/qwen2.5-coder:14b
+      api_base: http://host.docker.internal:11434
+    model_info:
+      tier: 1
+      cost_per_token: 0
+      use_for: [code-generation, code-review, structured-output, data-processing]
+      hardware_requirement: mac-apple-silicon-24gb
+      note: "#1 ranked local coding 2026. Requires 24GB. Use local-code-sm on RTX worker node."
+
+  - model_name: local-code-sm
+    litellm_params:
+      model: ollama/qwen2.5-coder:7b
+      api_base: http://host.docker.internal:11434
+    model_info:
+      tier: 1
+      cost_per_token: 0
+      use_for: [code-generation-worker-node]
+      hardware_requirement: nvidia-8gb
+      note: "7B for RTX 3070 worker where 14B exceeds VRAM ceiling."
+
+  # ─── TIER 2: Cheap cloud (~$0.00003/task) ────────────────────
+  - model_name: fast-cloud
+    litellm_params:
+      model: gemini/gemini-2.0-flash
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      tier: 2
+      use_for: [outreach-drafts, linkedin-posts, summaries, signal-classification]
+      note: "200x cheaper than Opus. Genuinely good. Use this more than you think."
+
+  - model_name: fast-cloud-fallback
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      tier: 2
+      use_for: [fallback-when-gemini-rate-limited]
+
+  # ─── TIER 3: Mid-tier (~$0.001/task) ─────────────────────────
+  - model_name: mid-reasoning
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      tier: 3
+      use_for: [medium-strategic-analysis, complex-structured-output]
+
+  - model_name: long-context
+    litellm_params:
+      model: moonshot/moonshot-v1-128k
+      api_key: os.environ/MOONSHOT_API_KEY
+      api_base: https://api.moonshot.cn/v1
+    model_info:
+      tier: 3
+      use_for: [long-document-processing, large-codebase-analysis]
+      context_window: 128000
+
+  # ─── TIER 4: Frontier (last resort, hard-capped) ─────────────
+  - model_name: voice-critical
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      tier: 4
+      use_for: [voice-matched-writing, ansible-synthesis, brand-critical-content]
+      note: "Not Opus. Sonnet handles voice-critical content."
+
+  - model_name: frontier
+    litellm_params:
+      model: anthropic/claude-opus-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      tier: 4
+      use_for: [deep-foresight, frontier-reasoning]
+      note: "~5% of total workload. Hard budget cap enforced."
+
+# ─── Router settings ─────────────────────────────────────────
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 2
+  fallbacks:
+    - fast-cloud: [fast-cloud-fallback]
+    - local-router: [local-general]
+    - local-general: [fast-cloud]
+    - local-synthesis: [mid-reasoning]
+    - local-code: [local-code-sm, fast-cloud]
+    - local-code-sm: [fast-cloud]
+
+# ─── Budget caps (enforced per model) ─────────────────────────
+litellm_settings:
+  max_budget: 55          # Hard monthly cap across all Tier 4 usage (USD)
+  budget_duration: monthly
+  success_callback: []
+  failure_callback: []

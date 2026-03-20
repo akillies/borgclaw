@@ -8,8 +8,8 @@
 An automated signal scanning system that monitors GitHub, arXiv, PubMed, Semantic Scholar, Hacker News, and Product Hunt to surface tools, papers, frameworks, and breakthroughs relevant to:
 
 1. **BorgClaw itself** — better tools to compose into the stack (self-improving principle)
-2. **Alexander's 11 interest domains** — the Interest Ontology signal feed
-3. **Cross-domain intersections** — the unique synthesis zones where Alexander's edge lives
+2. **the owner's 11 interest domains** — the Interest Ontology signal feed
+3. **Cross-domain intersections** — the unique synthesis zones where the owner's edge lives
 
 The radar runs daily as a cron job, feeds results through LLM classification, and surfaces only high-signal items. Low noise. High leverage.
 
@@ -84,7 +84,7 @@ q=topic:vector-database+topic:rag stars:>50 pushed:>2026-01-01&sort=stars&order=
 q=topic:workflow-engine+topic:ai stars:>30 pushed:>2026-02-01&sort=stars&order=desc&per_page=30
 ```
 
-#### Alexander's Interest Domains
+#### the owner's Interest Domains
 ```
 # AI Systems & Agent Architecture
 q=topic:ai-agent+topic:multi-agent stars:>50 created:>2025-12-01&sort=stars&order=desc
@@ -140,7 +140,7 @@ GET http://export.arxiv.org/api/query
 
 ### Query Templates
 
-#### Cross-Domain Synthesis (Alexander's edge)
+#### Cross-Domain Synthesis (the owner's edge)
 ```
 search_query=all:"agentic workflow" OR all:"multi-agent orchestration" OR all:"autonomous system"
   &sortBy=submittedDate&sortOrder=descending&max_results=30
@@ -158,8 +158,8 @@ search_query=cat:cs.CL AND all:"retrieval augmented"
   &sortBy=submittedDate&sortOrder=descending&max_results=15
 ```
 
-### Category Codes (Alexander's Domains)
-| arXiv Category | Alexander's Domain |
+### Category Codes (the owner's Domains)
+| arXiv Category | the owner's Domain |
 |---------------|-------------------|
 | cs.AI | AI Systems |
 | cs.MA | Multi-Agent Systems |
@@ -222,7 +222,7 @@ GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi
 ### No auth for basic use. API key recommended for higher rate limits.
 
 ### When to Use
-Only for Alexander's health/consciousness/genomics domains. Not for tech signals.
+Only for the owner's health/consciousness/genomics domains. Not for tech signals.
 
 ### Query Templates
 ```
@@ -257,7 +257,7 @@ query=self-hosted AI&tags=story&numericFilters=points>50,created_at_i>1740000000
 query=local LLM orchestration&tags=story&numericFilters=points>30
 query=MCP agent&tags=story&numericFilters=points>20
 
-# Alexander's domains
+# the owner's domains
 query=personal AI assistant&tags=story&numericFilters=points>30
 query=knowledge management AI&tags=story&numericFilters=points>20
 query=genomics AI&tags=story&numericFilters=points>15
@@ -302,9 +302,9 @@ Local model on Mac Mini (Qwen 3 8B or equivalent via LM Studio). Zero API cost.
 
 ### Classification Prompt
 ```
-You are a signal classifier for Alexander Kline's personal AI operating system.
+You are a signal classifier for this personal AI cluster.
 
-Alexander's 11 interest domains: AI Systems, Foresight, Information Architecture,
+the owner's 11 interest domains: AI Systems, Foresight, Information Architecture,
 Org Transformation, Consciousness/Health, Transmedia/Creative IP, Genomics,
 Quantum, Geopolitics, Venture, Academic Foresight.
 
@@ -324,16 +324,16 @@ Topics/Categories: {{topics}}
 Date: {{date}}
 
 Score on three dimensions (each 1-10):
-1. DOMAIN RELEVANCE: How relevant to Alexander's 11 domains?
-2. CROSS-DOMAIN POTENTIAL: Does this bridge two+ domains? (Alexander's unique edge)
-3. ACTIONABILITY: Can Alexander do something with this NOW? (write about it, use it, invest in it, apply it)
+1. DOMAIN RELEVANCE: How relevant to the owner's 11 domains?
+2. CROSS-DOMAIN POTENTIAL: Does this bridge two+ domains? (the owner's unique edge)
+3. ACTIONABILITY: Can the owner do something with this NOW? (write about it, use it, invest in it, apply it)
 
 Total = Domain × Cross-Domain × Actionability
 Threshold: Total ≥ 30 = SURFACE. Below 30 = LOG ONLY.
 
 Also answer:
 - STACK_IMPROVEMENT: Does this replace or improve anything in the BorgClaw stack? (yes/no + what)
-- BOUNDARY_LAYER: Is this a potential Boundary Layer article topic? (yes/no + angle)
+- CONTENT_PLATFORM: Is this a potential content platform article topic? (yes/no + angle)
 - SIGNAL_TYPE: tool | paper | framework | trend | breakthrough | person
 
 Output JSON:
@@ -346,7 +346,7 @@ Output JSON:
   "domains": ["AI Systems", "Genomics"],
   "intersections": ["Genomics×IA"],
   "stack_improvement": {"applies": false, "replaces": null, "note": null},
-  "boundary_layer": {"potential": true, "angle": "..."},
+  "content_platform": {"potential": true, "angle": "..."},
   "signal_type": "tool",
   "one_line_summary": "...",
   "recommended_action": "..."
@@ -433,21 +433,21 @@ nodes:
       code: |
         surfaced = [s for s in signals if s['total_score'] >= 30]
         stack_improvements = [s for s in signals if s['stack_improvement']['applies']]
-        boundary_layer = [s for s in signals if s['boundary_layer']['potential']]
+        content_platform = [s for s in signals if s['content_platform']['potential']]
 
   # OUTPUT: Four destinations
   - id: update_signals_registry
     type: code
     depends_on: [filter]
     config:
-      # Append to db/ak-os/entities/signals.md
+      # Append to {{knowledge_base}}/entities/signals.md
 
   - id: update_tool_landscape
     type: code
     depends_on: [filter]
     config:
       # For signals tagged as tools/repos/frameworks:
-      # Append new entry to db/ak-os/TOOL-LANDSCAPE.md
+      # Append new entry to {{knowledge_base}}/TOOL-LANDSCAPE.md
       # Status: 🗺️ Mapped (default) or 🔍 Evaluating (if stack_improvement applies)
       # This is the living inventory — "if we don't have a map, we won't think to use it"
 
@@ -671,7 +671,7 @@ Signal Radar detects new tool (e.g., "BetterGateway v2.0 — 3x faster than Nadi
     → NATS event: events.signal.stack_improvement
     → Cerebro agent picks up, does deep evaluation
     → Creates Fizzy card: "Evaluate BetterGateway as NadirClaw replacement"
-    → Alexander reviews in weekly system review
+    → the owner reviews in weekly system review
     → If approved: update models.json / docker-compose / TECHNOLOGY-AUDIT.md
 ```
 
@@ -679,24 +679,24 @@ The system literally watches for its own replacement parts.
 
 ---
 
-## BOUNDARY LAYER CONTENT PIPELINE
+## CONTENT PLATFORM PIPELINE
 
-When a signal is flagged as `boundary_layer.potential = true`:
+When a signal is flagged as `content_platform.potential = true`:
 
 ```
-Signal surfaced with Boundary Layer angle
+Signal surfaced with content platform angle
     → Creates Fizzy card in "Content Ideas" board
-    → Tags: boundary-layer, signal-sourced
+    → Tags: content-platform, signal-sourced
     → Card description includes: signal summary, angle, cross-domain zones
     → Weekly content drafter picks up cards from this board
-    → Drafts article brief → Alexander reviews → publish pipeline
+    → Drafts article brief → the owner reviews → publish pipeline
 ```
 
 ---
 
 ## INTEGRATION WITH EXISTING SCHEDULED TASKS
 
-The signal radar REPLACES or ENHANCES these existing AK-OS scheduled tasks:
+The signal radar REPLACES or ENHANCES these existing scheduled tasks:
 
 | Existing Task | Signal Radar Integration |
 |--------------|------------------------|
@@ -725,8 +725,8 @@ The signal radar REPLACES or ENHANCES these existing AK-OS scheduled tasks:
 - PubMed integration
 - GitHub → paper citation chaining (Papers with Code / HF)
 - Historical trend analysis (NATS event replay)
-- Query auto-tuning based on what Alexander clicks/ignores
+- Query auto-tuning based on what the owner clicks/ignores
 
 ---
 
-*This spec turns Alexander's daily "I wonder what's out there" into a systematic, automated, self-improving signal radar that feeds the entire AK-OS ecosystem.*
+*This spec turns the owner's daily "I wonder what's out there" into a systematic, automated, self-improving signal radar that feeds the entire BorgClaw ecosystem.*

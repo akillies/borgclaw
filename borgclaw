@@ -1,0 +1,277 @@
+#!/usr/bin/env bash
+# ============================================================
+# borgclaw — CLI entry point
+# ============================================================
+# Usage:
+#   borgclaw start     — Boot Queen + middleware services
+#   borgclaw stop      — Shut everything down
+#   borgclaw status    — Show cluster health
+#   borgclaw dashboard — Open dashboard in browser
+#   borgclaw bootstrap — Run hardware detection + setup
+#   borgclaw nodes     — List registered nodes
+#   borgclaw logs      — Tail Queen logs
+# ============================================================
+
+set -euo pipefail
+
+# --- Resolve BORGCLAW_HOME ---
+# If run from the repo directory, use that. Otherwise check env.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export BORGCLAW_HOME="${BORGCLAW_HOME:-$SCRIPT_DIR}"
+
+QUEEN_DIR="$BORGCLAW_HOME/services/queen"
+QUEEN_PID_FILE="/tmp/borgclaw-queen.pid"
+QUEEN_LOG="/tmp/borgclaw-queen.log"
+QUEEN_PORT="${QUEEN_PORT:-9090}"
+
+# --- Colors ---
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; NC='\033[0m'
+
+# --- Helpers ---
+log()  { echo -e "${CYAN}[borgclaw]${NC} $*"; }
+ok()   { echo -e "${GREEN}  ✓${NC} $*"; }
+warn() { echo -e "${YELLOW}  ⚠${NC} $*"; }
+err()  { echo -e "${RED}  ✗${NC} $*"; }
+
+queen_running() {
+  [[ -f "$QUEEN_PID_FILE" ]] && kill -0 "$(cat "$QUEEN_PID_FILE")" 2>/dev/null
+}
+
+# ============================================================
+# COMMANDS
+# ============================================================
+
+cmd_start() {
+  echo ""
+  echo -e "${CYAN}    ╭━━╮  ╭━━╮${NC}"
+  echo -e "${CYAN}   ╭╯${RED}●${CYAN} ╰╮╭╯ ${GREEN}●${CYAN}╰╮   ${NC}B O R G C L A W"
+  echo -e "${CYAN}   ┃  ╭━╯╰━╮  ┃${NC}   Adaptation is inevitable."
+  echo -e "${CYAN}   ╰━━╯    ╰━━╯${NC}"
+  echo -e "${CYAN}     ╰══════╯${NC}"
+  echo ""
+
+  # --- Queen ---
+  if queen_running; then
+    ok "Queen already running (PID $(cat "$QUEEN_PID_FILE"))"
+  else
+    log "Starting Queen service..."
+    if [[ ! -d "$QUEEN_DIR/node_modules" ]]; then
+      log "Installing dependencies..."
+      (cd "$QUEEN_DIR" && npm install --silent 2>&1)
+    fi
+
+    # Detect this machine's profile
+    local profile="unknown"
+    local caps="queen_api,scheduled_tasks"
+    local node_id
+    node_id=$(hostname | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+
+    if [[ "$(uname)" == "Darwin" ]]; then
+      local chip
+      chip=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "unknown")
+      if [[ "$chip" == *"Apple"* ]]; then
+        local ram_gb
+        ram_gb=$(sysctl -n hw.memsize | awk '{printf "%.0f", $1/1073741824}')
+        if (( ram_gb >= 24 )); then
+          profile="mac-apple-silicon-24gb"
+        elif (( ram_gb >= 16 )); then
+          profile="mac-apple-silicon-16gb"
+        else
+          profile="mac-apple-silicon-8gb"
+        fi
+        caps="mlx_inference,qmd_search,mcp_host,${caps}"
+      fi
+    fi
+
+    BORGCLAW_HOME="$BORGCLAW_HOME" \
+    BORGCLAW_PROFILE="$profile" \
+    BORGCLAW_NODE_ID="$node_id" \
+    BORGCLAW_CAPABILITIES="$caps" \
+    node "$QUEEN_DIR/server.js" > "$QUEEN_LOG" 2>&1 &
+
+    echo $! > "$QUEEN_PID_FILE"
+    sleep 1
+
+    if queen_running; then
+      ok "Queen started (PID $(cat "$QUEEN_PID_FILE")) — http://localhost:${QUEEN_PORT}"
+    else
+      err "Queen failed to start. Check $QUEEN_LOG"
+      cat "$QUEEN_LOG"
+      return 1
+    fi
+  fi
+
+  # --- Docker services (if docker is available) ---
+  if command -v docker &>/dev/null; then
+    if docker compose -f "$BORGCLAW_HOME/docker-compose.yml" ps --status running 2>/dev/null | grep -q "borgclaw"; then
+      ok "Docker services already running"
+    else
+      log "Starting middleware (NATS + LiteLLM + ntfy)..."
+      docker compose -f "$BORGCLAW_HOME/docker-compose.yml" up -d 2>&1 | tail -3
+      ok "Middleware started"
+    fi
+  else
+    warn "Docker not found — middleware services (NATS, LiteLLM, ntfy) skipped"
+    warn "Install Docker to enable the full stack, or run Queen standalone"
+  fi
+
+  # --- QMD status ---
+  if command -v qmd &>/dev/null; then
+    ok "QMD available ($(qmd --version 2>/dev/null || echo 'installed'))"
+  else
+    warn "QMD not installed — run: npm install -g @tobilu/qmd"
+  fi
+
+  # --- Ollama status ---
+  if command -v ollama &>/dev/null; then
+    ok "Ollama available"
+  else
+    warn "Ollama not installed — local inference disabled"
+    warn "Install: curl -fsSL https://ollama.com/install.sh | sh"
+  fi
+
+  echo ""
+  log "Dashboard: http://localhost:${QUEEN_PORT}/dashboard"
+  log "API:       http://localhost:${QUEEN_PORT}/api/status"
+  log "Logs:      borgclaw logs"
+}
+
+cmd_stop() {
+  log "Stopping BorgClaw..."
+
+  if queen_running; then
+    kill "$(cat "$QUEEN_PID_FILE")" 2>/dev/null
+    rm -f "$QUEEN_PID_FILE"
+    ok "Queen stopped"
+  else
+    warn "Queen not running"
+  fi
+
+  if command -v docker &>/dev/null; then
+    docker compose -f "$BORGCLAW_HOME/docker-compose.yml" down 2>/dev/null && ok "Middleware stopped" || true
+  fi
+}
+
+cmd_status() {
+  echo -e "${CYAN}BorgClaw Status${NC}"
+  echo ""
+
+  # Queen
+  if queen_running; then
+    ok "Queen: running (PID $(cat "$QUEEN_PID_FILE"))"
+    local status
+    status=$(curl -s "http://localhost:${QUEEN_PORT}/" 2>/dev/null)
+    if [[ -n "$status" ]]; then
+      local nodes_reg nodes_on uptime
+      nodes_reg=$(echo "$status" | python3 -c "import sys,json; print(json.load(sys.stdin)['nodes_registered'])" 2>/dev/null || echo "?")
+      nodes_on=$(echo "$status" | python3 -c "import sys,json; print(json.load(sys.stdin)['nodes_online'])" 2>/dev/null || echo "?")
+      uptime=$(echo "$status" | python3 -c "import sys,json; print(json.load(sys.stdin)['uptime_seconds'])" 2>/dev/null || echo "?")
+      echo "         Nodes: ${nodes_on}/${nodes_reg} online | Uptime: ${uptime}s"
+    fi
+  else
+    err "Queen: not running"
+  fi
+
+  # Docker
+  if command -v docker &>/dev/null; then
+    local running
+    running=$(docker compose -f "$BORGCLAW_HOME/docker-compose.yml" ps --status running 2>/dev/null | grep -c "borgclaw" || echo "0")
+    if (( running > 0 )); then
+      ok "Middleware: ${running} service(s) running"
+    else
+      warn "Middleware: not running"
+    fi
+  else
+    warn "Docker: not installed"
+  fi
+
+  # Ollama
+  if command -v ollama &>/dev/null; then
+    if curl -s http://localhost:11434/ &>/dev/null; then
+      ok "Ollama: running"
+      local models
+      models=$(ollama list 2>/dev/null | tail -n +2 | awk '{print $1}' | tr '\n' ', ' | sed 's/,$//')
+      [[ -n "$models" ]] && echo "         Models: $models"
+    else
+      warn "Ollama: installed but not serving (run: ollama serve)"
+    fi
+  else
+    warn "Ollama: not installed"
+  fi
+
+  # QMD
+  if command -v qmd &>/dev/null; then
+    ok "QMD: $(qmd --version 2>/dev/null || echo 'installed')"
+  else
+    warn "QMD: not installed"
+  fi
+}
+
+cmd_dashboard() {
+  if queen_running; then
+    open "http://localhost:${QUEEN_PORT}/dashboard" 2>/dev/null || \
+    xdg-open "http://localhost:${QUEEN_PORT}/dashboard" 2>/dev/null || \
+    echo "Open http://localhost:${QUEEN_PORT}/dashboard in your browser"
+  else
+    err "Queen not running. Start first: borgclaw start"
+  fi
+}
+
+cmd_nodes() {
+  if ! queen_running; then
+    err "Queen not running. Start first: borgclaw start"
+    return 1
+  fi
+  curl -s "http://localhost:${QUEEN_PORT}/api/nodes" | python3 -m json.tool 2>/dev/null || \
+    curl -s "http://localhost:${QUEEN_PORT}/api/nodes"
+}
+
+cmd_logs() {
+  if [[ -f "$QUEEN_LOG" ]]; then
+    tail -f "$QUEEN_LOG"
+  else
+    warn "No log file found at $QUEEN_LOG"
+  fi
+}
+
+cmd_bootstrap() {
+  log "Running bootstrap..."
+  bash "$BORGCLAW_HOME/scripts/bootstrap.sh" "$@"
+}
+
+cmd_help() {
+  echo -e "${CYAN}borgclaw${NC} — Your Machines. Your Models. Your Rules."
+  echo ""
+  echo "Usage: borgclaw <command>"
+  echo ""
+  echo "Commands:"
+  echo "  start       Start Queen service + middleware"
+  echo "  stop        Stop all services"
+  echo "  status      Show cluster health"
+  echo "  dashboard   Open dashboard in browser"
+  echo "  nodes       List registered nodes"
+  echo "  logs        Tail Queen service logs"
+  echo "  bootstrap   Run hardware detection + full setup"
+  echo "  help        Show this message"
+}
+
+# ============================================================
+# DISPATCH
+# ============================================================
+
+case "${1:-help}" in
+  start)     cmd_start ;;
+  stop)      cmd_stop ;;
+  status)    cmd_status ;;
+  dashboard) cmd_dashboard ;;
+  nodes)     cmd_nodes ;;
+  logs)      cmd_logs ;;
+  bootstrap) shift; cmd_bootstrap "$@" ;;
+  help|--help|-h) cmd_help ;;
+  *)
+    err "Unknown command: $1"
+    cmd_help
+    exit 1
+    ;;
+esac

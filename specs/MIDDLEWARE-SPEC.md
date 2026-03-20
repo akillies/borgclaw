@@ -1,5 +1,5 @@
 # BorgClaw Middleware Layer — Architecture Specification
-## The Missing Layer Between AK-OS (Knowledge) and BorgClaw (Infrastructure)
+## The Missing Layer Between the Knowledge Base (Knowledge) and BorgClaw (Infrastructure)
 
 ---
 
@@ -7,12 +7,12 @@
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  LAYER 5: HUMAN (Alexander)                         │
+│  LAYER 5: HUMAN (the operator)                      │
 │  Task capture (fizzy.do / Kanban)                   │
 │  Approval queue ← drafts, alerts, notifications     │
 │  Governance: Law Two (draft-then-approve)            │
 ├─────────────────────────────────────────────────────┤
-│  LAYER 4: AK-OS (Identity + Knowledge)              │  ← EXISTS
+│  LAYER 4: KNOWLEDGE BASE (Identity + Knowledge)     │  ← EXISTS
 │  Entity registries, patterns, workflows,             │
 │  operating laws, state, interest ontology            │
 │  Storage: git-backed markdown, portable              │
@@ -34,7 +34,7 @@
 ├─────────────────────────────────────────────────────┤
 │  LAYER 1: COMPUTE (Hardware)                        │  ← EXISTS
 │  Mac Mini M4 Pro 24GB (LM Studio + MLX)              │
-│  Ryzen 5 + RTX 3070 8GB / 32GB RAM (Ollama)         │
+│  GPU tower (Ollama, CUDA)                            │
 │  Cloud APIs: Claude Opus/Sonnet, GPT-4o (overflow)   │
 └─────────────────────────────────────────────────────┘
 ```
@@ -44,11 +44,11 @@
 ## 3a. TASK DISPATCH QUEUE
 
 ### The Insight
-To-dos ARE the routing mechanism. Every piece of work Alexander wants done starts as a task. Tasks get dispatched to agents. Agents execute end-to-end. The task queue is the system's heartbeat.
+To-dos ARE the routing mechanism. Every piece of work the operator wants done starts as a task. Tasks get dispatched to agents. Agents execute end-to-end. The task queue is the system's heartbeat.
 
 ### Flow
 ```
-fizzy.do (Kanban)           ← Alexander captures tasks (mobile, desktop, voice)
+fizzy.do (Kanban)           ← Operator captures tasks (mobile, desktop, voice)
     │
     ▼
 Task Ingestion Service      ← Polls fizzy.do API or watches webhook
@@ -74,10 +74,10 @@ Completion                  ← Task marked done in fizzy.do
 {
   "id": "task_2026-03-15_001",
   "source": "fizzy.do",
-  "title": "Publish Boundary Layer article on AI job exposure",
+  "title": "Publish content platform article on AI job exposure",
   "type": "workflow",
   "priority": "medium",
-  "labels": ["content", "boundary-layer"],
+  "labels": ["content", "content-platform"],
   "status": "queued",
   "assigned_agent": null,
   "workflow_template": "content-publish-pipeline",
@@ -85,7 +85,7 @@ Completion                  ← Task marked done in fizzy.do
   "requires_approval": true,
   "created_at": "2026-03-15T09:00:00-07:00",
   "deadline": null,
-  "context_files": ["db/ak-os/INTEREST-ONTOLOGY.md", "db/ak-os/entities/signals.md"],
+  "context_files": ["{{KNOWLEDGE_BASE}}/interests.md", "{{KNOWLEDGE_BASE}}/entities/signals.md"],
   "output": null,
   "audit_log": []
 }
@@ -97,7 +97,7 @@ Completion                  ← Task marked done in fizzy.do
 - Webhook or polling support — need to detect new tasks
 - Labels/tags for routing classification
 - Subtask support for workflow decomposition
-- Mobile-friendly UI for Alexander's capture
+- Mobile-friendly UI for operator task capture
 - Lightweight — runs on the always-on node
 - SELECTED: **Fizzy** (37signals) — 7.2K stars, AGENTS.md, 40+ API endpoints, signed webhooks, entropy system
 
@@ -106,13 +106,13 @@ Completion                  ← Task marked done in fizzy.do
 ## 3b. WORKFLOW DECOMPOSITION ENGINE
 
 ### The Insight
-A single to-do like "Publish Boundary Layer article" is not one task — it's a directed acyclic graph (DAG) of subtasks across multiple agents working in parallel and sequence.
+A single to-do like "Publish content platform article" is not one task — it's a directed acyclic graph (DAG) of subtasks across multiple agents working in parallel and sequence.
 
 ### Workflow Template Format
 ```yaml
 name: content-publish-pipeline
-description: End-to-end content publishing for Boundary Layer
-trigger: task with label "content" + "boundary-layer"
+description: End-to-end content publishing pipeline
+trigger: task with label "content" + "newsletter"
 
 steps:
   - id: research
@@ -129,7 +129,7 @@ steps:
     depends_on: [research]
     inputs:
       brief: "{{research.research_brief}}"
-      voice_rules: "memory/context/voice-and-brand-rules.md"
+      voice_rules: "{{KNOWLEDGE_BASE}}/memory/context/voice-and-brand-rules.md"
     outputs: [article_draft]
     requires_approval: true
 
@@ -161,7 +161,7 @@ steps:
 
   - id: publish
     agent: ops-handler
-    action: publish_to_substack
+    action: publish_to_platform
     depends_on: [draft_article, create_assets]
     inputs:
       article: "{{draft_article.article_draft}}"
@@ -278,7 +278,7 @@ Agents need to talk to each other — not just receive tasks from Jarvis. Sentin
     "signal_id": "SIG-003",
     "title": "New Karpathy post on AI agents",
     "relevance_score": 45,
-    "suggested_action": "boundary-layer-brief"
+    "suggested_action": "content-platform-brief"
   },
   "subscribers": ["jarvis-router", "comms-drafter"],
   "timestamp": "2026-03-15T10:30:00Z"
@@ -306,7 +306,7 @@ Agents need to talk to each other — not just receive tasks from Jarvis. Sentin
 ## 3e. CONTEXT ASSEMBLY PROTOCOL
 
 ### The Insight
-AK-OS has 500K+ words of context files. No model holds all of it. When an agent picks up a task, it needs the RIGHT context — not everything, not nothing.
+A personal AI OS may have hundreds of thousands of words of context files. No model holds all of it. When an agent picks up a task, it needs the RIGHT context — not everything, not nothing.
 
 ### Context Assembly Rules
 ```yaml
@@ -314,46 +314,46 @@ task_type_contexts:
   content_creation:
     always_load:
       - memory/context/voice-and-brand-rules.md
-      - db/ak-os/INTEREST-ONTOLOGY.md
+      - "{{KNOWLEDGE_BASE}}/interests.md"
     load_if_relevant:
-      - db/ak-os/entities/signals.md
-      - db/Alexander_Kline_Voice_Style_Guide_v3.md
+      - "{{KNOWLEDGE_BASE}}/entities/signals.md"
+      - "{{KNOWLEDGE_BASE}}/voice-style-guide.md"
     max_context_tokens: 32000
 
   signal_analysis:
     always_load:
-      - db/ak-os/INTEREST-ONTOLOGY.md
-      - db/ak-os/entities/signals.md
-      - db/ak-os/entities/patterns.md
+      - "{{KNOWLEDGE_BASE}}/interests.md"
+      - "{{KNOWLEDGE_BASE}}/entities/signals.md"
+      - "{{KNOWLEDGE_BASE}}/entities/patterns.md"
     load_if_relevant:
-      - db/ak-os/entities/projects.md
+      - "{{KNOWLEDGE_BASE}}/entities/projects.md"
     max_context_tokens: 64000
 
   meeting_prep:
     always_load:
-      - db/ak-os/entities/people.md
-      - db/ak-os/STATE.md
+      - "{{KNOWLEDGE_BASE}}/entities/people.md"
+      - "{{KNOWLEDGE_BASE}}/STATE.md"
     load_if_relevant:
-      - db/ak-os/entities/projects.md (filter to relevant project)
-      - db/ak-os/entities/financial.md (if revenue meeting)
+      - "{{KNOWLEDGE_BASE}}/entities/projects.md (filter to relevant project)"
+      - "{{KNOWLEDGE_BASE}}/entities/financial.md (if revenue meeting)"
     max_context_tokens: 32000
 
   client_work:
     always_load:
-      - db/ak-os/entities/projects.md (filter to client)
-      - db/ak-os/entities/financial.md
+      - "{{KNOWLEDGE_BASE}}/entities/projects.md (filter to client)"
+      - "{{KNOWLEDGE_BASE}}/entities/financial.md"
     load_if_relevant:
-      - db/ak-os/entities/people.md (filter to client contacts)
+      - "{{KNOWLEDGE_BASE}}/entities/people.md (filter to client contacts)"
     max_context_tokens: 32000
 
   strategic_planning:
     always_load:
-      - db/ak-os/STATE.md
-      - db/ak-os/entities/patterns.md
-      - db/ak-os/entities/decisions.md
-      - db/ak-os/entities/financial.md
+      - "{{KNOWLEDGE_BASE}}/STATE.md"
+      - "{{KNOWLEDGE_BASE}}/entities/patterns.md"
+      - "{{KNOWLEDGE_BASE}}/entities/decisions.md"
+      - "{{KNOWLEDGE_BASE}}/entities/financial.md"
     load_if_relevant:
-      - db/AK_Master_Context_2026.md
+      - "{{KNOWLEDGE_BASE}}/master-context.md"
     max_context_tokens: 128000
 ```
 
@@ -381,7 +381,7 @@ Send to model
 ```
 
 ### Requirements for Context Assembly
-- Vector embeddings of all AK-OS markdown files (for semantic search)
+- Vector embeddings of all knowledge base markdown files (for semantic search)
 - Token counting (tiktoken or equivalent)
 - Context windowing (summarize/truncate strategies)
 - File-level and section-level retrieval
@@ -392,7 +392,7 @@ Send to model
 ## 3f. HUMAN-IN-THE-LOOP APPROVAL UX
 
 ### The Insight
-Law Two says draft-then-approve. Agents produce work. Alexander reviews before anything goes external. But the approval mechanism needs to be FAST and MOBILE — or it becomes a bottleneck that kills the whole system.
+Law Two says draft-then-approve. Agents produce work. The operator reviews before anything goes external. But the approval mechanism needs to be FAST and MOBILE — or it becomes a bottleneck that kills the whole system.
 
 ### Approval Flow
 ```
@@ -402,11 +402,11 @@ Agent produces draft
 Draft saved to approval queue
     │
     ▼
-Push notification to Alexander's phone (ntfy / Pushover / Gotify)
-    │ Title: "✅ Approve: Boundary Layer draft ready"
+Push notification to the operator's phone (ntfy / Pushover / Gotify)
+    │ Title: "Approve: content platform draft ready"
     │ Body: preview + approve/reject/edit links
     ▼
-Alexander taps notification
+Operator taps notification
     │
     ├─→ APPROVE → agent proceeds to next step
     ├─→ REJECT + note → agent revises or task cancelled
@@ -420,9 +420,9 @@ Alexander taps notification
   "agent": "comms-drafter",
   "task_id": "task_2026-03-15_001",
   "type": "article_draft",
-  "title": "Boundary Layer: AI Job Exposure Analysis",
+  "title": "Content Platform: AI Job Exposure Analysis",
   "preview": "First 500 chars of the draft...",
-  "full_content_path": "/ak-os/drafts/boundary-layer-ai-jobs.md",
+  "full_content_path": "/knowledge-base/drafts/content-platform-ai-jobs.md",
   "status": "pending",
   "created_at": "2026-03-15T11:00:00Z",
   "actions": ["approve", "reject", "edit"],
@@ -432,7 +432,7 @@ Alexander taps notification
 ```
 
 ### Requirements for Approval System
-- Mobile push notifications (Alexander reviews on phone often)
+- Mobile push notifications (operator reviews on phone often)
 - Self-hosted notification service
 - Approval actions via URL (tap to approve without opening a dashboard)
 - Queue persists (pending items survive restarts)
@@ -452,7 +452,7 @@ Agents can draft, analyze, research. But the "last mile" — actually sending th
 | Send email | Gmail MCP | ✅ Draft only (create_draft) — send requires manual |
 | Post to LinkedIn | None | ❌ GAP |
 | Post to X/Twitter | None | ❌ GAP |
-| Publish to Substack | None | ❌ GAP |
+| Publish to content platform | None | ❌ GAP |
 | Push to GitHub | None | ❌ GAP |
 | Create Canva designs | Canva MCP | ✅ Connected |
 | Google Calendar | GCal MCP | ✅ Connected |
@@ -462,14 +462,14 @@ Agents can draft, analyze, research. But the "last mile" — actually sending th
 
 ### Gap Mitigation Strategies
 1. **Browser automation** — Claude in Chrome / Playwright for platforms without APIs
-2. **API-direct** — Build lightweight MCPs for X (API v2), Substack (unofficial API)
+2. **API-direct** — Build lightweight MCPs for X (API v2), content platform (unofficial API)
 3. **Zapier/n8n bridge** — Use automation platform as middleware for last-mile sends
-4. **Manual-with-notification** — Agent drafts + saves + notifies Alexander to press "send"
+4. **Manual-with-notification** — Agent drafts + saves + notifies the operator to press "send"
 
 ### Priority Gaps to Close
 1. **Email send** — Most impactful. Gmail MCP can draft. Need send capability or SMTP bridge.
 2. **Social posting** — X API v2 + LinkedIn API. Could be custom MCP or n8n/Zapier.
-3. **Substack publish** — Unofficial API exists. Could be custom MCP.
+3. **Content platform publish** — Unofficial API exists. Could be custom MCP.
 4. **GitHub** — Official MCP exists. Just needs connecting.
 
 ---
@@ -482,7 +482,7 @@ Every tool choice for this middleware layer must pass these filters:
 2. **Modular** — Each sublayer (3a-3g) is independent. Can upgrade one without touching others.
 3. **Portable** — Runs on any hardware. No cloud-only dependencies. Works air-gapped.
 4. **Extensible** — Adding a new agent, tool, workflow, or MCP should be config-not-code.
-5. **Self-improving** — The system should detect its own gaps and suggest improvements (CAPABILITY-ROADMAP.md pattern).
+5. **Self-improving** — The system should detect its own gaps and suggest improvements (capability roadmap pattern).
 
 ---
 
@@ -501,4 +501,4 @@ For each sublayer, we need to audit the open-source landscape and pick the best 
 
 ---
 
-*This spec defines what needs to exist between AK-OS (the brain) and BorgClaw (the nervous system). Each sublayer will be researched and tool-selected in the next pass.*
+*This spec defines what needs to exist between the knowledge base (the brain) and BorgClaw (the nervous system). Each sublayer will be researched and tool-selected in the next pass.*

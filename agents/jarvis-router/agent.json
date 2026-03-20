@@ -26,6 +26,7 @@
     "scheduled": ["morning-briefing-dispatch", "evening-health-check"],
     "event": ["new_email", "calendar_event_starting", "node_offline"]
   },
+  "_tools_note": "Tools listed below are declarative capability descriptions for Phase 1 planning. They are NOT implemented MCP endpoints yet. Implementation target: Phase D (The Agents). Each tool will become either an MCP call or a Queen API call.",
   "tools": [
     "route_to_agent",
     "classify_request",
@@ -36,16 +37,25 @@
     "read_knowledge_base",
     "send_notification"
   ],
+  "_mcps_note": "Paperclip evaluated 2026-03-11 and rejected — added complexity without needed capability. Governance handled by Queen API + Law Two (draft-then-approve). NATS provides event coordination.",
   "mcps": [
     {
       "name": "nadirclaw",
-      "purpose": "Smart routing — classify prompt complexity, route to optimal model",
-      "endpoint": "http://localhost:8856"
+      "purpose": "Binary prompt router — classify simple→local vs complex→cloud in ~10ms",
+      "endpoint": "http://localhost:8856",
+      "status": "planned — install via: pip install nadirclaw[dashboard] && nadirclaw --port 8856 --backend http://localhost:4000"
     },
     {
-      "name": "paperclip",
-      "purpose": "Agent governance — check budgets, log actions, request approvals",
-      "endpoint": "http://localhost:3100"
+      "name": "nats",
+      "purpose": "Event bus — publish agent actions, query recent hive activity for temporal coordination",
+      "endpoint": "nats://localhost:4222",
+      "status": "running — started by docker-compose.yml"
+    },
+    {
+      "name": "queen",
+      "purpose": "Node registry — check cluster health, look up capabilities, read config",
+      "endpoint": "http://localhost:9090",
+      "status": "running — started manually: node services/queen/server.js"
     }
   ]
 }

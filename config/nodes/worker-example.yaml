@@ -32,7 +32,7 @@ services:
     command: "gws mcp"
     enabled: false      # Pending gws install + auth
   docker:
-    compose_file: ~/akos/docker-compose.yml
+    compose_file: ~/borgclaw/docker-compose.yml
     services: [fizzy, nats, ntfy]
     enabled: true       # Pending docker compose up
 
