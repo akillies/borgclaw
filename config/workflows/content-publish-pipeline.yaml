@@ -1,0 +1,177 @@
+# Content Publish Pipeline — Workflow DAG Template
+# Trigger: Fizzy task with labels [content, boundary-layer]
+# Duration: ~30-60 min (mostly LLM processing + human approval gates)
+# Agents: Cerebro → Comms-Drafter → Ops-Handler (parallel branches after draft)
+#
+# MODULARITY NOTE: Every step specifies its agent and tool by name.
+# If a better research tool replaces gpt-researcher, change the tool field.
+# If Comms-Drafter gets swapped for a fine-tuned local model, change the agent field.
+# The DAG structure is the stable part. Components are the swappable parts.
+
+name: content-publish-pipeline
+version: "1.0"
+description: End-to-end Boundary Layer article from signal to published + distributed
+trigger:
+  type: fizzy_label
+  match:
+    - content
+    - boundary-layer
+
+# Variables available to all steps from the triggering task
+input_schema:
+  topic: string          # Article topic / thesis
+  signals: list[string]  # Optional: signal IDs from signals.md that inspired this
+  urgency: enum[low, medium, high]  # Affects timeout and routing priority
+
+steps:
+  - id: research
+    agent: cerebro-analyst
+    action: deep_research
+    description: "Research the topic across QMD knowledge base + web. Produce a structured brief."
+    inputs:
+      topic: "{{input.topic}}"
+      signals: "{{input.signals}}"
+      context_collections:
+        - ak-os-core
+        - master-context
+        - memory
+      web_search: true
+      depth: thorough    # cerebro knows what this means
+    outputs:
+      - research_brief   # Markdown document with sources, key points, cross-domain connections
+    timeout: 15m
+    retry: 1
+    requires_approval: false
+
+  - id: draft_article
+    agent: comms-drafter
+    action: write_article
+    description: "Write the Boundary Layer article in Alexander's voice."
+    depends_on: [research]
+    inputs:
+      brief: "{{research.research_brief}}"
+      voice_rules: "memory/context/voice-and-brand-rules.md"
+      style_guide: "db/Alexander_Kline_Voice_Style_Guide_v3.md"
+      format: boundary-layer-article
+      target_length: 1500-2500 words
+    outputs:
+      - article_draft    # Markdown article ready for review
+      - title_options    # 3-5 title options (short, punchy, per voice rules)
+    timeout: 10m
+    retry: 1
+    requires_approval: true   # Alexander reviews the article before anything else proceeds
+
+  # --- After article approval, these three run in PARALLEL ---
+
+  - id: create_assets
+    agent: ops-handler
+    action: generate_images
+    description: "Generate header image and social media cards for the article."
+    depends_on: [draft_article]  # Waits for approval
+    inputs:
+      article: "{{draft_article.article_draft}}"
+      title: "{{draft_article.title_options[0]}}"
+      formats:
+        - header: 1200x630
+        - social_card: 1080x1080
+        - twitter_card: 1200x675
+    outputs:
+      - header_image
+      - social_cards
+    timeout: 5m
+    requires_approval: false
+
+  - id: draft_social
+    agent: comms-drafter
+    action: write_social_posts
+    description: "Draft social media posts for LinkedIn, X, Threads."
+    depends_on: [draft_article]  # Parallel with create_assets
+    inputs:
+      article: "{{draft_article.article_draft}}"
+      platforms:
+        - linkedin: max 3000 chars, prose, no hashtag stuffing
+        - x: max 280 chars, punchy hook
+        - threads: max 500 chars, conversational
+      voice_rules: "memory/context/voice-and-brand-rules.md"
+    outputs:
+      - social_posts      # Dict keyed by platform
+    timeout: 5m
+    requires_approval: true
+
+  - id: draft_podcast_script
+    agent: comms-drafter
+    action: write_podcast_script
+    description: "Write a spoken-word version for audio (ElevenLabs TTS)."
+    depends_on: [draft_article]  # Parallel with create_assets + social
+    inputs:
+      article: "{{draft_article.article_draft}}"
+      format: conversational-monologue
+      target_duration: 5-8 minutes
+    outputs:
+      - podcast_script
+    timeout: 5m
+    requires_approval: true
+
+  # --- Sequential after parallel branches complete ---
+
+  - id: publish
+    agent: ops-handler
+    action: publish_to_substack
+    description: "Publish the article to Substack (Boundary Layer)."
+    depends_on: [draft_article, create_assets]
+    inputs:
+      article: "{{draft_article.article_draft}}"
+      title: "{{draft_article.title_options[0]}}"
+      header_image: "{{create_assets.header_image}}"
+    outputs:
+      - published_url
+    timeout: 5m
+    requires_approval: true   # Final publish approval
+
+  - id: distribute_social
+    agent: ops-handler
+    action: post_to_social
+    description: "Post to all social platforms with cards and article link."
+    depends_on: [draft_social, create_assets, publish]
+    inputs:
+      posts: "{{draft_social.social_posts}}"
+      cards: "{{create_assets.social_cards}}"
+      url: "{{publish.published_url}}"
+    outputs:
+      - post_urls         # Dict keyed by platform
+    timeout: 5m
+    requires_approval: true
+
+  - id: generate_audio
+    agent: ops-handler
+    action: generate_tts
+    description: "Generate podcast audio from approved script."
+    depends_on: [draft_podcast_script]
+    inputs:
+      script: "{{draft_podcast_script.podcast_script}}"
+      voice: alexander-clone  # When available, else default ElevenLabs
+    outputs:
+      - audio_file
+    timeout: 10m
+    requires_approval: false  # Script was already approved
+
+  - id: update_entities
+    agent: ops-handler
+    action: update_knowledge_base
+    description: "Update AK-OS entity files: content registry, signals used, project status."
+    depends_on: [publish]
+    inputs:
+      published_url: "{{publish.published_url}}"
+      topic: "{{input.topic}}"
+      signals_used: "{{input.signals}}"
+    outputs:
+      - entities_updated
+    timeout: 2m
+    requires_approval: false
+
+# Approval gates summary:
+# Gate 1: Article draft (Alexander reviews full article)
+# Gate 2: Social posts (Alexander reviews platform-specific versions)
+# Gate 3: Podcast script (Alexander reviews spoken version)
+# Gate 4: Publish to Substack (final go/no-go)
+# Gate 5: Distribute to social (final go/no-go)

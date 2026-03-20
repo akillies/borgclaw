@@ -1,0 +1,54 @@
+# Node
+node_modules/
+npm-debug.log*
+.npm
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.env
+
+# Hive identity (contains auth tokens — never commit)
+hive-identity.json
+hive/*.json
+config/hive.json
+
+# Runtime state
+nodes.json
+*.pid
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Build
+dist/
+build/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# LanceDB data (large, local)
+.lancedb/
+lancedb-data/
+
+# NATS data
+nats-data/
+
+# Docker volumes
+volumes/

@@ -1,0 +1,105 @@
+# BorgClaw Docker Compose — Tower Node Services
+# Run: docker compose up -d
+#
+# MODULARITY: Each service is independently replaceable.
+# - Fizzy → any task board with MCP (Linear, Notion, etc.)
+# - NATS → any message bus (Redis Streams, RabbitMQ, etc.)
+# - ntfy → any push notification service (Pushover, Gotify, etc.)
+#
+# NOTE: n8n deliberately excluded. Workflow orchestration is
+# handled by agent DAGs (config/workflows/*.yaml), not a
+# separate automation platform. Revisit if agent DAGs prove
+# insufficient for complex multi-step automations.
+
+version: "3.8"
+
+services:
+  # ============================================================
+  # NATS — Message bus for inter-node communication
+  # Queen and Worker nodes communicate via NATS JetStream.
+  # ============================================================
+  nats:
+    image: nats:2.10-alpine
+    container_name: borgclaw-nats
+    ports:
+      - "4222:4222"     # Client connections
+      - "8222:8222"     # HTTP monitoring
+    command: >
+      --jetstream
+      --store_dir /data
+      --max_mem_store 256MB
+      --max_file_store 1GB
+    volumes:
+      - nats-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ============================================================
+  # Fizzy — Kanban task management with MCP
+  # Replaces: Trello, Notion boards, Linear for personal task tracking
+  # MCP endpoint exposes: list_cards, create_card, update_card, move_card
+  # ============================================================
+  fizzy:
+    image: node:22-alpine
+    container_name: borgclaw-fizzy
+    working_dir: /app
+    command: npx @silky/fizzy-mcp
+    ports:
+      - "3100:3100"
+    environment:
+      - FIZZY_DATA_DIR=/data
+      - FIZZY_PORT=3100
+    volumes:
+      - fizzy-data:/data
+    restart: unless-stopped
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ============================================================
+  # ntfy — Push notifications
+  # Sends alerts to Alexander's phone when CRITICAL patterns trigger.
+  # Replaces: Pushover, custom email alerts
+  # ============================================================
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: borgclaw-ntfy
+    ports:
+      - "2586:80"
+    command: serve
+    environment:
+      - NTFY_BASE_URL=http://localhost:2586
+      - NTFY_CACHE_FILE=/var/cache/ntfy/cache.db
+      - NTFY_AUTH_DEFAULT_ACCESS=deny-all
+    volumes:
+      - ntfy-cache:/var/cache/ntfy
+      - ntfy-etc:/etc/ntfy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  nats-data:
+    driver: local
+  fizzy-data:
+    driver: local
+  ntfy-cache:
+    driver: local
+  ntfy-etc:
+    driver: local
+
+networks:
+  default:
+    name: borgclaw-net

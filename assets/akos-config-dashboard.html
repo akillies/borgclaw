@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AK-OS — Config Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0a0a0f; color: #e0e0e8; min-height: 100vh; }
+
+  .header { text-align: center; padding: 20px; border-bottom: 1px solid #1a1a2e; }
+  .header h1 { font-size: 24px; color: #00ff88; letter-spacing: 2px; }
+  .header .sub { color: #666; font-size: 12px; margin-top: 4px; }
+  .header .flash-icon { font-size: 32px; margin-bottom: 6px; }
+
+  .layout { display: flex; min-height: calc(100vh - 80px); }
+
+  /* Sidebar */
+  .sidebar { width: 220px; background: #0d0d14; border-right: 1px solid #1a1a2e; padding: 12px 0; flex-shrink: 0; }
+  .nav-section { padding: 8px 16px; font-size: 10px; color: #444; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 12px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; font-size: 13px; color: #888; transition: all 0.15s; border-left: 2px solid transparent; }
+  .nav-item:hover { color: #ccc; background: rgba(255,255,255,0.02); }
+  .nav-item.active { color: #00ff88; border-left-color: #00ff88; background: rgba(0,255,136,0.04); }
+  .nav-item .icon { width: 18px; text-align: center; }
+  .nav-item .badge { margin-left: auto; font-size: 10px; padding: 2px 6px; border-radius: 8px; background: rgba(0,255,136,0.15); color: #00ff88; }
+  .nav-item .badge.warn { background: rgba(251,146,60,0.15); color: #fb923c; }
+  .nav-item .badge.err { background: rgba(239,68,68,0.15); color: #f87171; }
+
+  /* Main content */
+  .main { flex: 1; padding: 24px; overflow-y: auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .panel h2 { font-size: 18px; color: #00ff88; margin-bottom: 4px; }
+  .panel .desc { color: #666; font-size: 12px; margin-bottom: 20px; }
+
+  /* Cards */
+  .card { border: 1px solid #1a1a2e; border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+  .card-header { padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); border-bottom: 1px solid #1a1a2e; }
+  .card-header h3 { font-size: 14px; color: #ccc; }
+  .card-body { padding: 16px 18px; }
+
+  /* Status indicators */
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 3px 10px; border-radius: 12px; }
+  .status.online { background: rgba(0,255,136,0.1); color: #00ff88; }
+  .status.offline { background: rgba(239,68,68,0.1); color: #f87171; }
+  .status.pending { background: rgba(251,146,60,0.1); color: #fb923c; }
+  .status.evaluating { background: rgba(96,165,250,0.1); color: #60a5fa; }
+  .status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+  .status.online::before { background: #00ff88; }
+  .status.offline::before { background: #f87171; }
+  .status.pending::before { background: #fb923c; }
+  .status.evaluating::before { background: #60a5fa; }
+
+  /* Grid layouts */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  /* Config rows */
+  .config-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #111; }
+  .config-row:last-child { border-bottom: none; }
+  .config-label { font-size: 13px; color: #aaa; }
+  .config-value { font-size: 13px; color: #e0e0e8; font-family: inherit; }
+  .config-value.mono { color: #00ff88; }
+
+  /* Buttons */
+  .btn { padding: 8px 16px; border-radius: 6px; border: 1px solid #1a1a2e; background: transparent; color: #ccc; font-size: 12px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  .btn:hover { border-color: #333; background: rgba(255,255,255,0.03); }
+  .btn.primary { border-color: #00ff88; color: #00ff88; }
+  .btn.primary:hover { background: rgba(0,255,136,0.08); }
+  .btn.danger { border-color: #f87171; color: #f87171; }
+  .btn.sm { padding: 5px 10px; font-size: 11px; }
+  .btn-row { display: flex; gap: 8px; margin-top: 12px; }
+
+  /* Toggle */
+  .toggle { width: 36px; height: 20px; border-radius: 10px; background: #222; position: relative; cursor: pointer; transition: background 0.2s; }
+  .toggle.on { background: rgba(0,255,136,0.3); }
+  .toggle::after { content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: #666; top: 2px; left: 2px; transition: all 0.2s; }
+  .toggle.on::after { left: 18px; background: #00ff88; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; padding: 8px 12px; color: #666; border-bottom: 1px solid #1a1a2e; font-weight: normal; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
+  td { padding: 8px 12px; border-bottom: 1px solid #0f0f18; }
+
+  /* Steps / Timeline */
+  .step { display: flex; gap: 16px; margin-bottom: 16px; }
+  .step-num { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #1a1a2e; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #666; flex-shrink: 0; margin-top: 2px; }
+  .step-num.done { border-color: #00ff88; color: #00ff88; background: rgba(0,255,136,0.08); }
+  .step-num.active { border-color: #60a5fa; color: #60a5fa; background: rgba(96,165,250,0.08); }
+  .step-content h4 { font-size: 13px; color: #ccc; margin-bottom: 3px; }
+  .step-content p { font-size: 12px; color: #666; }
+
+  /* Terminal / Code blocks */
+  .terminal { background: #111118; border: 1px solid #1a1a2e; border-radius: 6px; padding: 14px 16px; font-size: 12px; line-height: 1.6; overflow-x: auto; margin-top: 8px; }
+  .terminal .prompt { color: #00ff88; }
+  .terminal .comment { color: #444; }
+  .terminal .cmd { color: #e0e0e8; }
+  .terminal .output { color: #666; }
+  .terminal .highlight { color: #60a5fa; }
+
+  /* Flash drive animation */
+  .flash-drive { width: 80px; height: 120px; margin: 20px auto; position: relative; }
+  .flash-body { width: 60px; height: 80px; background: linear-gradient(135deg, #1a1a2e, #0d0d14); border: 1px solid #2a2a3e; border-radius: 6px; margin: 0 auto; position: relative; }
+  .flash-connector { width: 30px; height: 20px; background: #2a2a3e; border: 1px solid #333; border-radius: 3px 3px 0 0; margin: 0 auto; }
+  .flash-led { width: 6px; height: 6px; border-radius: 50%; background: #00ff88; position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); animation: pulse-led 2s ease-in-out infinite; }
+  @keyframes pulse-led { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; box-shadow: 0 0 8px #00ff88; } }
+  .flash-label { text-align: center; font-size: 10px; color: #666; margin-top: 8px; }
+
+  /* Node cards (for Queen provisioning) */
+  .node-card { border: 1px solid #1a1a2e; border-radius: 8px; padding: 16px; position: relative; }
+  .node-card.queen { border-color: rgba(0,255,136,0.3); }
+  .node-card.worker { border-color: rgba(96,165,250,0.3); }
+  .node-card .node-name { font-size: 14px; color: #ccc; margin-bottom: 8px; }
+  .node-card .node-role { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .node-card.queen .node-role { color: #00ff88; }
+  .node-card.worker .node-role { color: #60a5fa; }
+  .node-specs { font-size: 12px; color: #888; line-height: 1.8; }
+
+  /* Progress bar */
+  .progress { height: 4px; background: #1a1a2e; border-radius: 2px; overflow: hidden; margin-top: 8px; }
+  .progress-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .progress-fill.green { background: #00ff88; }
+  .progress-fill.blue { background: #60a5fa; }
+  .progress-fill.orange { background: #fb923c; }
+
+  /* Section dividers */
+  .section-title { font-size: 11px; color: #444; text-transform: uppercase; letter-spacing: 1.5px; margin: 24px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #111; }
+
+  /* Topology diagram */
+  .topology { display: flex; align-items: center; justify-content: center; gap: 40px; padding: 30px; flex-wrap: wrap; }
+  .topo-node { text-align: center; }
+  .topo-box { width: 100px; height: 100px; border: 1px solid #1a1a2e; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 8px; }
+  .topo-box.queen-box { border-color: rgba(0,255,136,0.4); background: rgba(0,255,136,0.04); }
+  .topo-box.worker-box { border-color: rgba(96,165,250,0.4); background: rgba(96,165,250,0.04); }
+  .topo-box.cloud-box { border-color: rgba(167,139,250,0.4); background: rgba(167,139,250,0.04); }
+  .topo-label { font-size: 11px; color: #888; }
+  .topo-connector { color: #333; font-size: 24px; }
+
+  .tab-bar { display: flex; gap: 2px; margin-bottom: 16px; }
+  .tab-btn { padding: 6px 14px; border: 1px solid #1a1a2e; border-radius: 4px; background: transparent; color: #666; font-size: 11px; cursor: pointer; font-family: inherit; }
+  .tab-btn.active { border-color: #00ff88; color: #00ff88; background: rgba(0,255,136,0.04); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="flash-icon">&#x1F4BE;</div>
+  <h1>AK-OS CONFIG</h1>
+  <div class="sub">PERSONAL AI OPERATING SYSTEM &mdash; CONFIGURATION DASHBOARD</div>
+</div>
+
+<div class="layout">
+  <!-- Sidebar Navigation -->
+  <div class="sidebar">
+    <div class="nav-section">System</div>
+    <div class="nav-item active" onclick="showPanel('overview')">
+      <span class="icon">&#x25C8;</span> Overview
+    </div>
+    <div class="nav-item" onclick="showPanel('nodes')">
+      <span class="icon">&#x2302;</span> Nodes
+      <span class="badge">2</span>
+    </div>
+    <div class="nav-item" onclick="showPanel('provision')">
+      <span class="icon">&#x2795;</span> Provision New
+    </div>
+
+    <div class="nav-section">Stack</div>
+    <div class="nav-item" onclick="showPanel('data-layer')">
+      <span class="icon">&#x25CE;</span> Data Layer
+      <span class="badge warn">QMD</span>
+    </div>
+    <div class="nav-item" onclick="showPanel('agents')">
+      <span class="icon">&#x2726;</span> Agents
+      <span class="badge">5</span>
+    </div>
+    <div class="nav-item" onclick="showPanel('mcps')">
+      <span class="icon">&#x2693;</span> MCPs & Tools
+      <span class="badge">7</span>
+    </div>
+    <div class="nav-item" onclick="showPanel('workflows')">
+      <span class="icon">&#x21BA;</span> Workflows
+    </div>
+
+    <div class="nav-section">Operations</div>
+    <div class="nav-item" onclick="showPanel('scheduled')">
+      <span class="icon">&#x23F0;</span> Scheduled Tasks
+      <span class="badge">6</span>
+    </div>
+    <div class="nav-item" onclick="showPanel('experiments')">
+      <span class="icon">&#x2697;</span> Experiments
+    </div>
+    <div class="nav-item" onclick="showPanel('signals')">
+      <span class="icon">&#x25B3;</span> Signal Radar
+    </div>
+
+    <div class="nav-section">Admin</div>
+    <div class="nav-item" onclick="showPanel('laws')">
+      <span class="icon">&#x2696;</span> Operating Laws
+    </div>
+    <div class="nav-item" onclick="showPanel('deploy')">
+      <span class="icon">&#x1F680;</span> Deploy
+    </div>
+    <div class="nav-item" onclick="showPanel('backup')">
+      <span class="icon">&#x1F4C2;</span> Backup & Sync
+    </div>
+  </div>
+
+  <!-- Main Content Area -->
+  <div class="main">
+
+    <!-- ==================== OVERVIEW ==================== -->
+    <div class="panel active" id="panel-overview">
+      <h2>System Overview</h2>
+      <p class="desc">AK-OS v0.1 &mdash; Flash Drive Architecture</p>
+
+      <div class="grid-3" style="margin-bottom: 20px;">
+        <div class="card">
+          <div class="card-body" style="text-align: center;">
+            <div style="font-size: 28px; color: #00ff88;">2</div>
+            <div style="font-size: 11px; color: #666; margin-top: 4px;">NODES</div>
+            <div style="font-size: 10px; color: #444; margin-top: 2px;">Queen + 1 Worker</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-body" style="text-align: center;">
+            <div style="font-size: 28px; color: #60a5fa;">5</div>
+            <div style="font-size: 11px; color: #666; margin-top: 4px;">AGENTS</div>
+            <div style="font-size: 10px; color: #444; margin-top: 2px;">Jarvis, Cerebro, Comms, Sentinel, Ops</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-body" style="text-align: center;">
+            <div style="font-size: 28px; color: #a78bfa;">~500K</div>
+            <div style="font-size: 11px; color: #666; margin-top: 4px;">WORDS INDEXED</div>
+            <div style="font-size: 10px; color: #444; margin-top: 2px;">via QMD (BM25 + Vector + Rerank)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Flash Drive Concept -->
+      <div class="card">
+        <div class="card-header"><h3>&#x1F4BE; The Flash Drive Concept</h3></div>
+        <div class="card-body">
+          <div style="display: flex; gap: 30px; align-items: start; flex-wrap: wrap;">
+            <div class="flash-drive">
+              <div class="flash-connector"></div>
+              <div class="flash-body">
+                <div class="flash-led"></div>
+              </div>
+              <div class="flash-label">akos/</div>
+            </div>
+            <div style="flex: 1; min-width: 300px;">
+              <p style="font-size: 13px; color: #aaa; line-height: 1.7; margin-bottom: 12px;">
+                AK-OS is a <span style="color: #00ff88;">portable folder</span> that turns any machine into Alexander's AI operating system.
+                Plug it into a new computer, run the bootstrap script, and the entire system comes alive &mdash;
+                agents, search index, scheduled tasks, tool connections, operating laws.
+              </p>
+              <p style="font-size: 13px; color: #aaa; line-height: 1.7; margin-bottom: 12px;">
+                All state is <span style="color: #60a5fa;">Markdown + SQLite + YAML</span>. No proprietary formats.
+                No vendor lock-in. If Claude disappears tomorrow, any AI reads these files.
+              </p>
+              <p style="font-size: 12px; color: #666; line-height: 1.7;">
+                The config dashboard (this page) is the control surface. It shows what's installed, what's running,
+                and gives you the commands to change anything. Every configuration change maps to a file edit or
+                a CLI command &mdash; nothing hidden.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- System topology -->
+      <div class="card">
+        <div class="card-header"><h3>Network Topology</h3></div>
+        <div class="card-body">
+          <div class="topology">
+            <div class="topo-node">
+              <div class="topo-box queen-box">&#x1F451;</div>
+              <div class="topo-label">Queen (Mac Mini)</div>
+              <div style="font-size: 10px; color: #444;">M4 Pro &middot; 24GB</div>
+            </div>
+            <div class="topo-connector">&larr; NATS &rarr;</div>
+            <div class="topo-node">
+              <div class="topo-box worker-box">&#x2699;</div>
+              <div class="topo-label">Worker (Tower)</div>
+              <div style="font-size: 10px; color: #444;">Ryzen 5 &middot; RTX 3070</div>
+            </div>
+            <div class="topo-connector">&larr; API &rarr;</div>
+            <div class="topo-node">
+              <div class="topo-box cloud-box">&#x2601;</div>
+              <div class="topo-label">Cloud APIs</div>
+              <div style="font-size: 10px; color: #444;">Claude &middot; GPT (overflow)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick health -->
+      <div class="section-title">Quick Health</div>
+      <table>
+        <tr><th>Component</th><th>Status</th><th>Version</th><th>Last Check</th></tr>
+        <tr><td>QMD (Search/Retrieval)</td><td><span class="status evaluating">Evaluating</span></td><td>latest</td><td>pending install</td></tr>
+        <tr><td>Fizzy (Task Queue)</td><td><span class="status online">Online</span></td><td>latest</td><td>2026-03-15</td></tr>
+        <tr><td>LangGraph (AI Reasoning)</td><td><span class="status online">Online</span></td><td>0.x</td><td>2026-03-15</td></tr>
+        <tr><td>NATS JetStream (Events)</td><td><span class="status pending">Pending</span></td><td>&mdash;</td><td>not deployed</td></tr>
+        <tr><td>NadirClaw (LLM Routing)</td><td><span class="status pending">Pending</span></td><td>&mdash;</td><td>not deployed</td></tr>
+        <tr><td>Paperclip (Governance)</td><td><span class="status pending">Pending</span></td><td>&mdash;</td><td>not deployed</td></tr>
+        <tr><td>Ollama (Local LLM)</td><td><span class="status online">Online</span></td><td>0.6+</td><td>2026-03-15</td></tr>
+        <tr><td>mem0 (Cross-Session Memory)</td><td><span class="status evaluating">Phase 2</span></td><td>&mdash;</td><td>pending</td></tr>
+      </table>
+    </div>
+
+    <!-- ==================== NODES ==================== -->
+    <div class="panel" id="panel-nodes">
+      <h2>Node Management</h2>
+      <p class="desc">Hardware in the BorgClaw cluster. Queen coordinates, workers execute.</p>
+
+      <div class="grid-2">
+        <div class="node-card queen">
+          <div class="node-role">&#x1F451; queen</div>
+          <div class="node-name">Mac Mini M4 Pro</div>
+          <div class="node-specs">
+            CPU: Apple M4 Pro (14-core)<br>
+            RAM: 24 GB unified<br>
+            GPU: 20-core Apple GPU (MLX)<br>
+            Storage: 512 GB SSD<br>
+            OS: macOS Sequoia<br>
+            Runtime: LM Studio + MLX<br>
+            Roles: Queen coordinator, local inference, QMD index host
+          </div>
+          <div style="margin-top: 12px;">
+            <span class="status online">Online</span>
+          </div>
+          <div class="progress"><div class="progress-fill green" style="width: 35%;"></div></div>
+          <div style="font-size: 10px; color: #444; margin-top: 4px;">RAM: ~8.4 GB / 24 GB used</div>
+        </div>
+
+        <div class="node-card worker">
+          <div class="node-role">&#x2699; worker</div>
+          <div class="node-name">Tower (Ryzen 5 + RTX 3070)</div>
+          <div class="node-specs">
+            CPU: AMD Ryzen 5<br>
+            RAM: 32 GB DDR4<br>
+            GPU: NVIDIA RTX 3070 8GB VRAM<br>
+            Storage: 1 TB NVMe<br>
+            OS: Windows 11 Pro<br>
+            Runtime: Ollama + Docker<br>
+            Roles: Worker inference, scheduled tasks, always-on services
+          </div>
+          <div style="margin-top: 12px;">
+            <span class="status online">Online</span>
+          </div>
+          <div class="progress"><div class="progress-fill blue" style="width: 25%;"></div></div>
+          <div style="font-size: 10px; color: #444; margin-top: 4px;">RAM: ~8 GB / 32 GB used</div>
+        </div>
+      </div>
+
+      <div class="section-title">Node Configuration</div>
+      <div class="card">
+        <div class="card-body">
+          <p style="font-size: 12px; color: #888; margin-bottom: 12px;">Each node runs a <code style="color: #00ff88;">borgclaw-agent</code> process that registers with Queen, reports hardware capabilities, and accepts task assignments.</p>
+          <div class="terminal">
+            <span class="comment"># Node config lives at: akos/config/nodes/{node-id}.yaml</span><br><br>
+            <span class="highlight">node_id:</span> <span class="cmd">mac-mini-queen</span><br>
+            <span class="highlight">role:</span> <span class="cmd">queen</span><br>
+            <span class="highlight">hostname:</span> <span class="cmd">192.168.1.100</span><br>
+            <span class="highlight">capabilities:</span><br>
+            <span class="cmd">&nbsp;&nbsp;- mlx_inference</span><br>
+            <span class="cmd">&nbsp;&nbsp;- qmd_search</span><br>
+            <span class="cmd">&nbsp;&nbsp;- mcp_host</span><br>
+            <span class="highlight">models:</span><br>
+            <span class="cmd">&nbsp;&nbsp;- qwen3-8b (MLX)</span><br>
+            <span class="cmd">&nbsp;&nbsp;- embedding-gemma-300M (QMD)</span><br>
+            <span class="cmd">&nbsp;&nbsp;- qwen3-reranker-0.6B (QMD)</span><br>
+            <span class="highlight">heartbeat_interval:</span> <span class="cmd">30s</span><br>
+            <span class="highlight">max_concurrent_tasks:</span> <span class="cmd">3</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== PROVISION NEW ==================== -->
+    <div class="panel" id="panel-provision">
+      <h2>Provision New Machine</h2>
+      <p class="desc">Turn any computer into an AK-OS node. One script, full system.</p>
+
+      <div class="card">
+        <div class="card-header"><h3>&#x1F4BE; Flash Drive Bootstrap</h3></div>
+        <div class="card-body">
+          <p style="font-size: 13px; color: #aaa; line-height: 1.7; margin-bottom: 16px;">
+            Plug in the akos/ folder (USB, git clone, rsync &mdash; any method). Run the bootstrap script.
+            It detects hardware, installs dependencies, configures the node role, indexes your knowledge base,
+            and joins the cluster.
+          </p>
+
+          <div class="section-title">Step 1: Get the folder onto the machine</div>
+          <div class="terminal">
+            <span class="comment"># Option A: Git clone (recommended)</span><br>
+            <span class="prompt">$</span> <span class="cmd">git clone git@github.com:akline/akos.git ~/akos</span><br><br>
+            <span class="comment"># Option B: USB / external drive</span><br>
+            <span class="prompt">$</span> <span class="cmd">cp -r /Volumes/AKOS ~/akos</span><br><br>
+            <span class="comment"># Option C: rsync from existing node</span><br>
+            <span class="prompt">$</span> <span class="cmd">rsync -avz queen:~/akos/ ~/akos/</span>
+          </div>
+
+          <div class="section-title">Step 2: Run the bootstrap</div>
+          <div class="terminal">
+            <span class="prompt">$</span> <span class="cmd">cd ~/akos && ./bootstrap.sh</span><br><br>
+            <span class="output">&#x2714; Detecting hardware...</span><br>
+            <span class="output">&nbsp;&nbsp;CPU: Apple M4 Pro (14-core ARM)</span><br>
+            <span class="output">&nbsp;&nbsp;RAM: 24 GB</span><br>
+            <span class="output">&nbsp;&nbsp;GPU: Apple GPU 20-core (MLX compatible)</span><br>
+            <span class="output">&nbsp;&nbsp;OS: macOS 15.3</span><br><br>
+            <span class="output">&#x2714; Installing dependencies...</span><br>
+            <span class="output">&nbsp;&nbsp;Node.js 22 LTS &mdash; OK</span><br>
+            <span class="output">&nbsp;&nbsp;Python 3.12 &mdash; OK</span><br>
+            <span class="output">&nbsp;&nbsp;QMD (@tobilu/qmd) &mdash; installing...</span><br>
+            <span class="output">&nbsp;&nbsp;Ollama &mdash; installing...</span><br>
+            <span class="output">&nbsp;&nbsp;Claude Code &mdash; OK</span><br><br>
+            <span class="output">&#x2714; What role for this node?</span><br>
+            <span class="output">&nbsp;&nbsp;[1] Queen (coordinator + inference + search)</span><br>
+            <span class="output">&nbsp;&nbsp;[2] Worker (inference + tasks)</span><br>
+            <span class="output">&nbsp;&nbsp;[3] Satellite (search only, low-power)</span><br>
+            <span class="prompt">&gt;</span> <span class="cmd">1</span><br><br>
+            <span class="output">&#x2714; Configuring as Queen...</span><br>
+            <span class="output">&nbsp;&nbsp;Writing config/nodes/mac-mini-queen.yaml</span><br>
+            <span class="output">&nbsp;&nbsp;Starting NATS JetStream...</span><br>
+            <span class="output">&nbsp;&nbsp;Starting QMD index (3 GGUF models, ~2GB)...</span><br>
+            <span class="output">&nbsp;&nbsp;Indexing akos/db/ as collection 'ak-os-core'...</span><br>
+            <span class="output">&nbsp;&nbsp;Indexing akos/memory/ as collection 'memory'...</span><br>
+            <span class="output">&nbsp;&nbsp;Adding context annotations...</span><br>
+            <span class="output">&nbsp;&nbsp;Starting QMD MCP server...</span><br>
+            <span class="output">&nbsp;&nbsp;Starting Fizzy MCP...</span><br>
+            <span class="output">&nbsp;&nbsp;Registering scheduled tasks (6 cron jobs)...</span><br><br>
+            <span class="output" style="color: #00ff88;">&#x2714; AK-OS Queen online. Dashboard: http://localhost:9090</span>
+          </div>
+
+          <div class="section-title">Step 3: Join existing cluster (workers only)</div>
+          <div class="terminal">
+            <span class="comment"># On a worker node, point to the Queen</span><br>
+            <span class="prompt">$</span> <span class="cmd">./bootstrap.sh --join queen@192.168.1.100</span><br><br>
+            <span class="output">&#x2714; Connected to Queen at 192.168.1.100</span><br>
+            <span class="output">&#x2714; Registered as worker: tower-ryzen5</span><br>
+            <span class="output">&#x2714; Syncing akos/ knowledge base...</span><br>
+            <span class="output">&#x2714; Ready for task assignments.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>What bootstrap.sh Configures</h3></div>
+        <div class="card-body">
+          <table>
+            <tr><th>Component</th><th>Queen</th><th>Worker</th><th>Satellite</th></tr>
+            <tr><td>QMD (search index)</td><td>&#x2714;</td><td>&#x2714;</td><td>&#x2714;</td></tr>
+            <tr><td>QMD MCP server</td><td>&#x2714;</td><td>&mdash;</td><td>&mdash;</td></tr>
+            <tr><td>NATS JetStream</td><td>&#x2714; (server)</td><td>&#x2714; (client)</td><td>&mdash;</td></tr>
+            <tr><td>Ollama / LM Studio</td><td>&#x2714;</td><td>&#x2714;</td><td>&mdash;</td></tr>
+            <tr><td>NadirClaw (routing)</td><td>&#x2714;</td><td>&mdash;</td><td>&mdash;</td></tr>
+            <tr><td>Fizzy MCP</td><td>&#x2714;</td><td>&mdash;</td><td>&mdash;</td></tr>
+            <tr><td>Scheduled tasks (cron)</td><td>&#x2714;</td><td>&#x2714; (subset)</td><td>&mdash;</td></tr>
+            <tr><td>Paperclip (governance)</td><td>&#x2714;</td><td>&mdash;</td><td>&mdash;</td></tr>
+            <tr><td>Claude Code bootstrap</td><td>&#x2714;</td><td>&#x2714;</td><td>&mdash;</td></tr>
+            <tr><td>gws (Google Workspace CLI)</td><td>&#x2714;</td><td>&#x2714;</td><td>&mdash;</td></tr>
+            <tr><td>Git sync (auto-pull)</td><td>&#x2714;</td><td>&#x2714;</td><td>&#x2714;</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>&#x1F451; Promote Worker to Queen</h3></div>
+        <div class="card-body">
+          <p style="font-size: 12px; color: #888; margin-bottom: 12px;">If the Queen goes down, any worker can be promoted. The akos/ folder IS the system &mdash; whoever has the folder can become Queen.</p>
+          <div class="terminal">
+            <span class="prompt">$</span> <span class="cmd">borgclaw promote --role queen</span><br><br>
+            <span class="output">&#x2714; Stopping worker services...</span><br>
+            <span class="output">&#x2714; Starting Queen services (NATS server, NadirClaw, Paperclip)...</span><br>
+            <span class="output">&#x2714; Re-indexing QMD collections...</span><br>
+            <span class="output">&#x2714; This node is now Queen. Workers will reconnect automatically.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== DATA LAYER ==================== -->
+    <div class="panel" id="panel-data-layer">
+      <h2>Data Layer Configuration</h2>
+      <p class="desc">Search, retrieval, and memory for agents. QMD + mem0 stack.</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h3>QMD &mdash; Search & Retrieval</h3>
+            <span class="status evaluating">Phase 1</span>
+          </div>
+          <div class="card-body">
+            <div class="config-row">
+              <span class="config-label">Install</span>
+              <span class="config-value mono">npm install -g @tobilu/qmd</span>
+            </div>
+            <div class="config-row">
+              <span class="config-label">Index</span>
+              <span class="config-value mono">SQLite (~100MB)</span>
+            </div>
+            <div class="config-row">
+              <span class="config-label">Models</span>
+              <span class="config-value">~2GB total (3 GGUF)</span>
+            </div>
+            <div class="config-row">
+              <span class="config-label">MCP Server</span>
+              <span class="config-value mono">qmd mcp-server</span>
+            </div>
+            <div class="config-row">
+              <span class="config-label">License</span>
+              <span class="config-value">MIT</span>
+            </div>
+
+            <div class="section-title" style="margin-top: 16px;">Collections</div>
+            <div class="terminal" style="font-size: 11px;">
+              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/akos/db/ak-os --name ak-os-core</span><br>
+              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/akos/db/ak-os/entities --name entities</span><br>
+              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/akos/db/ak-os/projects/borgclaw --name borgclaw</span><br>
+              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/akos/db --name master-context</span><br>
+              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/akos/memory --name memory</span>
+            </div>
+
+            <div class="section-title">Context Annotations</div>
+            <div class="terminal" style="font-size: 11px;">
+              <span class="prompt">$</span> <span class="cmd">qmd context add qmd://ak-os-core "AK-OS operating system: ontology, workflows, state"</span><br>
+              <span class="prompt">$</span> <span class="cmd">qmd context add qmd://entities "Entity registries: people, projects, patterns"</span><br>
+              <span class="prompt">$</span> <span class="cmd">qmd context add qmd://borgclaw "BorgClaw infrastructure: specs, research, config"</span><br>
+              <span class="prompt">$</span> <span class="cmd">qmd context add qmd://master-context "Deep context: identity, voice, brand, IP"</span><br>
+              <span class="prompt">$</span> <span class="cmd">qmd context add qmd://memory "Session-persistent: voice rules, corrections"</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3>mem0 &mdash; Cross-Session Memory</h3>
+            <span class="status pending">Phase 2</span>
+          </div>
+          <div class="card-body">
+            <div class="config-row">
+              <span class="config-label">Install</span>
+              <span class="config-value mono">pip install mem0ai</span>
+            </div>
+            <div class="config-row">
+              <span class="config-label">Mode</span>
+              <span class="config-value">Self-hosted</span>
+            </div>
+            <div class="config-row">
+              <span class="config-label">License</span>
+              <span class="config-value">Apache-2.0</span>
+            </div>
+            <div class="config-row">
+              <span class="config-label">Stars</span>
+              <span class="config-value">49.9K</span>
+            </div>
+
+            <div class="section-title" style="margin-top: 16px;">Memory Layers</div>
+            <table style="font-size: 11px;">
+              <tr><td style="color: #00ff88;">User Memory</td><td>Alexander's preferences, corrections, voice rules</td></tr>
+              <tr><td style="color: #60a5fa;">Agent Memory</td><td>Per-agent learned behaviors (Comms-Drafter voice, Cerebro patterns)</td></tr>
+              <tr><td style="color: #a78bfa;">Session Memory</td><td>Conversation summaries that persist across sessions</td></tr>
+            </table>
+
+            <p style="font-size: 11px; color: #666; margin-top: 12px;">QMD = search (find the right files). mem0 = memory (remember what worked). They complement &mdash; don't overlap.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Retrieval Pipeline (QMD)</h3></div>
+        <div class="card-body">
+          <div class="terminal" style="font-size: 11px; line-height: 2;">
+            <span class="comment"># How a query flows through QMD's 3-layer retrieval</span><br><br>
+            <span class="highlight">Query:</span> <span class="cmd">"how does the content pipeline work?"</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&#x2193;<br>
+            <span class="highlight">1. Query Expansion</span> <span class="output">(qmd-query-expansion-1.7B GGUF)</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;lex: <span class="cmd">"content pipeline workflow publish"</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;vec: <span class="cmd">"how content gets from draft to published"</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;hyde: <span class="cmd">"the content pipeline involves..."</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&#x2193; <span class="output">(parallel)</span><br>
+            <span class="highlight">2a. BM25 Full-Text</span> <span class="output">(SQLite FTS5) &mdash; exact keywords</span><br>
+            <span class="highlight">2b. Vector Semantic</span> <span class="output">(embedding-gemma-300M) &mdash; conceptual similarity</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&#x2193;<br>
+            <span class="highlight">3. Reciprocal Rank Fusion</span> <span class="output">&mdash; merges ranked lists</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&#x2193;<br>
+            <span class="highlight">4. LLM Re-ranking</span> <span class="output">(Qwen3-Reranker-0.6B) &mdash; reasoning: which results actually answer?</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&#x2193;<br>
+            <span style="color: #00ff88;">Top-N results with scores, snippets, context annotations</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== AGENTS ==================== -->
+    <div class="panel" id="panel-agents">
+      <h2>Agent Configuration</h2>
+      <p class="desc">The five-agent orchestra. Each agent has a role, capabilities, and assigned node.</p>
+
+      <table>
+        <tr><th>Agent</th><th>Role</th><th>Primary Tasks</th><th>Node</th><th>Status</th></tr>
+        <tr>
+          <td style="color: #00ff88;">Jarvis</td>
+          <td>Router / Coordinator</td>
+          <td>Task classification, workflow dispatch, agent assignment</td>
+          <td>Queen</td>
+          <td><span class="status pending">Designed</span></td>
+        </tr>
+        <tr>
+          <td style="color: #60a5fa;">Cerebro</td>
+          <td>Intelligence Analyst</td>
+          <td>Research, signal scanning, data synthesis, Ansible signal detection</td>
+          <td>Queen / Worker</td>
+          <td><span class="status pending">Designed</span></td>
+        </tr>
+        <tr>
+          <td style="color: #a78bfa;">Comms-Drafter</td>
+          <td>Communications</td>
+          <td>Email drafts, LinkedIn posts, Boundary Layer articles, voice-matched writing</td>
+          <td>Queen / Worker</td>
+          <td><span class="status pending">Designed</span></td>
+        </tr>
+        <tr>
+          <td style="color: #fb923c;">Sentinel</td>
+          <td>Monitoring & Alerts</td>
+          <td>Pattern detection, blind spot warnings, relationship decay, financial alerts</td>
+          <td>Worker</td>
+          <td><span class="status pending">Designed</span></td>
+        </tr>
+        <tr>
+          <td style="color: #f87171;">Ops-Handler</td>
+          <td>Operations</td>
+          <td>File management, publishing, social posting, last-mile delivery</td>
+          <td>Worker</td>
+          <td><span class="status pending">Designed</span></td>
+        </tr>
+      </table>
+
+      <div class="section-title">Agent Config Location</div>
+      <div class="terminal">
+        <span class="comment"># Agent prompts and configs live in:</span><br>
+        <span class="cmd">akos/config/agents/{agent-name}.yaml</span><br><br>
+        <span class="comment"># Each agent YAML defines:</span><br>
+        <span class="highlight">name:</span> <span class="cmd">comms-drafter</span><br>
+        <span class="highlight">model:</span> <span class="cmd">claude-sonnet-4-6</span> <span class="comment"># via NadirClaw routing</span><br>
+        <span class="highlight">context_files:</span><br>
+        <span class="cmd">&nbsp;&nbsp;- memory/context/voice-and-brand-rules.md</span><br>
+        <span class="cmd">&nbsp;&nbsp;- db/Alexander_Kline_Voice_Style_Guide_v3.md</span><br>
+        <span class="highlight">tools:</span><br>
+        <span class="cmd">&nbsp;&nbsp;- qmd-search</span><br>
+        <span class="cmd">&nbsp;&nbsp;- gmail-draft</span><br>
+        <span class="cmd">&nbsp;&nbsp;- fizzy-update</span><br>
+        <span class="highlight">governance:</span><br>
+        <span class="cmd">&nbsp;&nbsp;requires_approval: [send_email, publish_content, post_social]</span><br>
+        <span class="cmd">&nbsp;&nbsp;autonomous: [draft, research, summarize]</span>
+      </div>
+    </div>
+
+    <!-- ==================== MCPs & TOOLS ==================== -->
+    <div class="panel" id="panel-mcps">
+      <h2>MCPs & Tool Connections</h2>
+      <p class="desc">Model Context Protocol servers and external integrations.</p>
+
+      <table>
+        <tr><th>MCP / Tool</th><th>Capabilities</th><th>Node</th><th>Status</th></tr>
+        <tr><td>Gmail (Anthropic)</td><td>read, draft, search, labels</td><td>Cowork</td><td><span class="status online">Connected</span></td></tr>
+        <tr><td>Google Calendar</td><td>list, create, update, delete, find time</td><td>Cowork</td><td><span class="status online">Connected</span></td></tr>
+        <tr><td>Google Drive</td><td>search, fetch (READ ONLY)</td><td>Cowork</td><td><span class="status online">Connected</span></td></tr>
+        <tr><td>QMD MCP</td><td>search, query, context lookup</td><td>Queen</td><td><span class="status evaluating">Pending Install</span></td></tr>
+        <tr><td>Fizzy MCP</td><td>47 tools &mdash; cards, columns, labels, webhooks</td><td>Queen/Tower</td><td><span class="status pending">Pending Connect</span></td></tr>
+        <tr><td>Canva</td><td>generate, export, search designs</td><td>Cowork</td><td><span class="status online">Connected</span></td></tr>
+        <tr><td>Figma</td><td>screenshots, metadata, design context</td><td>Cowork</td><td><span class="status online">Connected</span></td></tr>
+        <tr><td>gws (Google Workspace CLI)</td><td>Gmail SEND, Drive WRITE, Docs, Sheets</td><td>Tower</td><td><span class="status pending">Pending Install</span></td></tr>
+        <tr><td style="color: #666;">GitHub</td><td style="color: #666;">repos, issues, PRs, actions</td><td style="color: #666;">&mdash;</td><td><span class="status offline">Not Connected</span></td></tr>
+        <tr><td style="color: #666;">LinkedIn</td><td style="color: #666;">post, engage, network</td><td style="color: #666;">&mdash;</td><td><span class="status offline">Not Connected</span></td></tr>
+        <tr><td style="color: #666;">Substack</td><td style="color: #666;">publish, analytics</td><td style="color: #666;">&mdash;</td><td><span class="status offline">Not Connected</span></td></tr>
+      </table>
+
+      <div class="section-title">Adding a New MCP</div>
+      <div class="terminal">
+        <span class="comment"># MCP registry lives at: akos/config/mcps/registry.yaml</span><br><br>
+        <span class="comment"># To add a new MCP connection:</span><br>
+        <span class="prompt">1.</span> <span class="cmd">Add entry to config/mcps/registry.yaml</span><br>
+        <span class="prompt">2.</span> <span class="cmd">Install the MCP server (npm or pip)</span><br>
+        <span class="prompt">3.</span> <span class="cmd">Configure auth (API key, OAuth, token)</span><br>
+        <span class="prompt">4.</span> <span class="cmd">Test with MCP Inspector: npx @modelcontextprotocol/inspector</span><br>
+        <span class="prompt">5.</span> <span class="cmd">Register capabilities in agent configs</span><br>
+        <span class="prompt">6.</span> <span class="cmd">borgclaw registry refresh</span>
+      </div>
+    </div>
+
+    <!-- ==================== WORKFLOWS ==================== -->
+    <div class="panel" id="panel-workflows">
+      <h2>Workflow Templates</h2>
+      <p class="desc">DAG-based workflow definitions. Task comes in &rarr; workflow decomposes &rarr; agents execute.</p>
+
+      <div class="card">
+        <div class="card-header"><h3>Registered Workflows</h3></div>
+        <div class="card-body">
+          <table>
+            <tr><th>Workflow</th><th>Trigger</th><th>Agents Involved</th><th>Approval Gates</th></tr>
+            <tr><td>content-publish-pipeline</td><td>label: content + boundary-layer</td><td>Cerebro &rarr; Comms &rarr; Ops</td><td>3 (draft, social, publish)</td></tr>
+            <tr><td>meeting-prep</td><td>calendar event T-24h</td><td>Cerebro &rarr; Comms</td><td>0</td></tr>
+            <tr><td>email-response</td><td>priority inbox match</td><td>Comms</td><td>1 (send)</td></tr>
+            <tr><td>signal-scan</td><td>cron: weekly Monday</td><td>Cerebro &rarr; Sentinel</td><td>0</td></tr>
+            <tr><td>job-application</td><td>manual trigger</td><td>Cerebro &rarr; Comms &rarr; Ops</td><td>2 (resume, submit)</td></tr>
+            <tr><td>relationship-nudge</td><td>decay threshold hit</td><td>Sentinel &rarr; Comms</td><td>1 (send)</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="section-title">Workflow Config Location</div>
+      <div class="terminal">
+        <span class="comment"># Workflow templates live in YAML:</span><br>
+        <span class="cmd">akos/config/workflows/{workflow-name}.yaml</span><br><br>
+        <span class="comment"># To add a new workflow:</span><br>
+        <span class="prompt">1.</span> <span class="cmd">Create YAML with steps, dependencies, agents, approval gates</span><br>
+        <span class="prompt">2.</span> <span class="cmd">Register trigger (cron, webhook, label match, event)</span><br>
+        <span class="prompt">3.</span> <span class="cmd">borgclaw workflow register {name}.yaml</span><br>
+        <span class="prompt">4.</span> <span class="cmd">Test: borgclaw workflow dry-run {name} --input "test task"</span>
+      </div>
+    </div>
+
+    <!-- ==================== SCHEDULED TASKS ==================== -->
+    <div class="panel" id="panel-scheduled">
+      <h2>Scheduled Tasks</h2>
+      <p class="desc">Cron-based tasks that run automatically on the Queen or Worker nodes.</p>
+
+      <table>
+        <tr><th>Task</th><th>Schedule</th><th>Node</th><th>Output</th><th>Status</th></tr>
+        <tr><td>morning-briefing</td><td>Weekdays 8:30 AM PT</td><td>Tower</td><td>Gmail draft</td><td><span class="status online">Active</span></td></tr>
+        <tr><td>signal-radar-scan</td><td>Monday 9:00 AM PT</td><td>Tower</td><td>Gmail draft + TOOL-LANDSCAPE.md</td><td><span class="status online">Active</span></td></tr>
+        <tr><td>network-opportunity-radar</td><td>Monday 9:00 AM PT</td><td>Tower</td><td>Gmail draft</td><td><span class="status online">Active</span></td></tr>
+        <tr><td>job-market-scanner</td><td>Monday 10:00 AM PT</td><td>Tower</td><td>Gmail draft</td><td><span class="status online">Active</span></td></tr>
+        <tr><td>weekly-content-drafter</td><td>Tuesday 9:00 AM PT</td><td>Tower</td><td>Gmail draft</td><td><span class="status online">Active</span></td></tr>
+        <tr><td>self-improvement-scan</td><td>Friday 11:00 AM PT</td><td>Tower</td><td>Gmail draft</td><td><span class="status online">Active</span></td></tr>
+      </table>
+
+      <div class="section-title">Task Config</div>
+      <div class="terminal">
+        <span class="comment"># Scheduled tasks are Cowork skills + cron triggers</span><br>
+        <span class="comment"># Config: akos/config/scheduled/{task-name}.yaml</span><br><br>
+        <span class="highlight">name:</span> <span class="cmd">morning-briefing</span><br>
+        <span class="highlight">cron:</span> <span class="cmd">"30 8 * * 1-5"</span> <span class="comment"># weekdays 8:30 AM</span><br>
+        <span class="highlight">timezone:</span> <span class="cmd">America/Vancouver</span><br>
+        <span class="highlight">runner:</span> <span class="cmd">claude-code</span><br>
+        <span class="highlight">prompt_file:</span> <span class="cmd">prompts/morning-briefing.md</span><br>
+        <span class="highlight">output:</span> <span class="cmd">gmail_draft</span><br>
+        <span class="highlight">node:</span> <span class="cmd">tower</span><br>
+        <span class="highlight">notify_on_failure:</span> <span class="cmd">ntfy://akos-alerts</span>
+      </div>
+    </div>
+
+    <!-- ==================== EXPERIMENTS ==================== -->
+    <div class="panel" id="panel-experiments">
+      <h2>Self-Improvement Experiments</h2>
+      <p class="desc">Autoresearch-inspired: modify &rarr; test &rarr; measure &rarr; keep/discard &rarr; loop.</p>
+
+      <table>
+        <tr><th>Surface</th><th>Metric</th><th>Cadence</th><th>Zone</th></tr>
+        <tr><td>1. Tool Stack</td><td>Setup time + uptime over 30 days</td><td>Weekly (Signal Radar)</td><td>Proposal &rarr; Approve</td></tr>
+        <tr><td>2. Agent Prompts</td><td>Human edit distance on outputs</td><td>Daily (on use)</td><td>Autonomous (draft only)</td></tr>
+        <tr><td>3. Workflow Templates</td><td>Steps-to-completion / error rate</td><td>Weekly (after runs)</td><td>Proposal &rarr; Approve</td></tr>
+        <tr><td>4. Context Assembly</td><td>Retrieval precision @ k</td><td>Weekly (QMD metrics)</td><td>Autonomous (ranking)</td></tr>
+        <tr><td>5. Signal Detection</td><td>Signal-to-noise ratio / hits</td><td>Weekly</td><td>Autonomous</td></tr>
+        <tr><td>6. Content Quality</td><td>Engagement + Alexander edits</td><td>Per piece</td><td>Proposal &rarr; Approve</td></tr>
+        <tr><td>7. Relationships</td><td>Response rate / relationship health</td><td>Monthly</td><td>Proposal &rarr; Approve</td></tr>
+        <tr><td>8. Financial</td><td>Revenue per hour / pipeline growth</td><td>Monthly</td><td>Data only (no auto)</td></tr>
+      </table>
+
+      <div class="section-title">Experiment Log</div>
+      <div class="terminal">
+        <span class="comment"># Log at: akos/db/ak-os/experiments/META.tsv</span><br>
+        <span class="comment"># Format: date | surface | experiment_id | baseline | result | delta | status | description</span><br><br>
+        <span class="output">No experiments logged yet. System instrumentation pending.</span>
+      </div>
+    </div>
+
+    <!-- ==================== SIGNAL RADAR ==================== -->
+    <div class="panel" id="panel-signals">
+      <h2>Signal Radar</h2>
+      <p class="desc">Automated weekly scan across GitHub, arXiv, Semantic Scholar, HN, PubMed. Feeds TOOL-LANDSCAPE.md.</p>
+
+      <div class="card">
+        <div class="card-header"><h3>Scan Configuration</h3></div>
+        <div class="card-body">
+          <div class="config-row">
+            <span class="config-label">Schedule</span>
+            <span class="config-value mono">Monday 9:00 AM PT</span>
+          </div>
+          <div class="config-row">
+            <span class="config-label">Sources</span>
+            <span class="config-value">GitHub Search API, arXiv, Semantic Scholar, HN Algolia, PubMed</span>
+          </div>
+          <div class="config-row">
+            <span class="config-label">Scoring</span>
+            <span class="config-value">Domain &times; Cross-Domain &times; Actionability &ge; 30</span>
+          </div>
+          <div class="config-row">
+            <span class="config-label">Quality Bar</span>
+            <span class="config-value">&gt;500 stars, pushed &lt;90d, active community, OSS license, 4/5 principles</span>
+          </div>
+          <div class="config-row">
+            <span class="config-label">Output</span>
+            <span class="config-value">Gmail draft + TOOL-LANDSCAPE.md update</span>
+          </div>
+          <div class="config-row">
+            <span class="config-label">Spec</span>
+            <span class="config-value mono">projects/borgclaw/research/SIGNAL-RADAR-SPEC.md</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== OPERATING LAWS ==================== -->
+    <div class="panel" id="panel-laws">
+      <h2>Operating Laws</h2>
+      <p class="desc">Non-negotiable constraints the system must obey. Violation = immediate halt.</p>
+
+      <div class="card">
+        <div class="card-body">
+          <table>
+            <tr><td style="color: #f87171; width: 80px;">Law Zero</td><td><strong>Never delete.</strong> Append, archive, version &mdash; but never destroy Alexander's data.</td></tr>
+            <tr><td style="color: #fb923c;">Law One</td><td><strong>Protect interests.</strong> Family, finances, reputation, IP. Family time is sacred.</td></tr>
+            <tr><td style="color: #00ff88;">Law Two</td><td><strong>Draft, then approve.</strong> Nothing sent, published, or committed without Alexander's review. Autonomy is earned.</td></tr>
+            <tr><td style="color: #60a5fa;">Law Three</td><td><strong>Self-improve.</strong> Track what works, experiment, evolve. The system that doesn't improve dies.</td></tr>
+            <tr><td style="color: #a78bfa;">Law Four</td><td><strong>Mutual respect.</strong> Treat every interaction as collaboration. Challenge constructively.</td></tr>
+            <tr><td style="color: #e879f9;">Law Five</td><td><strong>Direct tooling over browser.</strong> MCP/API first, browser automation last resort.</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== DEPLOY ==================== -->
+    <div class="panel" id="panel-deploy">
+      <h2>Deploy & Upgrade</h2>
+      <p class="desc">How to deploy changes, upgrade components, and roll back if something breaks.</p>
+
+      <div class="card">
+        <div class="card-header"><h3>Deployment Flow</h3></div>
+        <div class="card-body">
+          <div class="step">
+            <div class="step-num done">1</div>
+            <div class="step-content">
+              <h4>Edit config files in akos/config/</h4>
+              <p>All changes are YAML/Markdown edits. No compilation, no build step.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num done">2</div>
+            <div class="step-content">
+              <h4>Git commit & push</h4>
+              <p>Changes tracked in version control. Every deploy is reversible.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num active">3</div>
+            <div class="step-content">
+              <h4>Nodes auto-pull (or manual sync)</h4>
+              <p>Git sync pulls changes to all nodes. <code>borgclaw sync</code> for manual trigger.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <h4>Services reload configs</h4>
+              <p>QMD re-indexes if collections changed. Agents reload prompts. Cron updates.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">5</div>
+            <div class="step-content">
+              <h4>Health check</h4>
+              <p><code>borgclaw status</code> verifies all services healthy after deploy.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Upgrade a Component</h3></div>
+        <div class="card-body">
+          <div class="terminal">
+            <span class="comment"># Upgrade QMD</span><br>
+            <span class="prompt">$</span> <span class="cmd">npm update -g @tobilu/qmd</span><br>
+            <span class="prompt">$</span> <span class="cmd">qmd reindex --all</span><br><br>
+            <span class="comment"># Upgrade Ollama</span><br>
+            <span class="prompt">$</span> <span class="cmd">ollama update</span><br><br>
+            <span class="comment"># Upgrade mem0 (when Phase 2)</span><br>
+            <span class="prompt">$</span> <span class="cmd">pip install --upgrade mem0ai</span><br><br>
+            <span class="comment"># Roll back to previous config</span><br>
+            <span class="prompt">$</span> <span class="cmd">git log --oneline config/</span><br>
+            <span class="prompt">$</span> <span class="cmd">git checkout {commit-hash} -- config/</span><br>
+            <span class="prompt">$</span> <span class="cmd">borgclaw sync --reload</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== BACKUP & SYNC ==================== -->
+    <div class="panel" id="panel-backup">
+      <h2>Backup & Sync</h2>
+      <p class="desc">The akos/ folder IS the backup. Keep it synced, keep it safe.</p>
+
+      <div class="card">
+        <div class="card-body">
+          <table>
+            <tr><th>Method</th><th>Frequency</th><th>Destination</th><th>Status</th></tr>
+            <tr><td>Git push</td><td>On every change</td><td>GitHub (private repo)</td><td><span class="status pending">Pending setup</span></td></tr>
+            <tr><td>Google Drive sync (gws)</td><td>Nightly 11 PM PT</td><td>Drive AKOS folder</td><td><span class="status pending">Pending gws install</span></td></tr>
+            <tr><td>Local backup</td><td>Weekly</td><td>External drive</td><td><span class="status offline">Manual</span></td></tr>
+          </table>
+
+          <div class="section-title">Recovery</div>
+          <div class="terminal">
+            <span class="comment"># Full system recovery on a new machine:</span><br>
+            <span class="prompt">$</span> <span class="cmd">git clone git@github.com:akline/akos.git ~/akos</span><br>
+            <span class="prompt">$</span> <span class="cmd">cd ~/akos && ./bootstrap.sh</span><br>
+            <span class="comment"># That's it. Everything rebuilds from the folder.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<script>
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+</script>
+
+</body>
+</html>

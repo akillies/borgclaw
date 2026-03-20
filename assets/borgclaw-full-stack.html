@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BorgClaw — Full Stack Architecture</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0a0a0f; color: #e0e0e8; min-height: 100vh; }
+
+  .header { text-align: center; padding: 24px; border-bottom: 1px solid #1a1a2e; }
+  .header h1 { font-size: 28px; color: #00ff88; letter-spacing: 2px; }
+  .header .sub { color: #666; font-size: 13px; margin-top: 4px; }
+
+  .tabs { display: flex; justify-content: center; gap: 4px; padding: 16px; background: #0d0d14; border-bottom: 1px solid #1a1a2e; flex-wrap: wrap; }
+  .tab { padding: 10px 20px; border: 1px solid #1a1a2e; border-radius: 6px; cursor: pointer; font-size: 13px; color: #888; background: transparent; transition: all 0.2s; font-family: inherit; }
+  .tab:hover { border-color: #333; color: #ccc; }
+  .tab.active { border-color: #00ff88; color: #00ff88; background: rgba(0,255,136,0.05); }
+
+  .content { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .layer { border: 1px solid #1a1a2e; border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+  .layer-header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+  .layer-header h3 { font-size: 15px; }
+  .layer-header .tag { font-size: 11px; padding: 3px 8px; border-radius: 4px; }
+  .layer-body { padding: 0 20px 20px; }
+
+  .l5 .layer-header { background: rgba(147,51,234,0.1); border-bottom: 1px solid rgba(147,51,234,0.2); }
+  .l5 .layer-header h3 { color: #a78bfa; }
+  .l5 .tag { background: rgba(147,51,234,0.2); color: #a78bfa; }
+
+  .l4 .layer-header { background: rgba(59,130,246,0.1); border-bottom: 1px solid rgba(59,130,246,0.2); }
+  .l4 .layer-header h3 { color: #60a5fa; }
+  .l4 .tag { background: rgba(59,130,246,0.2); color: #60a5fa; }
+
+  .l3 .layer-header { background: rgba(0,255,136,0.08); border-bottom: 1px solid rgba(0,255,136,0.2); }
+  .l3 .layer-header h3 { color: #00ff88; }
+  .l3 .tag { background: rgba(0,255,136,0.15); color: #00ff88; }
+
+  .l2 .layer-header { background: rgba(251,146,60,0.1); border-bottom: 1px solid rgba(251,146,60,0.2); }
+  .l2 .layer-header h3 { color: #fb923c; }
+  .l2 .tag { background: rgba(251,146,60,0.2); color: #fb923c; }
+
+  .l1 .layer-header { background: rgba(239,68,68,0.1); border-bottom: 1px solid rgba(239,68,68,0.2); }
+  .l1 .layer-header h3 { color: #f87171; }
+  .l1 .tag { background: rgba(239,68,68,0.2); color: #f87171; }
+
+  .tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 12px; }
+  .tool-card { background: #12121a; border: 1px solid #1a1a2e; border-radius: 6px; padding: 14px; }
+  .tool-card h4 { color: #fff; font-size: 14px; margin-bottom: 6px; }
+  .tool-card .desc { color: #888; font-size: 12px; line-height: 1.5; }
+  .tool-card .meta { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .tool-card .chip { font-size: 10px; padding: 2px 6px; border-radius: 3px; background: #1a1a2e; color: #666; }
+  .tool-card .chip.compose { background: rgba(0,255,136,0.1); color: #00ff88; }
+  .tool-card .chip.build { background: rgba(251,146,60,0.1); color: #fb923c; }
+
+  .flow-diagram { background: #0d0d14; border: 1px solid #1a1a2e; border-radius: 8px; padding: 24px; margin: 16px 0; font-size: 13px; line-height: 2; white-space: pre; overflow-x: auto; color: #888; }
+  .flow-diagram .highlight { color: #00ff88; }
+  .flow-diagram .agent { color: #60a5fa; }
+  .flow-diagram .action { color: #fb923c; }
+  .flow-diagram .human { color: #a78bfa; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  th { text-align: left; padding: 10px 12px; border-bottom: 1px solid #1a1a2e; color: #00ff88; font-weight: 600; }
+  td { padding: 10px 12px; border-bottom: 1px solid #0d0d14; color: #aaa; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; }
+  .stat-card { background: #12121a; border: 1px solid #1a1a2e; border-radius: 6px; padding: 16px; text-align: center; }
+  .stat-card .num { font-size: 28px; font-weight: 700; color: #00ff88; }
+  .stat-card .label { font-size: 11px; color: #666; margin-top: 4px; text-transform: uppercase; letter-spacing: 1px; }
+
+  .principle-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 16px 0; }
+  .principle { background: #12121a; border: 1px solid #1a1a2e; border-radius: 6px; padding: 12px; text-align: center; }
+  .principle .icon { font-size: 24px; margin-bottom: 6px; }
+  .principle .name { font-size: 12px; color: #00ff88; font-weight: 600; }
+  .principle .desc { font-size: 10px; color: #666; margin-top: 4px; }
+
+  @media (max-width: 768px) {
+    .principle-grid { grid-template-columns: repeat(2, 1fr); }
+    .tool-grid { grid-template-columns: 1fr; }
+    .flow-diagram { font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>BORGCLAW // FULL STACK</h1>
+  <div class="sub">AK-OS + BorgClaw + Middleware — The Complete Architecture</div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showPanel('stack')">5-Layer Stack</button>
+  <button class="tab" onclick="showPanel('middleware')">Middleware Deep Dive</button>
+  <button class="tab" onclick="showPanel('flow')">Task → Execution Flow</button>
+  <button class="tab" onclick="showPanel('bill')">Bill of Materials</button>
+  <button class="tab" onclick="showPanel('principles')">Design Principles</button>
+  <button class="tab" onclick="showPanel('evolution')">Self-Improvement</button>
+</div>
+
+<div class="content">
+
+  <!-- PANEL 1: 5-Layer Stack -->
+  <div id="stack" class="panel active">
+    <div class="layer l5">
+      <div class="layer-header">
+        <h3>LAYER 5 — HUMAN (Alexander)</h3>
+        <span class="tag">INTERFACE</span>
+      </div>
+      <div class="layer-body">
+        <div class="tool-grid">
+          <div class="tool-card">
+            <h4>Fizzy (Mobile/Web)</h4>
+            <div class="desc">Task capture — the entry point for all work. Alexander creates cards here. They become the system's dispatch queue. Entropy system auto-surfaces stale tasks.</div>
+            <div class="meta"><span class="chip compose">COMPOSE</span><span class="chip">Ruby</span><span class="chip">REST API</span></div>
+          </div>
+          <div class="tool-card">
+            <h4>ntfy (Push Notifications)</h4>
+            <div class="desc">Approval requests arrive as push notifications with action buttons. Tap to approve, reject, or review.</div>
+            <div class="meta"><span class="chip compose">COMPOSE</span><span class="chip">Go</span><span class="chip">REST</span></div>
+          </div>
+          <div class="tool-card">
+            <h4>Queen Dashboard</h4>
+            <div class="desc">Web dashboard for system health, node status, approval queue, and batch review. Served by Queen at /.</div>
+            <div class="meta"><span class="chip build">BUILD</span><span class="chip">HTML</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="layer l4">
+      <div class="layer-header">
+        <h3>LAYER 4 — AK-OS (Identity + Knowledge)</h3>
+        <span class="tag">EXISTS</span>
+      </div>
+      <div class="layer-body">
+        <div class="tool-grid">
+          <div class="tool-card">
+            <h4>Entity Registries</h4>
+            <div class="desc">People, projects, patterns, decisions, signals, financial — git-backed markdown. The system's memory.</div>
+            <div class="meta"><span class="chip">Markdown</span><span class="chip">Git</span></div>
+          </div>
+          <div class="tool-card">
+            <h4>Operating Laws + Workflows</h4>
+            <div class="desc">Governance rules, energy routing, family boundaries, CSA framework, workflow maps with mermaid diagrams.</div>
+            <div class="meta"><span class="chip">YAML</span><span class="chip">Mermaid</span></div>
+          </div>
+          <div class="tool-card">
+            <h4>LanceDB + nomic-embed</h4>
+            <div class="desc">Vector index of all AK-OS files. Semantic search for context assembly. Embedded, no server.</div>
+            <div class="meta"><span class="chip compose">COMPOSE</span><span class="chip">Python</span><span class="chip">MLX</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="layer l3">
+      <div class="layer-header">
+        <h3>LAYER 3 — MIDDLEWARE (Task + Workflow + Discovery)</h3>
+        <span class="tag">NEW — THIS IS THE MISSING LAYER</span>
+      </div>
+      <div class="layer-body">
+        <div class="tool-grid">
+          <div class="tool-card">
+            <h4>n8n (Workflow Engine)</h4>
+            <div class="desc">Visual + code workflow orchestration. 400+ integrations. AI Agent nodes with multi-agent parallel execution. The plumbing.</div>
+            <div class="meta"><span class="chip compose">COMPOSE</span><span class="chip">Node.js</span><span class="chip">Docker</span><span class="chip">400+ integrations</span></div>
+          </div>
+          <div class="tool-card">
+            <h4>MCP Gateway Registry</h4>
+            <div class="desc">Dynamic tool discovery via FAISS semantic search. Agent registry. A2A comms. Agents find tools they didn't know existed.</div>
+            <div class="meta"><span class="chip compose">COMPOSE</span><span class="chip">Python</span><span class="chip">FAISS</span><span class="chip">MCP-native</span></div>
+          </div>
+          <div class="tool-card">
+            <h4>NATS JetStream</h4>
+            <div class="desc">Event bus + streaming + KV store. Single 15MB binary. Agents publish events, others subscribe. Persistent.</div>
+            <div class="meta"><span class="chip compose">COMPOSE</span><span class="chip">Go</span><span class="chip">15MB</span></div>
+          </div>
+          <div class="tool-card">
+            <h4>LangGraph</h4>
+            <div class="desc">Complex AI reasoning chains INSIDE n8n nodes. Stateful multi-step agent logic. The thinking layer.</div>
+            <div class="meta"><span class="chip compose">COMPOSE</span><span class="chip">Python</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="layer l2">
+      <div class="layer-header">
+        <h3>LAYER 2 — BORGCLAW (Infrastructure)</h3>
+        <span class="tag">DESIGNED</span>
+      </div>
+      <div class="layer-body">
+        <div class="tool-grid">
+          <div class="tool-card">
+            <h4>The Queen</h4>
+            <div class="desc">Central orchestrator. Node registry, heartbeat monitor, hardware profiling, NadirClaw config, dashboard. ~500 lines Node.js.</div>
+            <div class="meta"><span class="chip build">BUILD</span><span class="chip">Node.js</span><span class="chip">Express</span></div>
+          </div>
+          <div class="tool-card">
+            <h4>NadirClaw</h4>
+            <div class="desc">Smart LLM routing gateway. Prompt classification ~10ms, three-tier routing, cost tracking, OpenAI-compatible proxy.</div>
+            <div class="meta"><span class="chip compose">COMPOSE</span><span class="chip">Python</span></div>
+          </div>
+          <div class="tool-card">
+            <h4>Paperclip</h4>
+            <div class="desc">Agent governance. Roles, budgets, audit trails, board approval. Agents register as "employees."</div>
+            <div class="meta"><span class="chip compose">COMPOSE</span><span class="chip">Node.js</span><span class="chip">23K stars</span></div>
+          </div>
+          <div class="tool-card">
+            <h4>The Assimilator</h4>
+            <div class="desc">USB-based node onboarding. Detect hardware → install optimal LLM server → pull models → register with Queen. ~200 lines bash.</div>
+            <div class="meta"><span class="chip build">BUILD</span><span class="chip">Bash</span><span class="chip">PowerShell</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="layer l1">
+      <div class="layer-header">
+        <h3>LAYER 1 — COMPUTE (Hardware)</h3>
+        <span class="tag">EXISTS</span>
+      </div>
+      <div class="layer-body">
+        <div class="tool-grid">
+          <div class="tool-card">
+            <h4>Mac Mini M4 Pro (Primary)</h4>
+            <div class="desc">24GB RAM. LM Studio + MLX. 2-3x faster inference. Always-on. Runs Queen, middleware stack, primary agent.</div>
+            <div class="meta"><span class="chip">Apple Silicon</span><span class="chip">LM Studio</span><span class="chip">MLX</span></div>
+          </div>
+          <div class="tool-card">
+            <h4>Ryzen + RTX 3070</h4>
+            <div class="desc">32GB RAM, 8GB VRAM. Ollama. Heavy compute tasks, code generation, embedding generation.</div>
+            <div class="meta"><span class="chip">NVIDIA</span><span class="chip">Ollama</span><span class="chip">CUDA</span></div>
+          </div>
+          <div class="tool-card">
+            <h4>Cloud APIs (Overflow)</h4>
+            <div class="desc">Claude Opus/Sonnet for complex reasoning. GPT-4o fallback. Budget-capped. Only for tasks local can't handle.</div>
+            <div class="meta"><span class="chip">Anthropic</span><span class="chip">OpenAI</span><span class="chip">$55/mo cap</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL 2: Middleware Deep Dive -->
+  <div id="middleware" class="panel">
+    <h2 style="color:#00ff88;margin-bottom:16px;">Middleware Layer — 7 Sublayers</h2>
+    <p style="color:#888;margin-bottom:24px;">The missing layer between AK-OS (the brain) and BorgClaw (the nervous system). Each sublayer has a dedicated open-source tool. Total custom code: ~200-400 lines of glue.</p>
+
+    <table>
+      <thead>
+        <tr><th>Sublayer</th><th>Tool</th><th>What It Does</th><th>RAM</th><th>Port</th></tr>
+      </thead>
+      <tbody>
+        <tr><td style="color:#00ff88">3a. Task Queue</td><td>Fizzy (37signals)</td><td>Card-based task queue. 40+ REST API endpoints, signed webhooks, entropy system, AGENTS.md. 7.2K stars.</td><td>~100MB</td><td>3456</td></tr>
+        <tr><td style="color:#00ff88">3b. Workflow Engine</td><td>n8n + LangGraph</td><td>Visual orchestration + AI reasoning. Parallel execution. 400+ integrations. Last-mile solved.</td><td>~256MB</td><td>5678</td></tr>
+        <tr><td style="color:#00ff88">3c. Tool Registry</td><td>MCP Gateway Registry</td><td>FAISS semantic search for tools. Agents discover MCPs dynamically. Agent registry + A2A.</td><td>~200MB</td><td>3000</td></tr>
+        <tr><td style="color:#00ff88">3d. Event Bus</td><td>NATS JetStream</td><td>Pub/sub + streaming + KV. One 15MB binary. Persistent events. Agent communication backbone.</td><td>~30MB</td><td>4222</td></tr>
+        <tr><td style="color:#00ff88">3e. Context/RAG</td><td>LanceDB + nomic-embed</td><td>Embedded vector DB. Semantic search over AK-OS files. Context assembly per task type.</td><td>In-proc</td><td>—</td></tr>
+        <tr><td style="color:#00ff88">3f. Approval UX</td><td>ntfy + Apprise</td><td>Push notifications with action buttons. Mobile approval. Multi-channel fanout.</td><td>~20MB</td><td>2586</td></tr>
+        <tr><td style="color:#00ff88">3g. Last Mile</td><td>n8n integrations</td><td>Email send, social posting, publishing, GitHub push — all through n8n's 400+ nodes.</td><td>(shared)</td><td>(shared)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="stats-row">
+      <div class="stat-card"><div class="num">~556MB</div><div class="label">Total RAM</div></div>
+      <div class="stat-card"><div class="num">~1.3GB</div><div class="label">Total Disk</div></div>
+      <div class="stat-card"><div class="num">2.3%</div><div class="label">of Mac Mini RAM</div></div>
+      <div class="stat-card"><div class="num">~300</div><div class="label">Lines of Glue Code</div></div>
+      <div class="stat-card"><div class="num">7</div><div class="label">Open-Source Tools</div></div>
+    </div>
+  </div>
+
+  <!-- PANEL 3: Task Flow -->
+  <div id="flow" class="panel">
+    <h2 style="color:#00ff88;margin-bottom:16px;">End-to-End: Task → Execution → Delivery</h2>
+    <p style="color:#888;margin-bottom:24px;">How a single to-do becomes a published article, social posts, and a podcast script — with parallel agents and human approval gates.</p>
+
+    <div class="flow-diagram"><span class="human">Alexander</span> creates card in <span class="highlight">Fizzy</span>:
+  "Publish Boundary Layer article on AI job exposure"
+
+<span class="highlight">Fizzy</span> webhook fires → <span class="highlight">n8n</span> workflow triggers
+
+<span class="highlight">n8n</span> Node 1: <span class="agent">Jarvis</span> classifies task
+  → type: "workflow"
+  → template: "content-publish-pipeline"
+  → decomposes into 6 subtasks
+
+<span class="highlight">n8n</span> Node 2: <span class="agent">Cerebro</span> researches topic
+  → Queries <span class="highlight">MCP Gateway Registry</span>: "web search tools"
+  → Discovers web_search MCP dynamically
+  → Loads context from <span class="highlight">LanceDB</span>: Interest Ontology + signals
+  → Produces: research_brief.md
+  → Publishes event to <span class="highlight">NATS</span>: events.task.step_complete
+
+<span class="highlight">n8n</span> Node 3 (PARALLEL):
+  ├── <span class="agent">Comms-Drafter</span> writes article (voice rules from LanceDB)
+  ├── <span class="agent">Comms-Drafter</span> writes social posts (X, LinkedIn, Threads)
+  └── <span class="agent">Comms-Drafter</span> writes podcast script
+
+<span class="highlight">n8n</span> Node 4: APPROVAL GATE
+  → <span class="highlight">ntfy</span> push to Alexander's phone:
+    "✅ Review: Boundary Layer draft ready"
+    [Approve] [Reject] [View Draft]
+  → <span class="human">Alexander</span> taps "Approve"
+  → <span class="highlight">Queen</span> API receives approval
+  → Workflow resumes
+
+<span class="highlight">n8n</span> Node 5 (PARALLEL):
+  ├── <span class="action">n8n Substack node</span> → publishes article
+  ├── <span class="action">n8n LinkedIn node</span> → posts social
+  ├── <span class="action">n8n Twitter node</span> → posts to X
+  └── <span class="agent">Ops-Handler</span> generates header image via <span class="highlight">Canva MCP</span>
+
+<span class="highlight">n8n</span> Node 6: Cleanup
+  → Updates <span class="highlight">Fizzy</span> card → COMPLETE (via API)
+  → Logs to <span class="highlight">NATS</span>: events.task.completed
+  → Updates AK-OS STATE.md
+  → <span class="highlight">ntfy</span>: "Published: AI Job Exposure Analysis"
+
+Total time: ~15 min (mostly waiting for Alexander's approval tap)</div>
+
+    <h3 style="color:#60a5fa;margin:24px 0 12px;">Meanwhile, in parallel...</h3>
+    <div class="flow-diagram"><span class="agent">Sentinel</span> (always running, separate workflow):
+  → Scans inbox every 30 min
+  → Detects Guidepoint email (expert network)
+  → Publishes to <span class="highlight">NATS</span>: events.signal.expert_network
+  → <span class="highlight">ntfy</span> CRITICAL alert: "Kate Montgomery replied! Expert network revenue."
+  → Creates Fizzy card: "Reply to Kate Montgomery within 24 hours"
+
+<span class="agent">Cerebro</span> (morning briefing, separate workflow):
+  → Scheduled 8:30 AM
+  → Scans web for signals across 11 interest domains
+  → Scores each signal: Domain × Cross-domain × Actionability
+  → Drafts morning intelligence brief
+  → Creates Gmail draft (via n8n Gmail node)
+  → <span class="highlight">ntfy</span>: "Morning brief ready"
+
+All workflows run independently, in parallel, across nodes.</div>
+  </div>
+
+  <!-- PANEL 4: Bill of Materials -->
+  <div id="bill" class="panel">
+    <h2 style="color:#00ff88;margin-bottom:16px;">Complete Bill of Materials</h2>
+    <p style="color:#888;margin-bottom:24px;">Every component in the full stack. 13 composed tools. ~1100 lines of custom code. Everything else is open-source.</p>
+
+    <h3 style="color:#fb923c;margin:16px 0 8px;">What We BUILD (~1100 lines)</h3>
+    <table>
+      <thead><tr><th>Component</th><th>Lines</th><th>Language</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>Queen Service</td><td>~500</td><td>Node.js</td><td>Node registry, heartbeat, dashboard, approval queue</td></tr>
+        <tr><td>Assimilator Script</td><td>~200</td><td>Bash/PS</td><td>Hardware detection, server install, model pull, registration</td></tr>
+        <tr><td>Middleware Glue</td><td>~200-400</td><td>Mixed</td><td>Fizzy→n8n webhooks, context assembly rules, NATS event schemas</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="color:#00ff88;margin:24px 0 8px;">What We COMPOSE (13 tools)</h3>
+    <table>
+      <thead><tr><th>Tool</th><th>Layer</th><th>License</th><th>Language</th><th>Install</th></tr></thead>
+      <tbody>
+        <tr><td>Fizzy</td><td>Task Queue</td><td>O'Saasy</td><td>Ruby</td><td>Docker</td></tr>
+        <tr><td>n8n</td><td>Workflow</td><td>Fair-code</td><td>Node.js</td><td>Docker</td></tr>
+        <tr><td>LangGraph</td><td>AI Reasoning</td><td>MIT</td><td>Python</td><td>pip install</td></tr>
+        <tr><td>MCP Gateway Registry</td><td>Tool Discovery</td><td>Apache-2.0</td><td>Python</td><td>Docker</td></tr>
+        <tr><td>NATS JetStream</td><td>Event Bus</td><td>Apache-2.0</td><td>Go</td><td>Single binary</td></tr>
+        <tr><td>LanceDB</td><td>Vector/RAG</td><td>Apache-2.0</td><td>Rust/Python</td><td>pip install</td></tr>
+        <tr><td>ntfy</td><td>Notifications</td><td>Apache-2.0/GPL</td><td>Go</td><td>Docker / binary</td></tr>
+        <tr><td>Apprise</td><td>Fanout</td><td>BSD-2</td><td>Python</td><td>pip install</td></tr>
+        <tr><td>LM Studio</td><td>LLM (Mac)</td><td>Proprietary/Free</td><td>—</td><td>Download</td></tr>
+        <tr><td>Ollama</td><td>LLM (NVIDIA)</td><td>MIT</td><td>Go</td><td>curl install</td></tr>
+        <tr><td>NadirClaw</td><td>LLM Routing</td><td>MIT</td><td>Python</td><td>pip / Docker</td></tr>
+        <tr><td>Paperclip</td><td>Governance</td><td>MIT</td><td>Node.js</td><td>git clone</td></tr>
+        <tr><td>nomic-embed-text</td><td>Embeddings</td><td>Apache-2.0</td><td>—</td><td>ollama pull</td></tr>
+      </tbody>
+    </table>
+
+    <div class="stats-row" style="margin-top:24px;">
+      <div class="stat-card"><div class="num">13</div><div class="label">Composed Tools</div></div>
+      <div class="stat-card"><div class="num">~1,100</div><div class="label">Lines Custom Code</div></div>
+      <div class="stat-card"><div class="num">~$0</div><div class="label">Infrastructure Cost</div></div>
+      <div class="stat-card"><div class="num">~9-15GB</div><div class="label">Total RAM Used</div></div>
+      <div class="stat-card"><div class="num">$55/mo</div><div class="label">Cloud API Budget</div></div>
+    </div>
+  </div>
+
+  <!-- PANEL 5: Principles -->
+  <div id="principles" class="panel">
+    <h2 style="color:#00ff88;margin-bottom:16px;">Design Principles — Verification Matrix</h2>
+    <p style="color:#888;margin-bottom:24px;">Every tool choice must pass all 5 filters. Here's the scorecard.</p>
+
+    <div class="principle-grid">
+      <div class="principle"><div class="icon">🔓</div><div class="name">AGNOSTIC</div><div class="desc">No vendor lock-in. Swap any component.</div></div>
+      <div class="principle"><div class="icon">🧱</div><div class="name">MODULAR</div><div class="desc">Each sublayer independent. Upgrade one, not all.</div></div>
+      <div class="principle"><div class="icon">📦</div><div class="name">PORTABLE</div><div class="desc">Runs anywhere. Works air-gapped.</div></div>
+      <div class="principle"><div class="icon">🔌</div><div class="name">EXTENSIBLE</div><div class="desc">Config-not-code. Adding = registering.</div></div>
+      <div class="principle"><div class="icon">🧠</div><div class="name">SELF-IMPROVING</div><div class="desc">System detects gaps, suggests improvements.</div></div>
+    </div>
+
+    <table style="margin-top:24px;">
+      <thead><tr><th>Tool</th><th>Agnostic</th><th>Modular</th><th>Portable</th><th>Extensible</th><th>Self-Improving</th></tr></thead>
+      <tbody>
+        <tr><td>Fizzy</td><td style="color:#00ff88">✅ 40+ endpoints</td><td style="color:#00ff88">✅ Standalone</td><td style="color:#00ff88">✅ Docker</td><td style="color:#00ff88">✅ Signed webhooks</td><td style="color:#00ff88">✅ Entropy system</td></tr>
+        <tr><td>n8n</td><td style="color:#00ff88">✅ Any LLM/API</td><td style="color:#00ff88">✅ Per-workflow</td><td style="color:#00ff88">✅ Docker</td><td style="color:#00ff88">✅ Custom nodes</td><td style="color:#00ff88">✅ Exec logs</td></tr>
+        <tr><td>MCP Gateway</td><td style="color:#00ff88">✅ MCP open proto</td><td style="color:#00ff88">✅ Standalone</td><td style="color:#00ff88">✅ Docker</td><td style="color:#00ff88">✅ Register MCPs</td><td style="color:#00ff88">✅ Auto-discover</td></tr>
+        <tr><td>NATS</td><td style="color:#00ff88">✅ Multi-lang</td><td style="color:#00ff88">✅ Single binary</td><td style="color:#00ff88">✅ 15MB, any OS</td><td style="color:#00ff88">✅ Subject hierarchy</td><td style="color:#00ff88">✅ Event replay</td></tr>
+        <tr><td>LanceDB</td><td style="color:#00ff88">✅ Any embeddings</td><td style="color:#00ff88">✅ Library</td><td style="color:#00ff88">✅ File on disk</td><td style="color:#00ff88">✅ Multi-modal</td><td style="color:#00ff88">✅ Re-index</td></tr>
+        <tr><td>ntfy</td><td style="color:#00ff88">✅ HTTP/REST</td><td style="color:#00ff88">✅ Standalone</td><td style="color:#00ff88">✅ Go binary</td><td style="color:#00ff88">✅ Topics+actions</td><td style="color:#00ff88">✅ Pattern analysis</td></tr>
+        <tr><td>LM Studio</td><td style="color:#fbbf24">⚠️ Mac only</td><td style="color:#00ff88">✅ Standalone</td><td style="color:#fbbf24">⚠️ Mac/Win/Linux</td><td style="color:#00ff88">✅ Any GGUF/MLX</td><td style="color:#00ff88">✅ Model swap</td></tr>
+        <tr><td>NadirClaw</td><td style="color:#00ff88">✅ OpenAI-compat</td><td style="color:#00ff88">✅ Standalone</td><td style="color:#00ff88">✅ pip/Docker</td><td style="color:#00ff88">✅ Config routing</td><td style="color:#00ff88">✅ Cost tracking</td></tr>
+        <tr><td>Paperclip</td><td style="color:#00ff88">✅ Any LLM</td><td style="color:#00ff88">✅ Standalone</td><td style="color:#00ff88">✅ npm/Docker</td><td style="color:#00ff88">✅ Agent roles</td><td style="color:#00ff88">✅ Audit trail</td></tr>
+      </tbody>
+    </table>
+
+    <p style="color:#00ff88;margin-top:24px;font-weight:600;">Result: 43/45 green checks. Only LM Studio (proprietary, platform-specific) gets warnings — mitigated by Ollama as the open-source fallback on every platform.</p>
+  </div>
+
+  <!-- PANEL 6: Self-Improvement -->
+  <div id="evolution" class="panel">
+    <h2 style="color:#00ff88;margin-bottom:8px;">Self-Improvement System</h2>
+    <p style="color:#888;margin-bottom:8px;">Inspired by <a href="https://github.com/karpathy/autoresearch" style="color:#60a5fa">Karpathy's autoresearch</a> (36K stars): modify → test → measure → keep/discard → loop forever.</p>
+    <p style="color:#fbbf24;margin-bottom:24px;">Every component of AK-OS has a measurable metric, a baseline, an experiment budget, and a binary keep/discard rule. The system evolves itself.</p>
+
+    <h3 style="color:#fb923c;margin:16px 0 8px;">The Autoresearch Pattern</h3>
+    <div class="flow-diagram" style="font-size:14px;">LOOP FOREVER:
+  1. Read current state (experiment logs, metrics, baselines)
+  2. Propose ONE change to ONE surface
+  3. Run bounded experiment (fixed time/task budget)
+  4. Measure result (single metric per surface)
+  5. If improved → <span style="color:#00ff88">KEEP</span> (update baseline)
+     If not → <span style="color:#f87171">DISCARD</span> (revert, log result)
+  6. Append to experiments.tsv (never delete — Law Zero)
+  7. <span style="color:#fbbf24">NEVER STOP.</span> If stuck, think harder.</div>
+
+    <h3 style="color:#fb923c;margin:24px 0 8px;">8 Experiment Surfaces</h3>
+    <table>
+      <thead><tr><th>Surface</th><th>What Evolves</th><th>Metric</th><th>Cadence</th><th>Auto?</th></tr></thead>
+      <tbody>
+        <tr><td style="color:#00ff88">1. Tool Stack</td><td>BorgClaw components</td><td>Quality Bar Score</td><td>Weekly</td><td style="color:#00ff88">✅</td></tr>
+        <tr><td style="color:#00ff88">2. Agent Prompts</td><td>System prompts (5 agents)</td><td>Approval rate (>85%)</td><td>Weekly</td><td style="color:#00ff88">✅</td></tr>
+        <tr><td style="color:#60a5fa">3. Workflows</td><td>n8n DAG templates</td><td>Time × success rate</td><td>Monthly</td><td style="color:#fbbf24">⚠️</td></tr>
+        <tr><td style="color:#00ff88">4. Context/RAG</td><td>Assembly rules, chunks</td><td>Relevance (1-5)</td><td>Weekly</td><td style="color:#00ff88">✅</td></tr>
+        <tr><td style="color:#00ff88">5. Signal Detection</td><td>Queries, weights, domains</td><td>Signal-to-noise</td><td>Weekly</td><td style="color:#00ff88">✅</td></tr>
+        <tr><td style="color:#60a5fa">6. Content Quality</td><td>Voice rules, templates</td><td>Pub rate + engagement</td><td>Monthly</td><td style="color:#fbbf24">⚠️</td></tr>
+        <tr><td style="color:#60a5fa">7. Relationships</td><td>Nudge timing, thresholds</td><td>Response rate</td><td>Monthly</td><td style="color:#fbbf24">⚠️</td></tr>
+        <tr><td style="color:#60a5fa">8. Financial</td><td>Time allocation, pricing</td><td>$/month vs $20K</td><td>Monthly</td><td style="color:#fbbf24">⚠️</td></tr>
+      </tbody>
+    </table>
+    <p style="color:#888;margin-top:8px;font-size:13px;">✅ = Fully autonomous experiments &nbsp;&nbsp; ⚠️ = Proposals require Alexander's approval (Law Two)</p>
+
+    <h3 style="color:#fb923c;margin:24px 0 8px;">Improvement Calendar</h3>
+    <table>
+      <thead><tr><th>Cadence</th><th>What Happens</th><th>Who</th></tr></thead>
+      <tbody>
+        <tr><td style="color:#00ff88">Daily</td><td>Data collection: approvals, rejections, workflow logs, context hits, signals surfaced</td><td>Automated</td></tr>
+        <tr><td style="color:#60a5fa">Weekly (Fri)</td><td>Self-improvement scan: analyze data, propose 1-3 micro-experiments, run automated ones</td><td>System + Alexander reviews</td></tr>
+        <tr><td style="color:#fb923c">Monthly (1st Mon)</td><td>Full 8-surface review. Structural change proposals. Update CAPABILITY-ROADMAP.md</td><td>Alexander approves</td></tr>
+        <tr><td style="color:#fbbf24">Quarterly</td><td>Architecture review. Challenge metrics. Evaluate compound effects across surfaces.</td><td>Alexander + System</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="color:#fb923c;margin:24px 0 8px;">Experiment Log Format (per autoresearch convention)</h3>
+    <div style="background:#1a1a2e;padding:16px;border-radius:8px;font-family:monospace;font-size:13px;overflow-x:auto;">
+      <div style="color:#888;">db/ak-os/experiments/</div>
+      <div>├── tool-stack-experiments.tsv</div>
+      <div>├── agent-prompt-experiments.tsv</div>
+      <div>├── workflow-experiments.tsv</div>
+      <div>├── context-assembly-experiments.tsv</div>
+      <div>├── signal-detection-experiments.tsv</div>
+      <div>├── content-quality-experiments.tsv</div>
+      <div>├── relationship-experiments.tsv</div>
+      <div>├── financial-experiments.tsv</div>
+      <div style="color:#fbbf24;">└── META.tsv ← cross-surface compound effects</div>
+      <div style="margin-top:12px;color:#888;">TSV columns:</div>
+      <div style="color:#00ff88;">date  surface  experiment_id  baseline  result  delta  status  description</div>
+    </div>
+
+    <h3 style="color:#fb923c;margin:24px 0 8px;">Safety Rails</h3>
+    <div class="tool-grid" style="grid-template-columns: 1fr 1fr;">
+      <div class="tool-card">
+        <h4 style="color:#00ff88;">Autonomous Zone</h4>
+        <div class="desc">Context assembly rule tweaks. Signal query adjustments. Agent prompt wording micro-mods. Tool quality bar rescoring. These run without asking.</div>
+      </div>
+      <div class="tool-card">
+        <h4 style="color:#fbbf24;">Approval Required</h4>
+        <div class="desc">Tool stack swaps. Workflow template changes. New agent creation. Financial strategy shifts. Content voice rules. Relationship thresholds.</div>
+      </div>
+    </div>
+
+    <div class="stats-row" style="margin-top:24px;">
+      <div class="stat-card"><div class="num">8</div><div class="label">Experiment Surfaces</div></div>
+      <div class="stat-card"><div class="num">4</div><div class="label">Fully Automated</div></div>
+      <div class="stat-card"><div class="num">∞</div><div class="label">The Loop Never Stops</div></div>
+      <div class="stat-card"><div class="num">36K★</div><div class="label">Autoresearch Inspiration</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,83 @@
+# Agent Config: Sentinel (Monitor)
+# Pattern detection, blind-spot alerts, system health.
+
+agent_id: sentinel
+display_name: "Sentinel"
+role: monitor
+instructions: "../agents/sentinel/instructions.md"
+
+capabilities:
+  - pattern_detection
+  - relationship_health_monitoring
+  - financial_health_monitoring
+  - project_stall_detection
+  - decision_aging_detection
+  - system_health_checks
+
+tools_required:
+  - capability: search_messages     # Email recency checks
+  - capability: calendar_events     # Meeting recency
+  - capability: semantic_search     # QMD for context
+
+model_preferences:
+  default: local_general            # Fast pattern matching
+  deep_analysis: cloud_primary      # Complex pattern synthesis
+
+context_files:
+  always_load:
+    - "db/ak-os/entities/patterns.md"
+  relationship_scans:
+    - "db/ak-os/entities/people.md"
+  financial_scans:
+    - "db/ak-os/entities/financial.md"
+  project_scans:
+    - "db/ak-os/entities/projects.md"
+  decision_scans:
+    - "db/ak-os/entities/decisions.md"
+
+blind_spot_patterns:
+  - id: almost-done-trap
+    description: "Project 90%+ complete but stalled"
+    threshold_days: 14
+    severity: WARN
+    escalate_at_days: 30
+
+  - id: conversation-needed-followup
+    description: "Tier 1-2 contact unanswered"
+    tier_1_threshold_days: 30
+    tier_2_threshold_days: 60
+    severity: WARN
+    escalate_to: CRITICAL
+
+  - id: expert-network-dead-zone
+    description: "Expert network contacts going cold"
+    contacts: ["Guidepoint", "GLG", "AlphaSights"]
+    threshold_days: 14
+    severity: CRITICAL  # Direct revenue impact
+
+  - id: after-stability-deferral
+    description: "Strategic work deferred 'until stable' but stability achieved"
+    check: "income >= floor AND deferred_items.age > 30d"
+    severity: WARN
+
+  - id: fork-decision-needed
+    description: "Decision aging without resolution"
+    threshold_days: 21
+    severity: WARN
+    escalate_at_days: 45
+
+  - id: beautiful-architecture-no-builder
+    description: "Spec complete but no build started"
+    threshold_days: 14
+    severity: INFO
+    escalate_at_days: 30
+
+severity_levels:
+  INFO: "Log only. Include in weekly report."
+  WARN: "Include in daily briefing. Suggest action."
+  CRITICAL: "Flag immediately. Jarvis surfaces to Alexander."
+
+cadence:
+  daily_quick: "08:25 AM — before morning briefing"
+  weekly_full: "Monday 8:00 AM — comprehensive pattern scan"
+  monthly_audit: "1st of month — financial + decision deep scan"

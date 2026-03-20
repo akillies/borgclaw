@@ -1,0 +1,20 @@
+# Scheduled Task: Morning Briefing
+# Generates daily intelligence brief as Gmail draft
+
+task_id: morning-briefing
+schedule: "30 8 * * 1-5"  # Weekdays 8:30 AM
+timezone: America/Vancouver
+workflow: workflows/morning-briefing.yaml
+node: tower  # always-on machine
+enabled: true
+
+notification:
+  on_success: false  # The brief IS the notification
+  on_failure:
+    channel: gmail_draft
+    subject: "[BORGCLAW] Morning briefing failed"
+    include_error: true
+
+retry:
+  max_attempts: 2
+  delay_seconds: 300

@@ -1,0 +1,20 @@
+# Scheduled Task: Weekly Content Drafter
+# Generates 3 Boundary Layer article ideas from signal scan
+
+task_id: weekly-content-drafter
+schedule: "0 9 * * 2"  # Tuesday 9:00 AM
+timezone: America/Vancouver
+workflow: workflows/content-publish-pipeline.yaml
+workflow_stop_at: draft_article  # Only runs through ideation, not full publish
+node: tower
+enabled: true
+
+notification:
+  on_success: false
+  on_failure:
+    channel: gmail_draft
+    subject: "[BORGCLAW] Content drafter failed"
+
+retry:
+  max_attempts: 2
+  delay_seconds: 600

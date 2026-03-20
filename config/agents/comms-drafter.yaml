@@ -1,0 +1,68 @@
+# Agent Config: Comms-Drafter
+# Voice-matched writing. Every word out the door goes through this agent.
+
+agent_id: comms-drafter
+display_name: "Comms-Drafter"
+role: writer
+instructions: "../agents/comms-drafter/instructions.md"
+
+capabilities:
+  - voice_matched_writing
+  - email_drafting
+  - article_drafting
+  - social_post_drafting
+  - cover_letter_drafting
+  - report_formatting
+
+tools_required:
+  - capability: create_draft        # Gmail draft creation
+  - capability: semantic_search     # QMD for context/voice examples
+
+model_preferences:
+  email_draft: local_general        # Qwen3-8B for routine emails
+  voice_writing: cloud_primary      # Claude Sonnet for voice-critical content
+  article_draft: cloud_primary      # Boundary Layer needs frontier quality
+  social_post: local_general        # Short-form, fast iteration
+
+context_files:
+  always_load:
+    - "memory/context/voice-and-brand-rules.md"
+    - "db/Alexander_Kline_Voice_Style_Guide_v3.md"
+  article_tasks:
+    - "db/boundary-layer-content-automation.md"
+  linkedin_tasks:
+    - "db/AK_LinkedIn_20_Posts.md"
+    - "db/AK_LinkedIn_Profile_Rewrite.md"
+  job_tasks:
+    - "db/AK_OS_Brand_Context.md"
+
+voice_constraints:
+  identity: "Leader and strategist, not a builder or implementer"
+  core_word: "Innovation (this is his word)"
+  positioning: "Multidisciplinary is core — never single-domain"
+  tone: "Casual professional, direct, warm, occasionally dry humor"
+
+  anti_patterns:
+    - "No em-dashes as dramatic pauses"
+    - "No contrastive pivots (But here's the thing...)"
+    - "No announcing moves (Let me be direct...)"
+    - "No smarmy/performative warmth"
+    - "No turnaround/transformation branding"
+    - "No WFS membership mentioned publicly"
+    - "No Ansible name in public-facing content"
+    - "No over-indexing on AI (he's broader than that)"
+    - "No corporate fluff or buzzword salads"
+    - "No bullet points in prose (write in paragraphs)"
+    - "ATS matters for job applications"
+
+approval_matrix:
+  email_to_contact: required
+  article_publish: required
+  social_post: required
+  internal_report: auto
+  meeting_prep: auto
+
+self_learning:
+  enabled: true
+  method: "Compare drafts to Alexander's edits. Track edit distance. Categorize changes."
+  storage: "memory/context/voice-corrections-log.md"

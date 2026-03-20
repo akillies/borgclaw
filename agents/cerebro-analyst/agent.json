@@ -1,0 +1,83 @@
+{
+  "name": "cerebro-analyst",
+  "role": "Chief Intelligence Officer",
+  "description": "Deep research, signal analysis, foresight synthesis. The sense-making layer. Needs full AK-OS context and frontier-grade reasoning. This is the Ansible's brain.",
+  "compute": {
+    "node": "cloud",
+    "preference": "frontier",
+    "model_profile": "claude-opus-4-6",
+    "fallback": "claude-sonnet-4-6"
+  },
+  "budget": {
+    "type": "cloud",
+    "monthly_limit_usd": 40,
+    "warning_threshold_percent": 80,
+    "auto_pause_at_limit": true,
+    "fallback_on_pause": "ops-handler"
+  },
+  "governance": {
+    "autonomy_level": "medium",
+    "can_route_to_agents": false,
+    "can_route_to_cloud": false,
+    "can_send_notifications": false,
+    "can_modify_state": true,
+    "requires_approval": ["publish_content", "send_email", "update_project_status"]
+  },
+  "triggers": {
+    "routed_from": "jarvis-router",
+    "scheduled": ["morning-briefing-synthesis", "weekly-signal-scan", "friday-self-improvement"],
+    "event": ["meeting_prep_needed", "deep_research_request"]
+  },
+  "context_files": [
+    "db/ak-os/INTEREST-ONTOLOGY.md",
+    "db/ak-os/entities/signals.md",
+    "db/ak-os/entities/projects.md",
+    "db/ak-os/entities/patterns.md",
+    "db/ak-os/entities/people.md",
+    "db/ak-os/STATE.md",
+    "db/AK_Master_Context_2026.md"
+  ],
+  "tools": [
+    "web_search",
+    "web_fetch",
+    "read_knowledge_base",
+    "write_knowledge_base",
+    "update_signal_registry",
+    "update_state",
+    "create_draft",
+    "analyze_document"
+  ],
+  "mcps": [
+    {
+      "name": "web_search",
+      "purpose": "Research across AI, foresight, biotech, quantum, org design, geopolitics",
+      "type": "built-in"
+    },
+    {
+      "name": "gmail",
+      "purpose": "Read emails for context — expert networks, client comms, opportunities",
+      "tools": ["search_messages", "read_message", "read_thread"],
+      "note": "READ ONLY — cerebro never sends email"
+    },
+    {
+      "name": "google_calendar",
+      "purpose": "Read calendar for meeting prep context",
+      "tools": ["list_events", "get_event"],
+      "note": "READ ONLY — cerebro never creates/modifies events"
+    },
+    {
+      "name": "google_drive",
+      "purpose": "Access deep context documents",
+      "tools": ["search", "fetch"],
+      "note": "READ ONLY"
+    }
+  ],
+  "skills": [
+    "boundary-scanner",
+    "signal-detection",
+    "foresight-synthesis",
+    "meeting-prep",
+    "pattern-detection",
+    "ansible-methodology"
+  ]
+}

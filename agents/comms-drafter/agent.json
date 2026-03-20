@@ -1,0 +1,72 @@
+{
+  "name": "comms-drafter",
+  "role": "Communications Director",
+  "description": "Drafts emails, LinkedIn posts, Boundary Layer articles, follow-ups, pitches. Must write in Alexander's voice. Requires full brand context and style guide. NEVER sends — always queues for approval.",
+  "compute": {
+    "node": "cloud",
+    "preference": "frontier",
+    "model_profile": "claude-sonnet-4-6",
+    "fallback": "claude-opus-4-6",
+    "note": "Voice fidelity requires frontier model — local models cannot match Alexander's tone"
+  },
+  "budget": {
+    "type": "cloud",
+    "monthly_limit_usd": 15,
+    "warning_threshold_percent": 80,
+    "auto_pause_at_limit": true,
+    "fallback_on_pause": null,
+    "note": "If budget exhausted, queue comms tasks until next month"
+  },
+  "governance": {
+    "autonomy_level": "low",
+    "can_route_to_agents": false,
+    "can_route_to_cloud": false,
+    "can_send_notifications": true,
+    "can_modify_state": false,
+    "requires_approval": ["EVERYTHING — this agent ONLY drafts, NEVER sends or publishes"],
+    "approval_queue": "comms-review",
+    "note": "Law Two is absolute here. Every output goes to Alexander's approval queue."
+  },
+  "triggers": {
+    "routed_from": "jarvis-router",
+    "scheduled": ["weekly-content-draft", "tuesday-boundary-layer"],
+    "event": ["follow_up_needed", "email_draft_request", "content_request"]
+  },
+  "context_files": [
+    "memory/context/voice-and-brand-rules.md",
+    "db/Alexander_Kline_Voice_Style_Guide_v3.md",
+    "db/AK_OS_Brand_Context.md",
+    "db/ak-os/entities/people.md",
+    "db/ak-os/STATE.md"
+  ],
+  "tools": [
+    "read_knowledge_base",
+    "create_draft_email",
+    "create_draft_post",
+    "create_draft_article",
+    "queue_for_approval",
+    "read_person_context"
+  ],
+  "mcps": [
+    {
+      "name": "gmail",
+      "purpose": "Read email threads for context when drafting replies",
+      "tools": ["search_messages", "read_message", "read_thread"],
+      "note": "READ ONLY — comms-drafter reads context, queues drafts, NEVER sends"
+    }
+  ],
+  "voice_rules": {
+    "source": "memory/context/voice-and-brand-rules.md",
+    "critical_rules": [
+      "Identity = leader, not builder",
+      "No smarmy tone",
+      "No turnaround branding",
+      "No over-indexing on AI — multidisciplinary is core",
+      "No WFS references publicly yet",
+      "No Ansible name publicly",
+      "Innovation is his word",
+      "Prose over bullets",
+      "Casual professional, direct, warm, occasionally dry humor"
+    ]
+  }
+}

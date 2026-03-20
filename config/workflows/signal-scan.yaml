@@ -1,0 +1,212 @@
+# Signal Radar Scan — Workflow DAG Template
+# Trigger: Cron (Monday 9:00 AM PT)
+# Duration: ~15-20 min (API calls + LLM classification)
+# Agents: Cerebro (scan + classify) → Ops-Handler (update files + create draft)
+# Full spec: research/SIGNAL-RADAR-SPEC.md
+#
+# MODULARITY NOTE: Each source is a separate step. If we add HuggingFace Hub
+# or swap arXiv for Semantic Scholar, add/swap a step. The scoring and
+# classification step is independent of sources.
+
+name: signal-radar-scan
+version: "1.0"
+description: Weekly scan across GitHub, arXiv, Semantic Scholar, HN, PubMed for tools, papers, signals
+trigger:
+  type: cron
+  schedule: "0 9 * * 1"      # Monday 9:00 AM
+  timezone: America/Vancouver
+  node: tower
+
+input_schema:
+  domains: list[string]       # Override default domains (optional)
+  threshold: int              # Override scoring threshold (default: 30)
+
+steps:
+  # --- Source scans run in PARALLEL ---
+
+  - id: scan_github
+    agent: cerebro-analyst
+    action: search_github
+    description: "Search GitHub for new repos matching interest domains."
+    inputs:
+      queries:
+        - "personal AI agent language:python stars:>50 created:>{{7_days_ago}}"
+        - "MCP server language:typescript stars:>30 created:>{{7_days_ago}}"
+        - "foresight scenario planning stars:>20 created:>{{30_days_ago}}"
+        - "knowledge graph memory agent stars:>100 created:>{{30_days_ago}}"
+        - "local LLM orchestration stars:>50 created:>{{30_days_ago}}"
+        - "transmedia storytelling stars:>10 created:>{{90_days_ago}}"
+        - "genomics information architecture stars:>20 created:>{{90_days_ago}}"
+      api: github_search_api   # GET api.github.com/search/repositories
+      max_results_per_query: 10
+    outputs:
+      - github_results
+    timeout: 5m
+    requires_approval: false
+
+  - id: scan_arxiv
+    agent: cerebro-analyst
+    action: search_arxiv
+    description: "Search arXiv for papers in AI, foresight, genomics, quantum."
+    inputs:
+      queries:
+        - "cat:cs.AI AND (personal assistant OR agent memory)"
+        - "cat:cs.CL AND (knowledge graph OR retrieval augmented)"
+        - "cat:q-bio AND (information architecture OR genomics AI)"
+        - "cat:quant-ph AND (quantum computing applications)"
+      api: arxiv_api
+      date_range: last_7_days
+      max_results_per_query: 5
+    outputs:
+      - arxiv_results
+    timeout: 3m
+    requires_approval: false
+
+  - id: scan_semantic_scholar
+    agent: cerebro-analyst
+    action: search_semantic_scholar
+    description: "Search Semantic Scholar for high-citation recent papers."
+    inputs:
+      queries:
+        - "personal AI operating system"
+        - "AI agent memory architecture"
+        - "foresight methodology AI"
+        - "cross-domain synthesis"
+      api: semantic_scholar_api
+      date_range: last_30_days
+      min_citations: 5
+      max_results_per_query: 5
+    outputs:
+      - semantic_scholar_results
+    timeout: 3m
+    requires_approval: false
+
+  - id: scan_hackernews
+    agent: cerebro-analyst
+    action: search_hackernews
+    description: "Search HN Algolia for trending discussions in interest domains."
+    inputs:
+      queries:
+        - "personal AI"
+        - "MCP server"
+        - "local LLM"
+        - "foresight"
+        - "agent memory"
+      api: hn_algolia_api
+      min_points: 50
+      date_range: last_7_days
+      max_results_per_query: 5
+    outputs:
+      - hn_results
+    timeout: 2m
+    requires_approval: false
+
+  - id: scan_pubmed
+    agent: cerebro-analyst
+    action: search_pubmed
+    description: "Search PubMed for genomics/health papers with AI applications."
+    inputs:
+      queries:
+        - "(genomics[MeSH]) AND (artificial intelligence[MeSH]) AND (information architecture)"
+        - "(consciousness[MeSH]) AND (neural correlates) AND (computational model)"
+      api: pubmed_api
+      date_range: last_30_days
+      max_results_per_query: 5
+    outputs:
+      - pubmed_results
+    timeout: 2m
+    requires_approval: false
+
+  # --- Classification step: all results scored ---
+
+  - id: classify
+    agent: cerebro-analyst
+    action: classify_signals
+    description: "Score every result on Domain × Cross-Domain × Actionability. Filter to ≥30."
+    depends_on: [scan_github, scan_arxiv, scan_semantic_scholar, scan_hackernews, scan_pubmed]
+    inputs:
+      all_results:
+        github: "{{scan_github.github_results}}"
+        arxiv: "{{scan_arxiv.arxiv_results}}"
+        semantic_scholar: "{{scan_semantic_scholar.semantic_scholar_results}}"
+        hn: "{{scan_hackernews.hn_results}}"
+        pubmed: "{{scan_pubmed.pubmed_results}}"
+      scoring:
+        domain_relevance: 0-5        # How relevant to Alexander's 11 domains
+        cross_domain_potential: 0-5   # Does it bridge 2+ domains?
+        actionability: 0-5           # Can we USE this, not just know about it?
+        threshold: "{{input.threshold | default: 30}}"  # Domain × CrossDomain × Action ≥ 30
+      interest_ontology: "db/ak-os/INTEREST-ONTOLOGY.md"
+      existing_landscape: "db/ak-os/TOOL-LANDSCAPE.md"   # Don't surface what we already know
+    outputs:
+      - scored_signals     # All results with scores
+      - top_signals        # Filtered to ≥ threshold
+      - tool_candidates    # Subset that are tools/repos (for TOOL-LANDSCAPE.md)
+    timeout: 5m
+    requires_approval: false
+
+  # --- Output steps ---
+
+  - id: update_tool_landscape
+    agent: ops-handler
+    action: append_to_file
+    description: "Add new tool discoveries to TOOL-LANDSCAPE.md."
+    depends_on: [classify]
+    inputs:
+      file: "db/ak-os/TOOL-LANDSCAPE.md"
+      entries: "{{classify.tool_candidates}}"
+      format: tool-landscape-entry
+      status: "🗺️ Mapped"       # New discoveries start as Mapped
+    outputs:
+      - tools_added
+    timeout: 2m
+    requires_approval: false
+
+  - id: update_signals
+    agent: ops-handler
+    action: append_to_file
+    description: "Add scored signals to signals.md entity registry."
+    depends_on: [classify]
+    inputs:
+      file: "db/ak-os/entities/signals.md"
+      entries: "{{classify.top_signals}}"
+      format: signal-entry
+    outputs:
+      - signals_added
+    timeout: 2m
+    requires_approval: false
+
+  - id: format_report
+    agent: comms-drafter
+    action: format_signal_report
+    description: "Format the weekly signal radar report for Alexander."
+    depends_on: [classify]
+    inputs:
+      top_signals: "{{classify.top_signals}}"
+      tool_candidates: "{{classify.tool_candidates}}"
+      format: signal-radar-report
+      voice: concise-analytical   # Internal report, not public voice
+    outputs:
+      - report_html
+    timeout: 3m
+    requires_approval: false
+
+  - id: deliver
+    agent: ops-handler
+    action: create_gmail_draft
+    description: "Create Gmail draft with the signal radar report."
+    depends_on: [format_report, update_tool_landscape, update_signals]
+    inputs:
+      to: "alexanderkline13@gmail.com"
+      subject: "Signal Radar — Week of {{today_formatted}}"
+      body: "{{format_report.report_html}}"
+      tool: gmail_create_draft
+    outputs:
+      - draft_id
+    timeout: 1m
+    requires_approval: false
+
+# Total approximate time: 15-20 minutes
+# Sources: 5 (GitHub, arXiv, Semantic Scholar, HN, PubMed)
+# Scoring: Domain(0-5) × Cross-Domain(0-5) × Actionability(0-5) ≥ 30
+# Outputs: Gmail draft + TOOL-LANDSCAPE.md updates + signals.md updates

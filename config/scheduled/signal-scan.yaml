@@ -1,0 +1,19 @@
+# Scheduled Task: Signal Scan
+# Weekly cross-domain intelligence scan
+
+task_id: signal-scan
+schedule: "0 9 * * 1"  # Monday 9:00 AM
+timezone: America/Vancouver
+workflow: workflows/signal-scan.yaml
+node: tower
+enabled: true
+
+notification:
+  on_success: false
+  on_failure:
+    channel: gmail_draft
+    subject: "[BORGCLAW] Signal scan failed"
+
+retry:
+  max_attempts: 3
+  delay_seconds: 600

@@ -1,0 +1,155 @@
+# AK-OS MCP & Tool Registry
+# Master inventory of all connected tools, their capabilities, and status.
+#
+# MODULARITY PRINCIPLE: Every entry here is a slot, not a commitment.
+# The tool in the slot can be swapped at any time. What matters is the
+# CAPABILITY (what it does), not the IMPLEMENTATION (which tool does it).
+# When a better tool comes along, update the tool field. The agents
+# query by capability, not by tool name.
+#
+# Agents query: "I need search_messages capability" → registry returns
+# whichever tool currently fills that slot.
+
+_last_updated: "2026-03-15"
+
+# ============================================================
+# CONNECTED (currently available)
+# ============================================================
+
+connected:
+  - id: gmail-anthropic
+    capability: [search_messages, read_message, read_thread, list_labels, create_draft, list_drafts, get_profile]
+    tool: "Anthropic Gmail MCP"
+    node: cowork
+    status: online
+    gap: "No send capability (draft only). Upgrade path: gws CLI."
+    swappable_with: [gws]
+
+  - id: gcal-anthropic
+    capability: [list_events, create_event, update_event, delete_event, find_meeting_times, find_free_time]
+    tool: "Anthropic Google Calendar MCP"
+    node: cowork
+    status: online
+    swappable_with: [gws]
+
+  - id: gdrive-anthropic
+    capability: [search_drive, fetch_file]
+    tool: "Anthropic Google Drive MCP"
+    node: cowork
+    status: online
+    gap: "Read only. No upload/write. Upgrade path: gws CLI."
+    swappable_with: [gws]
+
+  - id: web-search
+    capability: [web_search, web_fetch]
+    tool: "Built-in Web Search"
+    node: cowork
+    status: online
+
+  - id: canva
+    capability: [generate_design, export_design, search_designs, edit_design]
+    tool: "Canva MCP"
+    node: cowork
+    status: online
+
+  - id: figma
+    capability: [get_screenshot, get_metadata, get_design_context]
+    tool: "Figma MCP"
+    node: cowork
+    status: online
+
+  - id: elevenlabs
+    capability: [generate_tts, generate_sound_effect, generate_music, play_audio]
+    tool: "ElevenLabs MCP"
+    node: cowork
+    status: online
+
+  - id: apple-notes
+    capability: [list_notes, get_note_content, add_note, update_note]
+    tool: "Apple Notes MCP"
+    node: cowork
+    status: unstable
+    notes: "Connection drops intermittently."
+
+# ============================================================
+# PENDING INSTALL (ready to connect)
+# ============================================================
+
+pending:
+  - id: qmd
+    capability: [semantic_search, keyword_search, reranked_search, context_lookup]
+    tool: "QMD MCP Server"
+    install: "npm install -g @tobilu/qmd && qmd mcp-server"
+    node: queen
+    status: pending_install
+    replaces: [lancedb-custom-mcp]
+    notes: "Built-in MCP server. Zero custom code."
+
+  - id: fizzy
+    capability: [list_cards, create_card, update_card, move_card, list_columns, webhooks]
+    tool: "Fizzy MCP (Fabric-Pro/fizzy-mcp)"
+    install: "npm install @silky/fizzy-mcp"
+    node: queen
+    status: pending_connect
+
+  - id: gws
+    capability: [gmail_send, drive_write, docs_read_write, sheets_read_write, calendar_full]
+    tool: "Google Workspace CLI (@googleworkspace/cli)"
+    install: "npm install -g @googleworkspace/cli && gws auth login && gws mcp"
+    node: tower
+    status: pending_install
+    replaces: [gmail-anthropic, gdrive-anthropic, gcal-anthropic]
+    notes: "First-party Google. AES-256-GCM. Replaces 3 separate MCPs with 1."
+
+# ============================================================
+# NOT CONNECTED (need research or no MCP exists yet)
+# ============================================================
+
+not_connected:
+  - id: github
+    capability: [repos, issues, pull_requests, actions, code_search]
+    tool: "GitHub MCP (TBD)"
+    status: not_connected
+    notes: "Multiple options exist. Evaluate when needed."
+
+  - id: linkedin
+    capability: [post, engage, network_search, messaging]
+    tool: "No official MCP. Browser automation fallback."
+    status: not_connected
+    notes: "May need thin custom MCP wrapping unofficial API."
+
+  - id: substack
+    capability: [publish, analytics, subscriber_list]
+    tool: "No official MCP or API."
+    status: not_connected
+    notes: "Hardest last-mile integration. May need browser automation."
+
+  - id: x-twitter
+    capability: [post, reply, search]
+    tool: "X API v2 (thin MCP wrapper)"
+    status: not_connected
+    notes: "API exists but rate limits and cost unclear."
+
+# ============================================================
+# CAPABILITY INDEX (what agents query)
+# ============================================================
+# This is the abstraction layer. Agents ask for capabilities,
+# not specific tools. The registry resolves to the current
+# best available tool for each capability.
+
+capability_index:
+  search_messages: gmail-anthropic       # → gws when installed
+  send_email: null                       # GAP: gws pending
+  create_draft: gmail-anthropic
+  search_drive: gdrive-anthropic         # → gws when installed
+  write_drive: null                      # GAP: gws pending
+  calendar_events: gcal-anthropic
+  semantic_search: null                  # GAP: qmd pending
+  task_management: null                  # GAP: fizzy pending
+  web_search: web-search
+  design_generation: canva
+  text_to_speech: elevenlabs
+  code_repository: null                  # GAP: github pending
+  social_post_linkedin: null             # GAP: not connected
+  social_post_x: null                    # GAP: not connected
+  publish_substack: null                 # GAP: not connected

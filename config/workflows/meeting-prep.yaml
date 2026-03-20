@@ -1,0 +1,111 @@
+# Workflow: Meeting Prep
+# Triggered: On-demand (Jarvis detects upcoming meeting within 2 hours) or manual
+# Duration: ~5 minutes
+# Agents: Cerebro, Comms-Drafter, Jarvis
+#
+# MODULARITY: Every tool reference resolves through registry.yaml.
+# If a data source changes, update registry — not this file.
+
+name: meeting-prep
+version: "1.0"
+trigger:
+  type: event
+  source: gcal
+  condition: "meeting_starts_within_minutes <= 120 AND meeting.attendees.length > 0"
+  also: manual
+
+variables:
+  meeting_id: "{{trigger.event_id}}"
+  attendees: "{{trigger.attendees}}"
+  meeting_title: "{{trigger.title}}"
+
+steps:
+  - id: fetch_meeting_details
+    agent: cerebro
+    action: query
+    tool_capability: calendar_events
+    params:
+      event_id: "{{meeting_id}}"
+    outputs: [meeting_details]
+
+  - id: research_attendees
+    agent: cerebro
+    action: research_people
+    depends_on: [fetch_meeting_details]
+    params:
+      people: "{{meeting_details.attendees}}"
+      sources:
+        - capability: search_messages
+          query: "from:{{attendee.email}}"
+          limit: 10
+        - capability: search_drive
+          query: "{{attendee.name}}"
+          limit: 5
+        - capability: web_search
+          query: "{{attendee.name}} {{attendee.org}} LinkedIn"
+          limit: 3
+      cross_reference: "db/ak-os/entities/people.md"
+    outputs: [attendee_profiles]
+    timeout_seconds: 120
+
+  - id: scan_prior_threads
+    agent: cerebro
+    action: query
+    depends_on: [fetch_meeting_details]
+    params:
+      sources:
+        - capability: search_messages
+          query: "{{meeting_details.title}} OR {{meeting_details.organizer}}"
+          limit: 20
+        - capability: semantic_search
+          query: "{{meeting_details.title}} meeting context"
+          collection: master-context
+    outputs: [prior_context]
+    timeout_seconds: 60
+
+  - id: check_open_decisions
+    agent: sentinel
+    action: pattern_scan
+    depends_on: []
+    params:
+      scan_type: decisions_relevant_to
+      filter: "{{meeting_title}}"
+      source: "db/ak-os/entities/decisions.md"
+    outputs: [relevant_decisions]
+
+  - id: format_prep_doc
+    agent: comms-drafter
+    action: draft
+    depends_on: [research_attendees, scan_prior_threads, check_open_decisions]
+    params:
+      template: meeting-prep
+      context:
+        meeting: "{{meeting_details}}"
+        attendees: "{{attendee_profiles}}"
+        prior: "{{prior_context}}"
+        decisions: "{{relevant_decisions}}"
+      format: markdown
+      sections:
+        - meeting_overview
+        - attendee_briefs
+        - prior_interaction_summary
+        - open_items_and_decisions
+        - suggested_talking_points
+        - questions_to_ask
+    outputs: [prep_document]
+    approval: none  # Internal prep doc, no external delivery
+
+  - id: deliver
+    agent: ops-handler
+    action: deliver
+    depends_on: [format_prep_doc]
+    params:
+      channel: gmail_draft
+      to: "alexanderkline13@gmail.com"
+      subject: "Meeting Prep: {{meeting_title}}"
+      body: "{{prep_document}}"
+    outputs: [delivery_confirmation]
+
+error_handling:
+  on_attendee_research_failure: "Continue with available data. Note gaps in prep doc."
+  on_no_prior_context: "Note 'First interaction' in prep doc. Suggest discovery questions."

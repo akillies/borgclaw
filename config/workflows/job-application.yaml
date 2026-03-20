@@ -1,0 +1,185 @@
+# Workflow: Job Application Pipeline
+# Triggered: Weekly scan (Monday 10 AM PT) + manual for specific applications
+# Duration: Scan ~10 min, full application prep ~30 min
+# Agents: Cerebro, Comms-Drafter, Sentinel, Ops-Handler
+#
+# MODULARITY: Job sources are pluggable. Add new sources as capabilities
+# appear in registry.yaml. The scoring model is in the params, not hardcoded.
+
+name: job-application
+version: "1.0"
+trigger:
+  type: cron
+  schedule: "0 10 * * 1"  # Monday 10:00 AM
+  timezone: America/Vancouver
+  also: manual
+
+variables:
+  target_roles:
+    - "AI Strategy"
+    - "Foresight"
+    - "Innovation Lead"
+    - "Knowledge Architecture"
+    - "AI Product"
+    - "Consulting Director"
+  target_rate_floor_usd: 125
+  target_salary_floor_cad: 140000
+  location_preference: ["remote", "Victoria BC", "Vancouver BC"]
+
+steps:
+  # --- SCAN PHASE (parallel) ---
+
+  - id: scan_job_boards
+    agent: cerebro
+    action: research
+    params:
+      sources:
+        - capability: web_search
+          queries:
+            - "AI strategy director remote job 2026"
+            - "foresight lead innovation remote job"
+            - "knowledge architecture AI product manager"
+            - "consulting director AI transformation"
+          limit_per_query: 10
+        - capability: search_messages
+          query: "subject:(job OR opportunity OR role OR position) newer_than:7d"
+          limit: 20
+    outputs: [raw_listings]
+    timeout_seconds: 180
+
+  - id: scan_network_referrals
+    agent: cerebro
+    action: query
+    params:
+      sources:
+        - capability: search_messages
+          query: "from:(kate OR guidepoint OR glg OR alphasights) newer_than:7d"
+          limit: 10
+        - capability: search_messages
+          query: "(referral OR recommend OR thought of you) newer_than:14d"
+          limit: 10
+    outputs: [referral_signals]
+    timeout_seconds: 60
+
+  # --- SCORING PHASE ---
+
+  - id: score_and_rank
+    agent: cerebro
+    action: analyze
+    depends_on: [scan_job_boards, scan_network_referrals]
+    params:
+      input: "{{raw_listings}} + {{referral_signals}}"
+      scoring:
+        csa_alignment:
+          creativity: "Does this feed Alexander's creative identity and cross-domain work?"
+          security: "Does this improve financial stability? Rate vs floor."
+          abundance: "Does this open scale, network, or future opportunities?"
+        weights:
+          rate_above_floor: 0.25
+          role_title_match: 0.20
+          remote_friendly: 0.15
+          csa_creativity: 0.15
+          csa_abundance: 0.15
+          csa_security: 0.10
+      deduplicate: true
+      exclude_applied: "db/ak-os/entities/decisions.md#job-applications"
+    outputs: [ranked_opportunities]
+
+  # --- CHECK FOR STALE APPLICATIONS ---
+
+  - id: check_application_status
+    agent: sentinel
+    action: pattern_scan
+    depends_on: []
+    params:
+      scan_type: stale_applications
+      source: "db/ak-os/entities/decisions.md"
+      thresholds:
+        no_response_days: 14
+        interview_followup_days: 3
+    outputs: [stale_applications]
+
+  # --- FORMAT & DELIVER ---
+
+  - id: format_report
+    agent: comms-drafter
+    action: draft
+    depends_on: [score_and_rank, check_application_status]
+    params:
+      template: job-scan-weekly
+      context:
+        opportunities: "{{ranked_opportunities}}"
+        stale: "{{stale_applications}}"
+      sections:
+        - top_opportunities_this_week   # Top 5, scored
+        - network_referral_signals      # Warm leads
+        - stale_application_followups   # Needs action
+        - expert_network_status         # Guidepoint, GLG, etc.
+      tone: direct_actionable
+    outputs: [weekly_report]
+    approval: none  # Internal report
+
+  - id: deliver
+    agent: ops-handler
+    action: deliver
+    depends_on: [format_report]
+    params:
+      channel: gmail_draft
+      to: "alexanderkline13@gmail.com"
+      subject: "Job Scanner: Week of {{trigger.date_formatted}}"
+      body: "{{weekly_report}}"
+    outputs: [delivery_confirmation]
+
+# --- ON-DEMAND: Full application prep (manual trigger) ---
+
+on_demand_actions:
+  prepare_application:
+    description: "Full prep for a specific role. Jarvis triggers manually."
+    steps:
+      - id: research_company
+        agent: cerebro
+        action: deep_research
+        params:
+          company: "{{manual.company}}"
+          role: "{{manual.role_title}}"
+          sources: [web_search, search_drive, semantic_search]
+        outputs: [company_intel]
+
+      - id: tailor_resume_points
+        agent: comms-drafter
+        action: draft
+        depends_on: [research_company]
+        params:
+          template: resume-tailoring
+          context:
+            company: "{{company_intel}}"
+            role: "{{manual.role_title}}"
+            master_context: "db/AK_Master_Context_2026.md"
+            voice_rules: "memory/context/voice-and-brand-rules.md"
+          output_format: bullet_points
+          ats_optimized: true
+        outputs: [tailored_points]
+        approval: required  # Alexander reviews before submitting
+
+      - id: draft_cover_letter
+        agent: comms-drafter
+        action: draft
+        depends_on: [research_company]
+        params:
+          template: cover-letter
+          context:
+            company: "{{company_intel}}"
+            role: "{{manual.role_title}}"
+            voice_rules: "memory/context/voice-and-brand-rules.md"
+          constraints:
+            - "Identity: leader, not builder"
+            - "Innovation is his word"
+            - "Multidisciplinary is core positioning"
+            - "No turnaround branding"
+            - "ATS-friendly formatting"
+        outputs: [cover_letter]
+        approval: required
+
+error_handling:
+  on_no_results: "Report 'No new opportunities matching criteria this week.' Still check stale applications."
+  on_search_rate_limit: "Reduce queries. Deliver partial results with gap note."

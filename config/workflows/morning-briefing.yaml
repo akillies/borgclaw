@@ -1,0 +1,123 @@
+# Morning Briefing — Workflow DAG Template
+# Trigger: Cron (weekdays 8:30 AM PT)
+# Duration: ~5-10 min
+# Agents: Cerebro (research) → Sentinel (pattern scan) → Comms-Drafter (format) → Ops-Handler (deliver)
+#
+# MODULARITY NOTE: Sources (Gmail, Calendar, Web) are queried via MCPs.
+# If Gmail MCP is swapped for gws, change the tool reference.
+# If delivery switches from Gmail draft to ntfy push, change the ops-handler action.
+
+name: morning-briefing
+version: "1.0"
+description: Daily intelligence brief delivered as Gmail draft
+trigger:
+  type: cron
+  schedule: "30 8 * * 1-5"   # Weekdays 8:30 AM
+  timezone: America/Vancouver
+  node: tower                  # Runs on always-on tower
+
+input_schema: {}  # No user input — fully automated
+
+steps:
+  - id: scan_calendar
+    agent: cerebro-analyst
+    action: scan_calendar
+    description: "Check today's calendar for meetings. Flag any needing prep."
+    inputs:
+      date: "{{today}}"
+      look_ahead_days: 2
+      tool: gcal_list_events
+    outputs:
+      - today_events
+      - needs_prep       # List of events needing meeting prep
+    timeout: 2m
+    requires_approval: false
+
+  - id: scan_inbox
+    agent: cerebro-analyst
+    action: scan_inbox
+    description: "Check priority inbox patterns: expert networks, revenue, WFS, key contacts."
+    inputs:
+      queries:
+        - "from:guidepoint OR from:glg"           # Expert networks
+        - "from:gumroad OR from:stripe"            # Revenue
+        - "from:julie subject:WFS"                 # WFS
+        - "is:unread is:important"                 # Unread important
+      since: yesterday
+      tool: gmail_search_messages
+    outputs:
+      - inbox_highlights
+      - revenue_alerts
+      - expert_network_updates
+    timeout: 3m
+    requires_approval: false
+
+  - id: scan_signals
+    agent: cerebro-analyst
+    action: scan_web_signals
+    description: "Quick signal scan across AI, foresight, biotech. Not the full weekly radar."
+    inputs:
+      domains: [ai_systems, foresight, biotech, quantum]  # Top 4 from INTEREST-ONTOLOGY
+      depth: quick          # 2-3 sources, not deep dive
+      tool: web_search
+    outputs:
+      - signal_highlights   # Top 3-5 signals worth noting
+    timeout: 3m
+    requires_approval: false
+
+  - id: pattern_scan
+    agent: sentinel
+    action: daily_pattern_check
+    description: "Quick check on all 6 blind-spot patterns + relationship decay."
+    depends_on: []  # Parallel with cerebro scans
+    inputs:
+      check_patterns: all
+      check_relationships: tier_1_only   # Full relationship scan is weekly
+      check_finances: quick              # Just revenue vs floor
+    outputs:
+      - pattern_alerts      # Any triggered patterns
+      - relationship_alerts # Any decaying Tier 1 contacts
+      - financial_status    # Quick health indicator
+    timeout: 2m
+    requires_approval: false
+
+  - id: format_briefing
+    agent: comms-drafter
+    action: format_briefing
+    description: "Assemble all scan results into a clean morning briefing."
+    depends_on: [scan_calendar, scan_inbox, scan_signals, pattern_scan]
+    inputs:
+      calendar: "{{scan_calendar.today_events}}"
+      needs_prep: "{{scan_calendar.needs_prep}}"
+      inbox: "{{scan_inbox.inbox_highlights}}"
+      revenue: "{{scan_inbox.revenue_alerts}}"
+      expert_networks: "{{scan_inbox.expert_network_updates}}"
+      signals: "{{scan_signals.signal_highlights}}"
+      patterns: "{{pattern_scan.pattern_alerts}}"
+      relationships: "{{pattern_scan.relationship_alerts}}"
+      finances: "{{pattern_scan.financial_status}}"
+      format: morning-briefing-template
+      voice: concise-professional  # Not full Alexander voice — this is internal
+    outputs:
+      - briefing_html       # Formatted briefing
+    timeout: 3m
+    requires_approval: false  # Internal brief, not external comms
+
+  - id: deliver
+    agent: ops-handler
+    action: create_gmail_draft
+    description: "Create Gmail draft with the morning briefing."
+    depends_on: [format_briefing]
+    inputs:
+      to: "alexanderkline13@gmail.com"
+      subject: "AK-OS Morning Brief — {{today_formatted}}"
+      body: "{{format_briefing.briefing_html}}"
+      tool: gmail_create_draft    # Swap to gws_send when available
+    outputs:
+      - draft_id
+    timeout: 1m
+    requires_approval: false  # Drafts don't need approval (Law Two: drafts are safe)
+
+# Total approximate time: 5-8 minutes
+# Delivery: Gmail draft waiting when Alexander opens email ~9 AM
+# Future upgrade: When gws is installed, switch deliver action to send instead of draft

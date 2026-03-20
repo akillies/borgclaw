@@ -1,0 +1,19 @@
+# Scheduled Task: Job Market Scanner
+# Weekly scan for relevant roles + stale application follow-ups
+
+task_id: job-market-scanner
+schedule: "0 10 * * 1"  # Monday 10:00 AM
+timezone: America/Vancouver
+workflow: workflows/job-application.yaml
+node: tower
+enabled: true
+
+notification:
+  on_success: false
+  on_failure:
+    channel: gmail_draft
+    subject: "[BORGCLAW] Job scanner failed"
+
+retry:
+  max_attempts: 2
+  delay_seconds: 600

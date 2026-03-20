@@ -1,0 +1,85 @@
+# Scheduled Task: Self-Improvement Scan
+# Weekly check for new tools, connectors, capabilities
+
+task_id: self-improvement-scan
+schedule: "0 11 * * 5"  # Friday 11:00 AM
+timezone: America/Vancouver
+node: tower
+enabled: true
+
+steps:
+  - id: scan_mcp_registry
+    agent: cerebro
+    action: research
+    params:
+      sources:
+        - capability: web_search
+          queries:
+            - "new MCP server 2026"
+            - "model context protocol connector new"
+            - "Claude Code plugin new"
+          limit: 10
+        - capability: web_search
+          queries:
+            - "QMD update changelog"
+            - "Fizzy MCP update"
+            - "ollama new models"
+            - "LM Studio update"
+          limit: 5
+      cross_reference: "db/ak-os/projects/borgclaw/config/mcps/registry.yaml"
+    outputs: [new_tools]
+
+  - id: check_capability_gaps
+    agent: sentinel
+    action: pattern_scan
+    params:
+      source: "db/ak-os/projects/borgclaw/config/mcps/registry.yaml"
+      scan_type: unfilled_capabilities
+      check_against: "db/ak-os/CAPABILITY-ROADMAP.md"
+    outputs: [gap_analysis]
+
+  - id: check_model_updates
+    agent: cerebro
+    action: research
+    params:
+      sources:
+        - capability: web_search
+          queries:
+            - "Qwen 3 new model release 2026"
+            - "small language model benchmark 2026"
+            - "MLX compatible models new"
+          limit: 10
+      cross_reference: "db/ak-os/projects/borgclaw/config/models.json"
+    outputs: [model_updates]
+
+  - id: format_report
+    agent: comms-drafter
+    depends_on: [scan_mcp_registry, check_capability_gaps, check_model_updates]
+    action: draft
+    params:
+      template: self-improvement-weekly
+      sections:
+        - new_tools_discovered
+        - capability_gaps_update
+        - model_updates
+        - recommended_actions
+    outputs: [report]
+
+  - id: deliver
+    agent: ops-handler
+    depends_on: [format_report]
+    action: deliver
+    params:
+      channel: gmail_draft
+      to: "alexanderkline13@gmail.com"
+      subject: "Self-Improvement Scan: {{trigger.date_formatted}}"
+      body: "{{report}}"
+
+notification:
+  on_failure:
+    channel: gmail_draft
+    subject: "[BORGCLAW] Self-improvement scan failed"
+
+retry:
+  max_attempts: 2
+  delay_seconds: 600

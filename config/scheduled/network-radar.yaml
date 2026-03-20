@@ -1,0 +1,19 @@
+# Scheduled Task: Network & Opportunity Radar
+# Weekly relationship decay detection + nudge drafts
+
+task_id: network-and-opportunity-radar
+schedule: "0 9 * * 1"  # Monday 9:00 AM
+timezone: America/Vancouver
+workflow: workflows/relationship-nudge.yaml
+node: tower
+enabled: true
+
+notification:
+  on_success: false
+  on_failure:
+    channel: gmail_draft
+    subject: "[BORGCLAW] Network radar failed"
+
+retry:
+  max_attempts: 2
+  delay_seconds: 300

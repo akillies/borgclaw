@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AK-OS — Control Plane</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, 'SF Pro', 'Inter', system-ui, sans-serif; background:#0a0a0f; color:#e0e0e0; min-height:100vh; }
+
+  /* SIDEBAR */
+  .sidebar { position:fixed; left:0; top:0; bottom:0; width:220px; background:#0f0f18; border-right:1px solid #1a1a2e; padding:16px 0; display:flex; flex-direction:column; z-index:10; }
+  .logo { padding:8px 20px 24px; font-size:18px; font-weight:700; color:#00ff88; letter-spacing:1px; }
+  .logo span { color:#60a5fa; font-weight:400; font-size:13px; display:block; margin-top:2px; }
+  .nav-section { font-size:10px; text-transform:uppercase; color:#555; padding:16px 20px 6px; letter-spacing:1.5px; }
+  .nav-item { padding:8px 20px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:10px; color:#888; transition: all .15s; border-left:3px solid transparent; }
+  .nav-item:hover { color:#e0e0e0; background:#1a1a2e; }
+  .nav-item.active { color:#00ff88; background:#0d1a14; border-left-color:#00ff88; }
+  .nav-item .icon { font-size:15px; width:20px; text-align:center; }
+  .nav-item .badge { margin-left:auto; background:#f87171; color:#fff; font-size:10px; padding:1px 6px; border-radius:8px; font-weight:600; }
+  .sidebar-footer { margin-top:auto; padding:12px 20px; border-top:1px solid #1a1a2e; font-size:11px; color:#444; }
+
+  /* MAIN */
+  .main { margin-left:220px; padding:24px 32px; }
+  .page { display:none; }
+  .page.active { display:block; }
+
+  /* COMMON */
+  h1 { font-size:22px; font-weight:600; margin-bottom:4px; }
+  h1 + p { color:#888; font-size:13px; margin-bottom:24px; }
+  h2 { font-size:16px; font-weight:600; margin:24px 0 12px; color:#c0c0c0; }
+  .card { background:#12121e; border:1px solid #1a1a2e; border-radius:10px; padding:20px; margin-bottom:16px; }
+  .card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .card-header h3 { font-size:14px; font-weight:600; }
+  .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+  .status-dot.green { background:#00ff88; box-shadow:0 0 6px #00ff8855; }
+  .status-dot.yellow { background:#fbbf24; box-shadow:0 0 6px #fbbf2455; }
+  .status-dot.red { background:#f87171; box-shadow:0 0 6px #f8717155; }
+  .status-dot.gray { background:#555; }
+  .tag { display:inline-block; font-size:10px; padding:2px 8px; border-radius:4px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; }
+  .tag.running { background:#00ff8822; color:#00ff88; }
+  .tag.stopped { background:#f8717122; color:#f87171; }
+  .tag.pending { background:#fbbf2422; color:#fbbf24; }
+  .tag.mapped { background:#60a5fa22; color:#60a5fa; }
+  .btn { padding:6px 14px; border-radius:6px; border:1px solid #333; background:#1a1a2e; color:#e0e0e0; font-size:12px; cursor:pointer; transition:all .15s; }
+  .btn:hover { border-color:#00ff88; color:#00ff88; }
+  .btn.primary { background:#00ff8822; border-color:#00ff88; color:#00ff88; }
+  .btn.danger { background:#f8717122; border-color:#f87171; color:#f87171; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; padding:8px 12px; border-bottom:1px solid #1a1a2e; color:#888; font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+  td { padding:8px 12px; border-bottom:1px solid #0f0f18; }
+  .mono { font-family:'SF Mono','Fira Code',monospace; font-size:12px; }
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+  .grid-4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; }
+  .stat-card { background:#12121e; border:1px solid #1a1a2e; border-radius:8px; padding:16px; text-align:center; }
+  .stat-card .num { font-size:28px; font-weight:700; color:#00ff88; }
+  .stat-card .label { font-size:11px; color:#888; margin-top:4px; text-transform:uppercase; letter-spacing:.5px; }
+  .progress-bar { height:6px; background:#1a1a2e; border-radius:3px; overflow:hidden; margin-top:8px; }
+  .progress-fill { height:100%; border-radius:3px; transition: width .3s; }
+  input, select, textarea { background:#0a0a0f; border:1px solid #1a1a2e; color:#e0e0e0; padding:8px 12px; border-radius:6px; font-size:13px; font-family:inherit; width:100%; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:#00ff88; }
+  textarea { resize:vertical; min-height:80px; }
+  label { font-size:12px; color:#888; display:block; margin-bottom:4px; }
+  .form-row { margin-bottom:12px; }
+  .form-row-inline { display:flex; gap:12px; margin-bottom:12px; }
+  .form-row-inline > div { flex:1; }
+  .toggle { position:relative; width:40px; height:22px; cursor:pointer; }
+  .toggle input { display:none; }
+  .toggle .slider { position:absolute; inset:0; background:#333; border-radius:11px; transition:.2s; }
+  .toggle .slider:before { content:''; position:absolute; width:16px; height:16px; left:3px; bottom:3px; background:#888; border-radius:50%; transition:.2s; }
+  .toggle input:checked + .slider { background:#00ff8844; }
+  .toggle input:checked + .slider:before { transform:translateX(18px); background:#00ff88; }
+  .terminal { background:#050508; border:1px solid #1a1a2e; border-radius:8px; padding:16px; font-family:'SF Mono','Fira Code',monospace; font-size:12px; line-height:1.6; color:#00ff88; max-height:300px; overflow-y:auto; white-space:pre-wrap; }
+  .wizard-steps { display:flex; gap:0; margin-bottom:32px; }
+  .wizard-step { flex:1; padding:12px; text-align:center; font-size:12px; border-bottom:3px solid #1a1a2e; color:#555; }
+  .wizard-step.active { border-bottom-color:#00ff88; color:#00ff88; }
+  .wizard-step.done { border-bottom-color:#00ff8866; color:#00ff8888; }
+  .wizard-step .step-num { font-size:18px; font-weight:700; display:block; }
+  .approval-item { display:flex; align-items:center; gap:12px; padding:12px 16px; background:#12121e; border:1px solid #1a1a2e; border-radius:8px; margin-bottom:8px; }
+  .approval-item .type { font-size:10px; text-transform:uppercase; color:#fbbf24; letter-spacing:.5px; }
+  .approval-item .desc { font-size:13px; flex:1; }
+  .approval-item .time { font-size:11px; color:#555; }
+  .tab-row { display:flex; gap:0; border-bottom:1px solid #1a1a2e; margin-bottom:20px; }
+  .tab-btn { padding:8px 16px; font-size:12px; color:#888; cursor:pointer; border-bottom:2px solid transparent; background:none; border-top:none; border-left:none; border-right:none; font-family:inherit; }
+  .tab-btn:hover { color:#e0e0e0; }
+  .tab-btn.active { color:#00ff88; border-bottom-color:#00ff88; }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+
+  @media (max-width: 900px) {
+    .sidebar { width:60px; }
+    .sidebar .logo span, .nav-section, .nav-item span:not(.icon), .sidebar-footer { display:none; }
+    .logo { font-size:14px; padding:8px 12px 16px; text-align:center; }
+    .nav-item { padding:10px 0; justify-content:center; }
+    .main { margin-left:60px; padding:16px; }
+    .grid-2, .grid-3, .grid-4 { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="logo">AK-OS<span>Control Plane v0.1</span></div>
+
+  <div class="nav-section">System</div>
+  <div class="nav-item active" onclick="showPage('setup')"><span class="icon">⚡</span><span>Setup Wizard</span></div>
+  <div class="nav-item" onclick="showPage('status')"><span class="icon">📊</span><span>System Status</span></div>
+  <div class="nav-item" onclick="showPage('approvals')"><span class="icon">✅</span><span>Approvals</span><span class="badge">3</span></div>
+
+  <div class="nav-section">Configure</div>
+  <div class="nav-item" onclick="showPage('tools')"><span class="icon">🧱</span><span>Tool Stack</span></div>
+  <div class="nav-item" onclick="showPage('agents')"><span class="icon">🤖</span><span>Agents</span></div>
+  <div class="nav-item" onclick="showPage('workflows')"><span class="icon">🔀</span><span>Workflows</span></div>
+  <div class="nav-item" onclick="showPage('connections')"><span class="icon">🔌</span><span>Connections</span></div>
+
+  <div class="nav-section">Intelligence</div>
+  <div class="nav-item" onclick="showPage('radar')"><span class="icon">🛰️</span><span>Signal Radar</span></div>
+  <div class="nav-item" onclick="showPage('experiments')"><span class="icon">🧪</span><span>Experiments</span></div>
+  <div class="nav-item" onclick="showPage('landscape')"><span class="icon">🗺️</span><span>Tool Landscape</span></div>
+
+  <div class="nav-section">Knowledge</div>
+  <div class="nav-item" onclick="showPage('knowledge')"><span class="icon">🧠</span><span>AK-OS Files</span></div>
+
+  <div class="sidebar-footer">
+    AK-OS + BorgClaw<br>
+    Alexander Kline © 2026
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- ==================== SETUP WIZARD ==================== -->
+  <div id="setup" class="page active">
+    <h1>Setup Wizard</h1>
+    <p>First-run deployment: plug in the drive, configure, deploy. Three steps.</p>
+
+    <div class="wizard-steps">
+      <div class="wizard-step active"><span class="step-num">1</span>Detect Hardware</div>
+      <div class="wizard-step"><span class="step-num">2</span>Configure Stack</div>
+      <div class="wizard-step"><span class="step-num">3</span>Deploy & Verify</div>
+    </div>
+
+    <!-- Step 1 -->
+    <div id="wizard-1" class="card">
+      <div class="card-header"><h3>Step 1 — Hardware Detection</h3><span class="tag running">SCANNING</span></div>
+      <p style="color:#888;font-size:13px;margin-bottom:16px;">The Assimilator script auto-detects what you're running on and picks the right model + config.</p>
+
+      <div class="terminal">$ ./assimilate.sh
+
+[DETECT] Hostname: kronos
+[DETECT] OS: macOS 15.3 (Sequoia)
+[DETECT] CPU: Apple M4 Pro (14-core)
+[DETECT] RAM: 24 GB
+[DETECT] GPU: Apple M4 Pro (20-core GPU, 16-core Neural Engine)
+[DETECT] Disk: 465 GB free of 1 TB
+[DETECT] Network: 192.168.1.42 (LAN) + Tailscale: 100.x.x.x
+
+[CLASSIFY] Node type: MAC_APPLE_SILICON
+[CLASSIFY] Capability: LOCAL_INFERENCE + QUEEN_ELIGIBLE
+[CLASSIFY] Recommended LLM runtime: LM Studio (MLX)
+[CLASSIFY] Recommended model: Qwen 3 8B (MLX, ~5GB)
+
+[CHECK] Docker: ✅ installed (v27.4)
+[CHECK] Python 3.12: ✅
+[CHECK] Node.js 22: ✅
+[CHECK] Git: ✅
+[CHECK] LM Studio: ❌ not found
+
+→ Ready for Step 2. Install LM Studio? [Y/n]</div>
+
+      <div style="margin-top:16px;">
+        <p style="font-size:12px;color:#888;margin-bottom:8px;">Or add another node to the cluster:</p>
+        <div class="form-row-inline">
+          <div><label>Node Name</label><input placeholder="e.g., odin (Ryzen desktop)" /></div>
+          <div><label>SSH Address</label><input placeholder="e.g., 192.168.1.50 or tailscale IP" /></div>
+          <div style="flex:0.5;display:flex;align-items:flex-end;"><button class="btn" style="width:100%;">+ Add Node</button></div>
+        </div>
+      </div>
+
+      <h2 style="margin-top:20px;">Detected Nodes</h2>
+      <table>
+        <thead><tr><th>Node</th><th>Hardware</th><th>Role</th><th>LLM Runtime</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><span class="status-dot green"></span>kronos</td><td>Mac Mini M4 Pro · 24GB</td><td>Queen + Inference</td><td>LM Studio (MLX)</td><td><span class="tag running">Online</span></td></tr>
+          <tr><td><span class="status-dot yellow"></span>odin</td><td>Ryzen 7 · RTX 3060 12GB · 32GB</td><td>Worker + Inference</td><td>Ollama (CUDA)</td><td><span class="tag pending">Pending</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <button class="btn primary" onclick="advanceWizard()" style="margin-top:8px;">Continue to Step 2 →</button>
+  </div>
+
+  <!-- ==================== SYSTEM STATUS ==================== -->
+  <div id="status" class="page">
+    <h1>System Status</h1>
+    <p>Real-time health of all services across all nodes.</p>
+
+    <div class="grid-4">
+      <div class="stat-card"><div class="num">13</div><div class="label">Services</div></div>
+      <div class="stat-card"><div class="num" style="color:#00ff88;">11</div><div class="label">Running</div></div>
+      <div class="stat-card"><div class="num" style="color:#fbbf24;">1</div><div class="label">Degraded</div></div>
+      <div class="stat-card"><div class="num" style="color:#f87171;">1</div><div class="label">Stopped</div></div>
+    </div>
+
+    <div class="grid-2" style="margin-top:16px;">
+      <div class="card">
+        <div class="card-header"><h3>kronos (Queen)</h3><span class="tag running">ONLINE</span></div>
+        <div style="font-size:12px;color:#888;margin-bottom:12px;">Mac Mini M4 Pro · 24GB · macOS 15.3</div>
+        <div style="display:flex;gap:24px;font-size:13px;">
+          <div><span style="color:#888;">CPU:</span> 12%</div>
+          <div><span style="color:#888;">RAM:</span> 14.2 / 24 GB</div>
+          <div><span style="color:#888;">Disk:</span> 312 GB free</div>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:59%;background:linear-gradient(90deg,#00ff88,#60a5fa);"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>odin (Worker)</h3><span class="tag pending">JOINING</span></div>
+        <div style="font-size:12px;color:#888;margin-bottom:12px;">Ryzen 7 · RTX 3060 12GB · 32GB · Ubuntu 22.04</div>
+        <div style="display:flex;gap:24px;font-size:13px;">
+          <div><span style="color:#888;">CPU:</span> —</div>
+          <div><span style="color:#888;">RAM:</span> —</div>
+          <div><span style="color:#888;">GPU VRAM:</span> —</div>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:0%;background:#fbbf24;"></div></div>
+      </div>
+    </div>
+
+    <h2>Service Health</h2>
+    <div class="card" style="padding:0;">
+      <table>
+        <thead><tr><th>Service</th><th>Layer</th><th>Node</th><th>Port</th><th>RAM</th><th>Uptime</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><span class="status-dot green"></span>Queen</td><td>Infra</td><td>kronos</td><td class="mono">3100</td><td>95 MB</td><td>3d 14h</td><td><span class="tag running">Running</span></td><td><button class="btn" style="font-size:11px;">Logs</button></td></tr>
+          <tr><td><span class="status-dot green"></span>LM Studio</td><td>Infra</td><td>kronos</td><td class="mono">1234</td><td>8.2 GB</td><td>3d 14h</td><td><span class="tag running">Running</span></td><td><button class="btn" style="font-size:11px;">Logs</button></td></tr>
+          <tr><td><span class="status-dot green"></span>NadirClaw</td><td>Infra</td><td>kronos</td><td class="mono">8856</td><td>180 MB</td><td>3d 14h</td><td><span class="tag running">Running</span></td><td><button class="btn" style="font-size:11px;">Logs</button></td></tr>
+          <tr><td><span class="status-dot green"></span>Fizzy</td><td>Middleware</td><td>kronos</td><td class="mono">3456</td><td>110 MB</td><td>3d 14h</td><td><span class="tag running">Running</span></td><td><button class="btn" style="font-size:11px;">Logs</button></td></tr>
+          <tr><td><span class="status-dot green"></span>NATS JetStream</td><td>Middleware</td><td>kronos</td><td class="mono">4222</td><td>28 MB</td><td>3d 14h</td><td><span class="tag running">Running</span></td><td><button class="btn" style="font-size:11px;">Logs</button></td></tr>
+          <tr><td><span class="status-dot green"></span>MCP Gateway</td><td>Middleware</td><td>kronos</td><td class="mono">3000</td><td>195 MB</td><td>3d 12h</td><td><span class="tag running">Running</span></td><td><button class="btn" style="font-size:11px;">Logs</button></td></tr>
+          <tr><td><span class="status-dot green"></span>LanceDB</td><td>Middleware</td><td>kronos</td><td class="mono">—</td><td>in-proc</td><td>—</td><td><span class="tag running">Running</span></td><td><button class="btn" style="font-size:11px;">Logs</button></td></tr>
+          <tr><td><span class="status-dot green"></span>ntfy</td><td>Middleware</td><td>kronos</td><td class="mono">2586</td><td>18 MB</td><td>3d 14h</td><td><span class="tag running">Running</span></td><td><button class="btn" style="font-size:11px;">Logs</button></td></tr>
+          <tr><td><span class="status-dot green"></span>Paperclip</td><td>Governance</td><td>kronos</td><td class="mono">3200</td><td>85 MB</td><td>3d 14h</td><td><span class="tag running">Running</span></td><td><button class="btn" style="font-size:11px;">Logs</button></td></tr>
+          <tr><td><span class="status-dot green"></span>Apprise</td><td>Middleware</td><td>kronos</td><td class="mono">—</td><td>12 MB</td><td>—</td><td><span class="tag running">Running</span></td><td><button class="btn" style="font-size:11px;">Logs</button></td></tr>
+          <tr><td><span class="status-dot yellow"></span>Signal Radar</td><td>Intelligence</td><td>kronos</td><td class="mono">—</td><td>—</td><td>—</td><td><span class="tag pending">Next: Mon 9AM</span></td><td><button class="btn" style="font-size:11px;">Run Now</button></td></tr>
+          <tr><td><span class="status-dot red"></span>Ollama</td><td>Infra</td><td>odin</td><td class="mono">11434</td><td>—</td><td>—</td><td><span class="tag stopped">Offline</span></td><td><button class="btn" style="font-size:11px;">Start</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ==================== APPROVALS ==================== -->
+  <div id="approvals" class="page">
+    <h1>Approval Queue</h1>
+    <p>Items waiting for your review. Tap to approve, reject, or view details.</p>
+
+    <div class="grid-4" style="margin-bottom:20px;">
+      <div class="stat-card"><div class="num">3</div><div class="label">Pending</div></div>
+      <div class="stat-card"><div class="num" style="color:#00ff88;">12</div><div class="label">Approved Today</div></div>
+      <div class="stat-card"><div class="num" style="color:#f87171;">1</div><div class="label">Rejected Today</div></div>
+      <div class="stat-card"><div class="num">87%</div><div class="label">Approval Rate</div></div>
+    </div>
+
+    <div class="approval-item">
+      <div style="min-width:80px;">
+        <div class="type">Content</div>
+        <div class="time">2 min ago</div>
+      </div>
+      <div class="desc">
+        <strong>Boundary Layer article draft:</strong> "The Coming AI Job Exposure Gradient"<br>
+        <span style="color:#888;font-size:12px;">Agent: Comms-Drafter · 2,400 words · 3 social variants</span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn primary">✅ Approve</button>
+        <button class="btn">📝 View</button>
+        <button class="btn danger">✗</button>
+      </div>
+    </div>
+
+    <div class="approval-item">
+      <div style="min-width:80px;">
+        <div class="type">Experiment</div>
+        <div class="time">1 hr ago</div>
+      </div>
+      <div class="desc">
+        <strong>Tool swap proposal:</strong> Replace LanceDB with Chroma (higher recall in benchmark)<br>
+        <span style="color:#888;font-size:12px;">Surface: Tool Stack · Signal Radar found chromadb v0.6.2 · Score: 42</span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn primary">✅ Approve</button>
+        <button class="btn">📝 Details</button>
+        <button class="btn danger">✗</button>
+      </div>
+    </div>
+
+    <div class="approval-item">
+      <div style="min-width:80px;">
+        <div class="type">Relationship</div>
+        <div class="time">3 hr ago</div>
+      </div>
+      <div class="desc">
+        <strong>Nudge: Kate Montgomery</strong> — 60+ days since last contact. Guidepoint opportunity may be expiring.<br>
+        <span style="color:#888;font-size:12px;">Agent: Sentinel · Draft follow-up email ready</span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn primary">✅ Send</button>
+        <button class="btn">📝 Edit</button>
+        <button class="btn danger">✗</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TOOL STACK ==================== -->
+  <div id="tools" class="page">
+    <h1>Tool Stack</h1>
+    <p>All composed tools. Click any row to configure. Drag to reorder priority.</p>
+
+    <div class="tab-row">
+      <button class="tab-btn active" onclick="showTab(this,'tools-running')">Running (13)</button>
+      <button class="tab-btn" onclick="showTab(this,'tools-available')">Available</button>
+      <button class="tab-btn" onclick="showTab(this,'tools-parked')">Parked</button>
+    </div>
+
+    <div id="tools-running" class="tab-content active">
+      <div class="card" style="padding:0;">
+        <table>
+          <thead><tr><th>Tool</th><th>Layer</th><th>Version</th><th>License</th><th>Stars</th><th>Last Update</th><th>Principles</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>Fizzy</td><td>Task Queue</td><td class="mono">v1.2.0</td><td>O'Saasy</td><td>7.2K</td><td>Mar 13</td><td>🟢🟢🟢🟢🟢</td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+            <tr><td>LangGraph</td><td>AI Reasoning</td><td class="mono">v0.3.1</td><td>MIT</td><td>12K</td><td>Mar 15</td><td>🟢🟢🟢🟢🟢</td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+            <tr><td>MCP Gateway</td><td>Tool Discovery</td><td class="mono">v0.8.0</td><td>Apache-2.0</td><td>—</td><td>Mar 10</td><td>🟢🟢🟢🟢🟢</td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+            <tr><td>NATS JetStream</td><td>Event Bus</td><td class="mono">v2.11</td><td>Apache-2.0</td><td>16K</td><td>Mar 14</td><td>🟢🟢🟢🟢🟢</td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+            <tr><td>LanceDB</td><td>Vector/RAG</td><td class="mono">v0.15</td><td>Apache-2.0</td><td>5K</td><td>Mar 12</td><td>🟢🟢🟢🟢🟢</td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+            <tr><td>ntfy</td><td>Notifications</td><td class="mono">v2.11</td><td>Apache/GPL</td><td>20K</td><td>Mar 10</td><td>🟢🟢🟢🟢🟢</td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+            <tr><td>LM Studio</td><td>LLM (Mac)</td><td class="mono">v0.4.2</td><td>Proprietary</td><td>—</td><td>Mar 8</td><td>🟡🟢🟡🟢🟢</td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+            <tr><td>NadirClaw</td><td>LLM Routing</td><td class="mono">v1.0.0</td><td>MIT</td><td>—</td><td>Mar 5</td><td>🟢🟢🟢🟢🟢</td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+            <tr><td>Paperclip</td><td>Governance</td><td class="mono">v2.1.0</td><td>MIT</td><td>23K</td><td>Mar 14</td><td>🟢🟢🟢🟢🟢</td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="tools-available" class="tab-content">
+      <p style="color:#888;font-size:13px;margin-bottom:12px;">Tools discovered by Signal Radar that pass the quality bar. Click "Install" to add to your stack.</p>
+      <div class="card" style="padding:0;">
+        <table>
+          <thead><tr><th>Tool</th><th>What It Does</th><th>Stars</th><th>Last Push</th><th>Score</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>autoresearch</td><td>Autonomous experiment loops (Karpathy)</td><td>36.4K</td><td>Mar 11</td><td style="color:#00ff88;">92</td><td><button class="btn primary" style="font-size:11px;">Install</button></td></tr>
+            <tr><td>Activepieces</td><td>280+ MCP-native integration pieces</td><td>21.2K</td><td>Mar 16</td><td style="color:#00ff88;">85</td><td><button class="btn primary" style="font-size:11px;">Install</button></td></tr>
+            <tr><td>gpt-researcher</td><td>Deep autonomous research agent</td><td>25.8K</td><td>Mar 14</td><td style="color:#fbbf24;">71</td><td><button class="btn" style="font-size:11px;">Evaluate</button></td></tr>
+            <tr><td>Khoj</td><td>Self-hosted AI second brain</td><td>33.4K</td><td>Mar 6</td><td style="color:#fbbf24;">68</td><td><button class="btn" style="font-size:11px;">Evaluate</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="tools-parked" class="tab-content">
+      <div class="card" style="padding:0;">
+        <table>
+          <thead><tr><th>Tool</th><th>Why Parked</th><th>Revisit When</th></tr></thead>
+          <tbody>
+            <tr><td>Vikunja</td><td>Lost quality bar to Fizzy (3.6K vs 7.2K)</td><td>If Fizzy stalls or we need CalDAV</td></tr>
+            <tr><td>n8n</td><td>Under review — may not need workflow platform</td><td>If Option C (lean) proves insufficient</td></tr>
+            <tr><td>Temporal</td><td>Overkill (enterprise Kubernetes)</td><td>If we scale beyond single-node</td></tr>
+            <tr><td>ChromaDB</td><td>Needs server process</td><td>If we outgrow embedded vector DB</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== AGENTS ==================== -->
+  <div id="agents" class="page">
+    <h1>Agent Configuration</h1>
+    <p>Five agents. Edit prompts, assign models, set governance rules, track approval rates.</p>
+
+    <div class="grid-3" style="margin-bottom:16px;">
+      <div class="stat-card"><div class="num">5</div><div class="label">Active Agents</div></div>
+      <div class="stat-card"><div class="num">87%</div><div class="label">Avg Approval Rate</div></div>
+      <div class="stat-card"><div class="num">142</div><div class="label">Tasks This Week</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>🎯 Jarvis — Chief of Staff (Router)</h3>
+        <div><span class="tag running">Active</span> <button class="btn" style="font-size:11px;margin-left:8px;">Edit</button></div>
+      </div>
+      <div class="grid-2">
+        <div>
+          <div class="form-row"><label>Model</label><select><option>Qwen 3 8B (local, fast)</option><option>Claude Sonnet 4 (API)</option><option>Claude Opus 4 (API, complex)</option></select></div>
+          <div class="form-row"><label>Governance</label><select><option>Low autonomy (draft everything)</option><option>Medium (auto-execute routine)</option><option>High (auto-execute, notify after)</option></select></div>
+          <div class="form-row"><label>Max tokens/task</label><input type="number" value="4000" /></div>
+        </div>
+        <div>
+          <div class="form-row"><label>System Prompt (excerpt)</label><textarea style="min-height:120px;" readonly>You are Jarvis, the Chief of Staff for AK-OS. Your job is to classify incoming tasks from Fizzy, route them to the correct agent, decompose complex tasks into workflows, and track completion.
+
+ROUTING RULES:
+- Research/analysis → Cerebro
+- Content/writing → Comms-Drafter
+- Operations/scheduling → Ops-Handler
+- Monitoring/alerts → Sentinel
+- Complex multi-step → Decompose into workflow DAG</textarea></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:24px;font-size:12px;color:#888;margin-top:8px;">
+        <span>Approval rate: <strong style="color:#00ff88;">92%</strong></span>
+        <span>Tasks routed this week: <strong>67</strong></span>
+        <span>Avg classification time: <strong>1.2s</strong></span>
+        <span>Last experiment: <em>Added voice calibration step → +5% approval</em></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>🔬 Cerebro — Intelligence Officer</h3><div><span class="tag running">Active</span> <button class="btn" style="font-size:11px;margin-left:8px;">Edit</button></div></div>
+      <div style="display:flex;gap:24px;font-size:12px;color:#888;">
+        <span>Model: <strong>Claude Sonnet 4</strong></span>
+        <span>Approval rate: <strong style="color:#00ff88;">89%</strong></span>
+        <span>Tasks: <strong>23/week</strong></span>
+        <span>Governance: <strong>Medium</strong></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>✍️ Comms-Drafter — Communications</h3><div><span class="tag running">Active</span> <button class="btn" style="font-size:11px;margin-left:8px;">Edit</button></div></div>
+      <div style="display:flex;gap:24px;font-size:12px;color:#888;">
+        <span>Model: <strong>Claude Opus 4</strong></span>
+        <span>Approval rate: <strong style="color:#fbbf24;">78%</strong> ⚠️ below threshold</span>
+        <span>Tasks: <strong>31/week</strong></span>
+        <span>Governance: <strong>Low (all drafts reviewed)</strong></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>👁️ Sentinel — Night Watch</h3><div><span class="tag running">Active</span> <button class="btn" style="font-size:11px;margin-left:8px;">Edit</button></div></div>
+      <div style="display:flex;gap:24px;font-size:12px;color:#888;">
+        <span>Model: <strong>Qwen 3 8B (local)</strong></span>
+        <span>Approval rate: <strong style="color:#00ff88;">94%</strong></span>
+        <span>Alerts: <strong>8/week</strong></span>
+        <span>Governance: <strong>High (auto-monitor)</strong></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>⚙️ Ops-Handler — Operations</h3><div><span class="tag running">Active</span> <button class="btn" style="font-size:11px;margin-left:8px;">Edit</button></div></div>
+      <div style="display:flex;gap:24px;font-size:12px;color:#888;">
+        <span>Model: <strong>Qwen 3 8B (local)</strong></span>
+        <span>Approval rate: <strong style="color:#00ff88;">91%</strong></span>
+        <span>Tasks: <strong>13/week</strong></span>
+        <span>Governance: <strong>Medium</strong></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== WORKFLOWS ==================== -->
+  <div id="workflows" class="page">
+    <h1>Workflow Templates</h1>
+    <p>DAG templates that define how multi-step tasks execute. Edit steps, agent assignments, approval gates.</p>
+
+    <div class="card">
+      <div class="card-header"><h3>content-publish-pipeline</h3><span class="tag running">6 steps</span></div>
+      <div class="terminal" style="font-size:11px;max-height:200px;">Fizzy card → Jarvis classifies → Cerebro researches
+  → Comms-Drafter writes (article + social + podcast) [PARALLEL]
+  → APPROVAL GATE (ntfy → Alexander)
+  → Publish: Substack + LinkedIn + X [PARALLEL]
+  → Update Fizzy card → COMPLETE</div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button class="btn">Edit Template</button>
+        <button class="btn">View Runs (12)</button>
+        <button class="btn">Clone</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>relationship-nudge</h3><span class="tag running">4 steps</span></div>
+      <div class="terminal" style="font-size:11px;max-height:120px;">Sentinel detects decay → Comms-Drafter writes follow-up
+  → APPROVAL GATE
+  → Send email (Gmail MCP or thin MCP)</div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <button class="btn">Edit Template</button>
+        <button class="btn">View Runs (5)</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>expert-network-response</h3><span class="tag pending">3 steps · DRAFT</span></div>
+      <div class="terminal" style="font-size:11px;max-height:120px;">Sentinel detects Guidepoint/GLG email → Cerebro evaluates opportunity
+  → Comms-Drafter writes response → APPROVAL GATE → Send</div>
+    </div>
+
+    <button class="btn primary" style="margin-top:8px;">+ New Workflow Template</button>
+  </div>
+
+  <!-- ==================== CONNECTIONS ==================== -->
+  <div id="connections" class="page">
+    <h1>Connections</h1>
+    <p>External services — MCPs, APIs, and custom integrations. The last-mile layer.</p>
+
+    <h2>Connected (Working)</h2>
+    <div class="card" style="padding:0;">
+      <table>
+        <thead><tr><th>Service</th><th>Type</th><th>Capabilities</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><span class="status-dot green"></span>Gmail</td><td>MCP</td><td>Read, Search, Draft</td><td><span class="tag running">Connected</span></td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+          <tr><td><span class="status-dot green"></span>Google Calendar</td><td>MCP</td><td>Read, Create, Update, Delete</td><td><span class="tag running">Connected</span></td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+          <tr><td><span class="status-dot green"></span>Google Drive</td><td>MCP</td><td>Read, Search</td><td><span class="tag running">Connected</span></td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+          <tr><td><span class="status-dot green"></span>Canva</td><td>MCP</td><td>Design, Generate, Export</td><td><span class="tag running">Connected</span></td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+          <tr><td><span class="status-dot green"></span>ElevenLabs</td><td>MCP</td><td>TTS, Sound Effects, Music</td><td><span class="tag running">Connected</span></td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+          <tr><td><span class="status-dot green"></span>Figma</td><td>MCP</td><td>Read, Screenshot, Variables</td><td><span class="tag running">Connected</span></td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+          <tr><td><span class="status-dot green"></span>Apple Notes</td><td>MCP</td><td>Read, Write</td><td><span class="tag pending">Unstable</span></td><td><button class="btn" style="font-size:11px;">Config</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Gaps (Need to Build)</h2>
+    <div class="card" style="padding:0;">
+      <table>
+        <thead><tr><th>Service</th><th>Need</th><th>Solution</th><th>Effort</th><th></th></tr></thead>
+        <tbody>
+          <tr><td style="color:#f87171;">Gmail Send</td><td>Send emails (not just draft)</td><td>SMTP thin MCP or upgrade Gmail MCP</td><td>~30 lines</td><td><button class="btn primary" style="font-size:11px;">Build</button></td></tr>
+          <tr><td style="color:#f87171;">LinkedIn</td><td>Post to LinkedIn</td><td>Thin MCP wrapping LinkedIn API</td><td>~40 lines</td><td><button class="btn primary" style="font-size:11px;">Build</button></td></tr>
+          <tr><td style="color:#f87171;">X / Twitter</td><td>Post tweets</td><td>Thin MCP wrapping X API v2</td><td>~30 lines</td><td><button class="btn primary" style="font-size:11px;">Build</button></td></tr>
+          <tr><td style="color:#f87171;">Substack</td><td>Publish articles</td><td>Unofficial API or browser automation</td><td>~60 lines</td><td><button class="btn" style="font-size:11px;">Research</button></td></tr>
+          <tr><td style="color:#f87171;">Drive Write</td><td>Write files to Google Drive</td><td>Upgrade Drive MCP or Google API</td><td>~40 lines</td><td><button class="btn primary" style="font-size:11px;">Build</button></td></tr>
+          <tr><td style="color:#fbbf24;">GitHub</td><td>Repo ops, push, PR</td><td>Existing MCP — just need to connect</td><td>Config only</td><td><button class="btn primary" style="font-size:11px;">Connect</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <button class="btn primary" style="margin-top:8px;">+ Add Connection</button>
+  </div>
+
+  <!-- ==================== SIGNAL RADAR ==================== -->
+  <div id="radar" class="page">
+    <h1>Signal Radar</h1>
+    <p>Automated weekly scan across 6 sources. Configure queries, review results, tune signal-to-noise.</p>
+
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="stat-card"><div class="num">6</div><div class="label">Sources</div></div>
+      <div class="stat-card"><div class="num">347</div><div class="label">Scanned Last Week</div></div>
+      <div class="stat-card"><div class="num">12</div><div class="label">Surfaced (≥30)</div></div>
+      <div class="stat-card"><div class="num">3.5%</div><div class="label">Signal:Noise</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>Source Configuration</h3><button class="btn" style="font-size:11px;">+ Add Source</button></div>
+      <table>
+        <thead><tr><th>Source</th><th>Queries</th><th>Last Run</th><th>Results</th><th>Surfaced</th><th>Enabled</th></tr></thead>
+        <tbody>
+          <tr><td>GitHub Search API</td><td class="mono">18 queries</td><td>Mar 10</td><td>142</td><td>5</td><td><label class="toggle"><input type="checkbox" checked><span class="slider"></span></label></td></tr>
+          <tr><td>arXiv API</td><td class="mono">5 queries</td><td>Mar 10</td><td>98</td><td>3</td><td><label class="toggle"><input type="checkbox" checked><span class="slider"></span></label></td></tr>
+          <tr><td>HN Algolia</td><td class="mono">5 queries</td><td>Mar 10</td><td>45</td><td>2</td><td><label class="toggle"><input type="checkbox" checked><span class="slider"></span></label></td></tr>
+          <tr><td>Semantic Scholar</td><td class="mono">3 queries</td><td>Mar 10</td><td>30</td><td>1</td><td><label class="toggle"><input type="checkbox" checked><span class="slider"></span></label></td></tr>
+          <tr><td>PubMed</td><td class="mono">2 queries</td><td>Mar 10</td><td>22</td><td>1</td><td><label class="toggle"><input type="checkbox" checked><span class="slider"></span></label></td></tr>
+          <tr><td>Papers with Code</td><td class="mono">3 queries</td><td>—</td><td>—</td><td>—</td><td><label class="toggle"><input type="checkbox"><span class="slider"></span></label></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>Scoring Threshold</h3></div>
+      <div class="form-row-inline">
+        <div><label>Domain Relevance (1-10)</label><input type="range" min="1" max="10" value="3" style="padding:0;" /></div>
+        <div><label>Cross-Domain (1-10)</label><input type="range" min="1" max="10" value="3" style="padding:0;" /></div>
+        <div><label>Actionability (1-10)</label><input type="range" min="1" max="10" value="3" style="padding:0;" /></div>
+        <div><label>Threshold (D×C×A)</label><input type="number" value="30" style="width:80px;" /></div>
+      </div>
+      <p style="font-size:11px;color:#888;">Items with Domain × Cross-Domain × Actionability ≥ 30 get surfaced. Currently: 3.5% pass rate.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>Quality Bar (for tools only)</h3></div>
+      <div class="form-row-inline">
+        <div><label>Min Stars</label><input type="number" value="500" /></div>
+        <div><label>Max Age (days since push)</label><input type="number" value="90" /></div>
+        <div><label>Min Principle Score</label><select><option>4/5</option><option>3/5</option><option>5/5</option></select></div>
+        <div><label>License</label><select><option>Open Source Only</option><option>Fair-code OK</option><option>Any</option></select></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== EXPERIMENTS ==================== -->
+  <div id="experiments" class="page">
+    <h1>Self-Improvement Experiments</h1>
+    <p>Autoresearch pattern: modify → test → measure → keep/discard → loop. 8 surfaces.</p>
+
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="stat-card"><div class="num">8</div><div class="label">Surfaces</div></div>
+      <div class="stat-card"><div class="num">23</div><div class="label">Experiments Run</div></div>
+      <div class="stat-card"><div class="num" style="color:#00ff88;">14</div><div class="label">Kept</div></div>
+      <div class="stat-card"><div class="num">61%</div><div class="label">Keep Rate</div></div>
+    </div>
+
+    <div class="card" style="padding:0;">
+      <table>
+        <thead><tr><th>Surface</th><th>Metric</th><th>Baseline</th><th>Current</th><th>Δ</th><th>Last Experiment</th><th>Cadence</th><th>Auto</th></tr></thead>
+        <tbody>
+          <tr><td style="color:#00ff88;">Tool Stack</td><td>Quality Bar</td><td>—</td><td>43/45</td><td style="color:#00ff88;">—</td><td>Fizzy swap (+100%)</td><td>Weekly</td><td>✅</td></tr>
+          <tr><td style="color:#00ff88;">Agent Prompts</td><td>Approval %</td><td>72%</td><td>87%</td><td style="color:#00ff88;">+15%</td><td>Voice calibration step</td><td>Weekly</td><td>✅</td></tr>
+          <tr><td style="color:#60a5fa;">Workflows</td><td>Time × Success</td><td>—</td><td>—</td><td>—</td><td>Not started</td><td>Monthly</td><td>⚠️</td></tr>
+          <tr><td style="color:#00ff88;">Context/RAG</td><td>Relevance</td><td>3.2/5</td><td>3.8/5</td><td style="color:#00ff88;">+0.6</td><td>Added LEARNINGS.md</td><td>Weekly</td><td>✅</td></tr>
+          <tr><td style="color:#00ff88;">Signal Detection</td><td>S/N Ratio</td><td>2.1%</td><td>3.5%</td><td style="color:#00ff88;">+1.4%</td><td>Tightened stars threshold</td><td>Weekly</td><td>✅</td></tr>
+          <tr><td style="color:#60a5fa;">Content Quality</td><td>Pub Rate</td><td>—</td><td>—</td><td>—</td><td>Not started</td><td>Monthly</td><td>⚠️</td></tr>
+          <tr><td style="color:#60a5fa;">Relationships</td><td>Response %</td><td>—</td><td>—</td><td>—</td><td>Not started</td><td>Monthly</td><td>⚠️</td></tr>
+          <tr><td style="color:#60a5fa;">Financial</td><td>$/month</td><td>$2,700</td><td>$2,700</td><td>—</td><td>Not started</td><td>Monthly</td><td>⚠️</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ==================== TOOL LANDSCAPE ==================== -->
+  <div id="landscape" class="page">
+    <h1>Tool Landscape</h1>
+    <p>Living inventory of everything we've discovered. Fed by Signal Radar. "If we don't have a map, we won't think to use it."</p>
+
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="stat-card"><div class="num">20+</div><div class="label">Tools Mapped</div></div>
+      <div class="stat-card"><div class="num">13</div><div class="label">In Stack</div></div>
+      <div class="stat-card"><div class="num">6</div><div class="label">Evaluating</div></div>
+      <div class="stat-card"><div class="num">4</div><div class="label">Parked</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>Recent Discoveries</h3><span style="font-size:11px;color:#888;">Last Signal Radar run: Mar 10</span></div>
+      <table>
+        <thead><tr><th>Tool</th><th>Stars</th><th>Score</th><th>Category</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><a href="#" style="color:#60a5fa;">Superpowers</a></td><td>86K</td><td style="color:#00ff88;">95</td><td>Dev Methodology</td><td><span class="tag mapped" style="background:#00ff8822;color:#00ff88;">Evaluating</span></td></tr>
+          <tr><td><a href="#" style="color:#60a5fa;">autoresearch</a></td><td>36K</td><td style="color:#00ff88;">92</td><td>Experimentation</td><td><span class="tag mapped" style="background:#00ff8822;color:#00ff88;">Evaluating</span></td></tr>
+          <tr><td><a href="#" style="color:#60a5fa;">Khoj</a></td><td>33K</td><td style="color:#fbbf24;">68</td><td>Second Brain</td><td><span class="tag mapped">Mapped</span></td></tr>
+          <tr><td><a href="#" style="color:#60a5fa;">gpt-researcher</a></td><td>26K</td><td style="color:#fbbf24;">71</td><td>Deep Research</td><td><span class="tag mapped">Mapped</span></td></tr>
+          <tr><td><a href="#" style="color:#60a5fa;">Activepieces</a></td><td>21K</td><td style="color:#00ff88;">85</td><td>Workflow/MCP</td><td><span class="tag mapped" style="background:#00ff8822;color:#00ff88;">Evaluating</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="color:#888;font-size:12px;margin-top:8px;">Full landscape: <span class="mono">db/ak-os/TOOL-LANDSCAPE.md</span></p>
+  </div>
+
+  <!-- ==================== KNOWLEDGE ==================== -->
+  <div id="knowledge" class="page">
+    <h1>AK-OS Knowledge Base</h1>
+    <p>Core system files. The brain. Edit directly or let agents update through experiment loops.</p>
+
+    <div class="card" style="padding:0;">
+      <table>
+        <thead><tr><th>File</th><th>Purpose</th><th>Last Modified</th><th>Indexed</th><th></th></tr></thead>
+        <tbody>
+          <tr><td class="mono">CLAUDE.md</td><td>Session bootstrap</td><td>Mar 15</td><td>✅</td><td><button class="btn" style="font-size:11px;">View</button></td></tr>
+          <tr><td class="mono">STATE.md</td><td>Current system state</td><td>Mar 15</td><td>✅</td><td><button class="btn" style="font-size:11px;">View</button></td></tr>
+          <tr><td class="mono">SELF-IMPROVEMENT-SYSTEM.md</td><td>Autoresearch architecture</td><td>Mar 15</td><td>✅</td><td><button class="btn" style="font-size:11px;">View</button></td></tr>
+          <tr><td class="mono">TOOL-LANDSCAPE.md</td><td>Living tool inventory</td><td>Mar 15</td><td>✅</td><td><button class="btn" style="font-size:11px;">View</button></td></tr>
+          <tr><td class="mono">INTEREST-ONTOLOGY.md</td><td>11 domains + intersections</td><td>Mar 8</td><td>✅</td><td><button class="btn" style="font-size:11px;">View</button></td></tr>
+          <tr><td class="mono">BORGCLAW-COMPENDIUM.md</td><td>Full system spec</td><td>Mar 15</td><td>✅</td><td><button class="btn" style="font-size:11px;">View</button></td></tr>
+          <tr><td class="mono">LEARNINGS.md</td><td>Corrections & patterns</td><td>Mar 12</td><td>✅</td><td><button class="btn" style="font-size:11px;">View</button></td></tr>
+          <tr><td class="mono">entities/patterns.md</td><td>Blind spots & strengths</td><td>Mar 8</td><td>✅</td><td><button class="btn" style="font-size:11px;">View</button></td></tr>
+          <tr><td class="mono">entities/decisions.md</td><td>Open decisions (8)</td><td>Mar 15</td><td>✅</td><td><button class="btn" style="font-size:11px;">View</button></td></tr>
+          <tr><td class="mono">entities/financial.md</td><td>Financial state</td><td>Mar 8</td><td>✅</td><td><button class="btn" style="font-size:11px;">View</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid-2" style="margin-top:16px;">
+      <div class="card">
+        <h3 style="margin-bottom:8px;">LanceDB Index Status</h3>
+        <div style="font-size:13px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Files indexed:</span><strong>47</strong></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Total chunks:</span><strong>2,340</strong></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Embedding model:</span><strong>nomic-embed-text</strong></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Index size:</span><strong>89 MB</strong></div>
+          <div style="display:flex;justify-content:space-between;"><span>Last re-indexed:</span><strong>Mar 15, 11:00 PM</strong></div>
+        </div>
+        <button class="btn" style="margin-top:12px;">Re-index Now</button>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:8px;">Context Assembly Rules</h3>
+        <div style="font-size:12px;color:#888;line-height:1.6;">
+          <div><strong>Content tasks:</strong> voice-rules + interest-ontology + style-guide</div>
+          <div><strong>Research tasks:</strong> interest-ontology + signals + patterns</div>
+          <div><strong>Financial tasks:</strong> financial + decisions + patterns</div>
+          <div><strong>Relationship tasks:</strong> people + patterns + learnings</div>
+          <div><strong>All tasks:</strong> LEARNINGS.md always included</div>
+        </div>
+        <button class="btn" style="margin-top:12px;">Edit Rules</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.closest('.nav-item').classList.add('active');
+}
+
+function showTab(btn, id) {
+  const row = btn.closest('.page');
+  row.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  row.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(id).classList.add('active');
+}
+
+function advanceWizard() {
+  const steps = document.querySelectorAll('.wizard-step');
+  let found = false;
+  steps.forEach((s, i) => {
+    if (s.classList.contains('active') && !found) {
+      s.classList.remove('active');
+      s.classList.add('done');
+      if (steps[i+1]) steps[i+1].classList.add('active');
+      found = true;
+    }
+  });
+}
+</script>
+
+</body>
+</html>

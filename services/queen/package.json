@@ -1,0 +1,19 @@
+{
+  "name": "borgclaw-queen",
+  "version": "0.1.0",
+  "description": "BorgClaw Queen Node — HTTP service for node registry, health monitoring, and dashboard.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "js-yaml": "^4.1.0",
+    "glob": "^11.0.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

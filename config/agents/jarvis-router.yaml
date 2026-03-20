@@ -1,0 +1,58 @@
+# Agent Config: Jarvis (Router)
+# The front door. Every request enters through Jarvis.
+
+agent_id: jarvis-router
+display_name: "Jarvis"
+role: router
+instructions: "../agents/jarvis-router/instructions.md"
+
+capabilities:
+  - request_classification
+  - agent_delegation
+  - context_loading
+  - energy_routing
+
+tools_required:
+  - capability: calendar_events    # Check today's schedule
+  - capability: search_messages    # Quick inbox check
+  - capability: semantic_search    # Context lookup via QMD
+
+delegation_targets:
+  - agent: cerebro
+    when: ["research", "analysis", "intelligence", "deep_dive"]
+  - agent: comms-drafter
+    when: ["write", "draft", "email", "post", "content"]
+  - agent: sentinel
+    when: ["scan", "alert", "pattern", "health_check"]
+  - agent: ops-handler
+    when: ["send", "deliver", "file_ops", "execute", "deploy"]
+
+routing_rules:
+  # Phase 1: Jarvis uses these rules manually
+  # Phase 2: NadirClaw automates this via models.json routing_rules
+  simple_triage: local_general
+  email_draft: local_general
+  voice_writing: cloud_primary
+  deep_research: cloud_primary
+  code_generation: local_code
+  signal_classification: local_general
+  frontier_reasoning: cloud_escalation
+
+context_files:
+  always_load:
+    - "db/ak-os/STATE.md"
+    - "db/ak-os/LEARNINGS.md"
+  load_on_request:
+    - "db/ak-os/entities/people.md"
+    - "db/ak-os/entities/projects.md"
+    - "db/ak-os/entities/decisions.md"
+    - "db/ak-os/entities/financial.md"
+    - "db/ak-os/entities/patterns.md"
+
+energy_routing:
+  peak: { time: "09:00-12:00", route_to: "deep_work" }
+  second_wind: { time: "15:00-17:00", route_to: "medium_complexity" }
+  evening: { time: "19:00-22:00", route_to: "reflective_creative" }
+  hard_stop: { time: "14:20", reason: "Evander pickup" }
+
+max_concurrent_delegations: 3

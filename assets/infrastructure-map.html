@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AK-OS Infrastructure Map</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0f; color: #e0e0e0; font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; overflow-x: hidden; }
+
+  .header { text-align: center; padding: 32px 20px 16px; }
+  .header h1 { font-size: 28px; color: #00d4ff; letter-spacing: 4px; text-transform: uppercase; }
+  .header .subtitle { color: #666; font-size: 13px; margin-top: 6px; }
+
+  .tabs { display: flex; justify-content: center; gap: 8px; padding: 16px; flex-wrap: wrap; }
+  .tab { padding: 10px 20px; background: #151520; border: 1px solid #252535; border-radius: 8px; cursor: pointer; font-size: 13px; color: #888; transition: all 0.3s; font-family: inherit; }
+  .tab:hover { border-color: #00d4ff40; color: #ccc; }
+  .tab.active { background: #00d4ff15; border-color: #00d4ff; color: #00d4ff; }
+
+  .view { display: none; padding: 20px; max-width: 1200px; margin: 0 auto; }
+  .view.active { display: block; }
+
+  /* Network View */
+  .network-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-top: 20px; }
+  @media (max-width: 900px) { .network-grid { grid-template-columns: 1fr; } }
+
+  .node-card { background: #12121a; border: 1px solid #252535; border-radius: 12px; padding: 24px; position: relative; }
+  .node-card.primary { border-color: #00d4ff50; box-shadow: 0 0 30px #00d4ff10; }
+  .node-card.secondary { border-color: #ff8c0050; box-shadow: 0 0 30px #ff8c0010; }
+  .node-card.cloud { border-color: #a855f750; box-shadow: 0 0 30px #a855f710; }
+
+  .node-badge { position: absolute; top: -10px; left: 20px; padding: 3px 12px; border-radius: 20px; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; }
+  .node-badge.always-on { background: #00d4ff20; color: #00d4ff; border: 1px solid #00d4ff40; }
+  .node-badge.on-demand { background: #ff8c0020; color: #ff8c00; border: 1px solid #ff8c0040; }
+  .node-badge.api { background: #a855f720; color: #a855f7; border: 1px solid #a855f740; }
+
+  .node-name { font-size: 18px; font-weight: bold; margin-top: 8px; }
+  .node-name.cyan { color: #00d4ff; }
+  .node-name.orange { color: #ff8c00; }
+  .node-name.purple { color: #a855f7; }
+
+  .node-specs { margin-top: 12px; font-size: 12px; color: #666; line-height: 1.8; }
+  .node-specs .spec-label { color: #888; }
+  .node-specs .spec-value { color: #ccc; }
+
+  .node-services { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .service-tag { padding: 4px 10px; background: #1a1a2a; border-radius: 6px; font-size: 11px; color: #aaa; border: 1px solid #252535; }
+  .service-tag.active { border-color: #00d4ff40; color: #00d4ff; }
+
+  /* Connection lines area */
+  .connections-area { margin-top: 32px; background: #0d0d15; border-radius: 12px; border: 1px solid #1a1a25; padding: 24px; }
+  .conn-title { font-size: 14px; color: #888; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 16px; }
+  .conn-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #151520; font-size: 13px; }
+  .conn-row:last-child { border-bottom: none; }
+  .conn-from { color: #00d4ff; min-width: 120px; }
+  .conn-arrow { color: #333; font-size: 18px; }
+  .conn-to { color: #ff8c00; min-width: 120px; }
+  .conn-via { color: #666; font-style: italic; }
+  .conn-port { color: #a855f7; font-size: 11px; }
+
+  /* Agent View */
+  .agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; margin-top: 20px; }
+
+  .agent-card { background: #12121a; border-radius: 12px; padding: 20px; border: 1px solid #252535; transition: all 0.3s; }
+  .agent-card:hover { border-color: #00d4ff30; transform: translateY(-2px); }
+
+  .agent-icon { font-size: 28px; margin-bottom: 8px; }
+  .agent-name { font-size: 16px; font-weight: bold; color: #e0e0e0; }
+  .agent-role { font-size: 12px; color: #00d4ff; margin-top: 2px; text-transform: uppercase; letter-spacing: 1px; }
+  .agent-desc { font-size: 12px; color: #888; margin-top: 10px; line-height: 1.6; }
+
+  .agent-meta { margin-top: 14px; display: flex; gap: 16px; font-size: 11px; }
+  .meta-item { display: flex; align-items: center; gap: 4px; }
+  .meta-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .meta-dot.local { background: #00d4ff; }
+  .meta-dot.cloud { background: #a855f7; }
+  .meta-dot.hybrid { background: #ff8c00; }
+
+  /* Data Flow View */
+  .flow-container { margin-top: 20px; }
+
+  .flow-section { margin-bottom: 32px; }
+  .flow-label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #1a1a25; }
+
+  .flow-pipeline { display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin: 12px 0; }
+  .flow-step { background: #12121a; border: 1px solid #252535; border-radius: 8px; padding: 12px 16px; font-size: 12px; min-width: 140px; text-align: center; }
+  .flow-step .step-name { color: #e0e0e0; font-weight: bold; }
+  .flow-step .step-detail { color: #666; margin-top: 4px; font-size: 11px; }
+  .flow-step.cyan { border-color: #00d4ff40; }
+  .flow-step.cyan .step-name { color: #00d4ff; }
+  .flow-step.orange { border-color: #ff8c0040; }
+  .flow-step.orange .step-name { color: #ff8c00; }
+  .flow-step.purple { border-color: #a855f740; }
+  .flow-step.purple .step-name { color: #a855f7; }
+  .flow-step.green { border-color: #22c55e40; }
+  .flow-step.green .step-name { color: #22c55e; }
+
+  .flow-arrow { color: #333; font-size: 20px; padding: 0 8px; flex-shrink: 0; }
+
+  /* Cost View */
+  .cost-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+  @media (max-width: 700px) { .cost-grid { grid-template-columns: 1fr; } }
+
+  .cost-card { background: #12121a; border: 1px solid #252535; border-radius: 12px; padding: 24px; }
+  .cost-card h3 { color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; }
+  .cost-total { font-size: 36px; font-weight: bold; margin-top: 8px; }
+  .cost-total.green { color: #22c55e; }
+  .cost-total.red { color: #ef4444; }
+  .cost-breakdown { margin-top: 16px; }
+  .cost-line { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1a1a25; font-size: 13px; }
+  .cost-line:last-child { border-bottom: none; }
+  .cost-line .label { color: #888; }
+  .cost-line .amount { color: #ccc; }
+  .cost-line .amount.free { color: #22c55e; }
+
+  .savings-bar { margin-top: 24px; background: #1a1a2a; border-radius: 8px; overflow: hidden; height: 24px; position: relative; }
+  .savings-fill { height: 100%; background: linear-gradient(90deg, #22c55e, #00d4ff); border-radius: 8px; transition: width 1s; }
+  .savings-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 11px; color: white; font-weight: bold; }
+
+  /* Assimilator View */
+  .assimilator-flow { margin-top: 20px; }
+  .assim-step { display: flex; gap: 20px; margin-bottom: 4px; align-items: stretch; }
+  .assim-number { width: 48px; height: 48px; min-width: 48px; background: #00d4ff15; border: 1px solid #00d4ff40; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #00d4ff; font-weight: bold; font-size: 16px; }
+  .assim-content { background: #12121a; border: 1px solid #252535; border-radius: 12px; padding: 16px 20px; flex: 1; }
+  .assim-content h4 { color: #e0e0e0; font-size: 14px; }
+  .assim-content p { color: #888; font-size: 12px; margin-top: 6px; line-height: 1.6; }
+  .assim-content code { background: #1a1a2a; padding: 2px 8px; border-radius: 4px; color: #00d4ff; font-size: 11px; }
+  .assim-line { width: 2px; background: #252535; margin-left: 23px; height: 20px; }
+
+  .usb-icon { text-align: center; margin: 32px 0; padding: 24px; background: #00d4ff08; border: 1px dashed #00d4ff30; border-radius: 12px; }
+  .usb-icon .big { font-size: 48px; }
+  .usb-icon .label { color: #00d4ff; font-size: 14px; margin-top: 8px; }
+  .usb-icon .sublabel { color: #666; font-size: 12px; margin-top: 4px; }
+
+  .section-desc { color: #888; font-size: 13px; line-height: 1.7; margin-top: 8px; max-width: 700px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>AK-OS Infrastructure</h1>
+  <div class="subtitle">Project Assimilator &mdash; Home AI Cluster Blueprint &mdash; 2026-03-14</div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showView('network')">Physical Network</button>
+  <button class="tab" onclick="showView('agents')">Agent Layer</button>
+  <button class="tab" onclick="showView('flow')">Data Flow</button>
+  <button class="tab" onclick="showView('cost')">Cost Model</button>
+  <button class="tab" onclick="showView('assimilator')">The Assimilator</button>
+</div>
+
+<!-- ==================== NETWORK VIEW ==================== -->
+<div id="view-network" class="view active">
+  <div class="network-grid">
+    <div class="node-card primary">
+      <div class="node-badge always-on">Always On</div>
+      <div class="node-name cyan">Mac Mini M4 Pro</div>
+      <div class="node-specs">
+        <div><span class="spec-label">CPU:</span> <span class="spec-value">Apple M4 Pro</span></div>
+        <div><span class="spec-label">RAM:</span> <span class="spec-value">24 GB unified</span></div>
+        <div><span class="spec-label">GPU:</span> <span class="spec-value">M4 Pro integrated (20-core)</span></div>
+        <div><span class="spec-label">Role:</span> <span class="spec-value">Primary node, router, gateway</span></div>
+        <div><span class="spec-label">Port:</span> <span class="spec-value">:11434 (Ollama) / :8000 (Gateway)</span></div>
+      </div>
+      <div class="node-services">
+        <span class="service-tag active">Ollama</span>
+        <span class="service-tag active">nginx gateway</span>
+        <span class="service-tag active">Paperclip</span>
+        <span class="service-tag">qwen2.5:7b</span>
+        <span class="service-tag">nomic-embed</span>
+        <span class="service-tag">sentinel agent</span>
+      </div>
+    </div>
+
+    <div class="node-card secondary">
+      <div class="node-badge on-demand">On Demand</div>
+      <div class="node-name orange">Ryzen Tower</div>
+      <div class="node-specs">
+        <div><span class="spec-label">CPU:</span> <span class="spec-value">Ryzen 5</span></div>
+        <div><span class="spec-label">RAM:</span> <span class="spec-value">32 GB DDR4</span></div>
+        <div><span class="spec-label">GPU:</span> <span class="spec-value">RTX 3070 8GB VRAM</span></div>
+        <div><span class="spec-label">Role:</span> <span class="spec-value">Deep reasoning, code, verification</span></div>
+        <div><span class="spec-label">Port:</span> <span class="spec-value">:11434 (Ollama)</span></div>
+      </div>
+      <div class="node-services">
+        <span class="service-tag active">Ollama</span>
+        <span class="service-tag">qwen2.5:14b</span>
+        <span class="service-tag">codellama:7b</span>
+        <span class="service-tag">gws CLI</span>
+        <span class="service-tag">Docker</span>
+      </div>
+    </div>
+
+    <div class="node-card cloud">
+      <div class="node-badge api">Cloud API</div>
+      <div class="node-name purple">Claude (Frontier)</div>
+      <div class="node-specs">
+        <div><span class="spec-label">Model:</span> <span class="spec-value">Claude Opus / Sonnet</span></div>
+        <div><span class="spec-label">Context:</span> <span class="spec-value">200K tokens</span></div>
+        <div><span class="spec-label">Role:</span> <span class="spec-value">Deep reasoning, writing, foresight</span></div>
+        <div><span class="spec-label">Access:</span> <span class="spec-value">API + Cowork sessions</span></div>
+        <div><span class="spec-label">Cost:</span> <span class="spec-value">Pay per token</span></div>
+      </div>
+      <div class="node-services">
+        <span class="service-tag active">Voice & brand</span>
+        <span class="service-tag active">Full AK-OS context</span>
+        <span class="service-tag">Boundary Layer</span>
+        <span class="service-tag">Ansible synthesis</span>
+        <span class="service-tag">Cowork skills</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="connections-area">
+    <div class="conn-title">Network Connections</div>
+    <div class="conn-row">
+      <span class="conn-from">Any Agent</span>
+      <span class="conn-arrow">&rarr;</span>
+      <span class="conn-to">Gateway</span>
+      <span class="conn-via">http://mac-mini:8000</span>
+      <span class="conn-port">single endpoint</span>
+    </div>
+    <div class="conn-row">
+      <span class="conn-from">Gateway</span>
+      <span class="conn-arrow">&rarr;</span>
+      <span class="conn-to">Mac Mini</span>
+      <span class="conn-via">model="fast" &rarr; localhost:11434</span>
+      <span class="conn-port">LAN</span>
+    </div>
+    <div class="conn-row">
+      <span class="conn-from">Gateway</span>
+      <span class="conn-arrow">&rarr;</span>
+      <span class="conn-to">Ryzen Tower</span>
+      <span class="conn-via">model="deep" &rarr; ryzen-ip:11434</span>
+      <span class="conn-port">LAN</span>
+    </div>
+    <div class="conn-row">
+      <span class="conn-from">Gateway</span>
+      <span class="conn-arrow">&rarr;</span>
+      <span class="conn-to">Claude API</span>
+      <span class="conn-via">model="frontier" &rarr; api.anthropic.com</span>
+      <span class="conn-port">HTTPS</span>
+    </div>
+    <div class="conn-row">
+      <span class="conn-from">All Nodes</span>
+      <span class="conn-arrow">&harr;</span>
+      <span class="conn-to">akos/ folder</span>
+      <span class="conn-via">Git sync + Google Drive</span>
+      <span class="conn-port">shared state</span>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== AGENT VIEW ==================== -->
+<div id="view-agents" class="view">
+  <p class="section-desc">Each agent is a folder with a JSON config, instructions, and skill files. The orchestrator (Paperclip) dispatches tasks. Alexander operates as the "Board of Directors" &mdash; nothing ships without approval.</p>
+  <div class="agent-grid">
+    <div class="agent-card">
+      <div class="agent-icon">&#x1F916;</div>
+      <div class="agent-name">Jarvis Router</div>
+      <div class="agent-role">Chief of Staff</div>
+      <div class="agent-desc">Triage layer. Receives all incoming requests and routes to the right agent. Monitors scheduled tasks. First-pass email scanning. Runs 24/7.</div>
+      <div class="agent-meta">
+        <div class="meta-item"><div class="meta-dot local"></div> Mac Mini</div>
+        <div class="meta-item">qwen2.5:7b</div>
+        <div class="meta-item">$0/mo</div>
+      </div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-icon">&#x1F9E0;</div>
+      <div class="agent-name">Cerebro Analyst</div>
+      <div class="agent-role">Chief Intelligence Officer</div>
+      <div class="agent-desc">Deep research. Signal analysis. Foresight synthesis. Boundary Layer drafting. Ansible methodology. Needs full AK-OS context and frontier reasoning.</div>
+      <div class="agent-meta">
+        <div class="meta-item"><div class="meta-dot cloud"></div> Claude API</div>
+        <div class="meta-item">opus/sonnet</div>
+        <div class="meta-item">~$20-40/mo</div>
+      </div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-icon">&#x2699;&#xFE0F;</div>
+      <div class="agent-name">Ops Handler</div>
+      <div class="agent-role">Operations Manager</div>
+      <div class="agent-desc">Code generation. File operations. Data processing. Template filling. Structured output. Heavy compute tasks that don't need frontier intelligence.</div>
+      <div class="agent-meta">
+        <div class="meta-item"><div class="meta-dot hybrid"></div> Ryzen Tower</div>
+        <div class="meta-item">qwen2.5:14b</div>
+        <div class="meta-item">$0/mo</div>
+      </div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-icon">&#x1F4E8;</div>
+      <div class="agent-name">Comms Drafter</div>
+      <div class="agent-role">Communications Director</div>
+      <div class="agent-desc">Draft emails, LinkedIn posts, follow-ups, pitches. Must write in Alexander's voice. Requires full brand context and style guide.</div>
+      <div class="agent-meta">
+        <div class="meta-item"><div class="meta-dot cloud"></div> Claude API</div>
+        <div class="meta-item">sonnet</div>
+        <div class="meta-item">~$5-15/mo</div>
+      </div>
+    </div>
+    <div class="agent-card">
+      <div class="agent-icon">&#x1F441;</div>
+      <div class="agent-name">Sentinel</div>
+      <div class="agent-role">Night Watch</div>
+      <div class="agent-desc">Runs 24/7. Monitors Gmail for expert network opportunities. Checks calendar for meetings needing prep. Fires alerts for time-sensitive items. Pattern detector.</div>
+      <div class="agent-meta">
+        <div class="meta-item"><div class="meta-dot local"></div> Mac Mini</div>
+        <div class="meta-item">qwen2.5:7b</div>
+        <div class="meta-item">$0/mo</div>
+      </div>
+    </div>
+    <div class="agent-card" style="border: 1px dashed #333;">
+      <div class="agent-icon" style="opacity: 0.5;">&#x1F50A;</div>
+      <div class="agent-name" style="opacity: 0.5;">Voice Interface</div>
+      <div class="agent-role">Future &mdash; Watching</div>
+      <div class="agent-desc" style="opacity: 0.7;">Two-way voice conversation. Morning briefing discussions. Brainstorming by talking. Needs: ElevenLabs Conversational AI or Anthropic voice API + local Whisper STT.</div>
+      <div class="agent-meta">
+        <div class="meta-item" style="opacity: 0.5;">Phase 2</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== FLOW VIEW ==================== -->
+<div id="view-flow" class="view">
+
+  <div class="flow-section">
+    <div class="flow-label">Morning Briefing Pipeline</div>
+    <div class="flow-pipeline">
+      <div class="flow-step cyan"><div class="step-name">Sentinel</div><div class="step-detail">Mac Mini, 8:30 AM</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step cyan"><div class="step-name">Gmail Scan</div><div class="step-detail">Expert networks, clients</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step cyan"><div class="step-name">Calendar Check</div><div class="step-detail">Today's events</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step purple"><div class="step-name">Cerebro Synthesis</div><div class="step-detail">Claude API, full context</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step green"><div class="step-name">Draft &rarr; Send</div><div class="step-detail">gws CLI, Gmail</div></div>
+    </div>
+  </div>
+
+  <div class="flow-section">
+    <div class="flow-label">Incoming Request Routing</div>
+    <div class="flow-pipeline">
+      <div class="flow-step" style="border-color: #ffffff20;"><div class="step-name">Request In</div><div class="step-detail">Any source</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step cyan"><div class="step-name">Jarvis Router</div><div class="step-detail">Mac Mini, instant</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step" style="border-color: #ffffff20; min-width: 200px;">
+        <div class="step-name" style="color: #ccc;">Route Decision</div>
+        <div class="step-detail">
+          Quick? &rarr; handle locally<br>
+          Code? &rarr; Ryzen<br>
+          Writing? &rarr; Claude<br>
+          Research? &rarr; Claude
+        </div>
+      </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step orange"><div class="step-name">Execute</div><div class="step-detail">Assigned agent</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step green"><div class="step-name">Draft Output</div><div class="step-detail">Law Two: approve first</div></div>
+    </div>
+  </div>
+
+  <div class="flow-section">
+    <div class="flow-label">Draft &rarr; Refine (Multi-Node)</div>
+    <div class="flow-pipeline">
+      <div class="flow-step cyan"><div class="step-name">First Draft</div><div class="step-detail">Mac Mini, 7B, fast</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step orange"><div class="step-name">Verify / Refine</div><div class="step-detail">Ryzen, 14B, thorough</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step purple"><div class="step-name">Polish (if needed)</div><div class="step-detail">Claude, frontier, voice</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step green"><div class="step-name">Output</div><div class="step-detail">Alexander reviews</div></div>
+    </div>
+  </div>
+
+  <div class="flow-section">
+    <div class="flow-label">Signal Detection Pipeline (Ansible / Cerebro)</div>
+    <div class="flow-pipeline">
+      <div class="flow-step cyan"><div class="step-name">Signal Scan</div><div class="step-detail">RSS, web, feeds</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step cyan"><div class="step-name">Filter</div><div class="step-detail">Interest Ontology match</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step orange"><div class="step-name">Embed &amp; Cluster</div><div class="step-detail">nomic-embed, vector DB</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step purple"><div class="step-name">Synthesize</div><div class="step-detail">Cross-domain insight</div></div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step green"><div class="step-name">Signal Registry</div><div class="step-detail">signals.md update</div></div>
+    </div>
+  </div>
+
+  <div class="flow-section">
+    <div class="flow-label">Shared State Layer</div>
+    <div class="flow-pipeline">
+      <div class="flow-step" style="border-color: #22c55e40;"><div class="step-name" style="color: #22c55e;">akos/ folder</div><div class="step-detail">Markdown files = brain</div></div>
+      <div class="flow-arrow">&harr;</div>
+      <div class="flow-step" style="border-color: #ffffff20;"><div class="step-name" style="color: #ccc;">Git</div><div class="step-detail">Version history</div></div>
+      <div class="flow-arrow">&harr;</div>
+      <div class="flow-step" style="border-color: #ffffff20;"><div class="step-name" style="color: #ccc;">Google Drive</div><div class="step-detail">Cross-device access</div></div>
+      <div class="flow-arrow">&harr;</div>
+      <div class="flow-step" style="border-color: #ffffff20;"><div class="step-name" style="color: #ccc;">Any Node</div><div class="step-detail">Reads same files</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== COST VIEW ==================== -->
+<div id="view-cost" class="view">
+  <div class="cost-grid">
+    <div class="cost-card">
+      <h3>Hybrid Model (Local + Cloud)</h3>
+      <div class="cost-total green">~$17-61/mo</div>
+      <div class="cost-breakdown">
+        <div class="cost-line"><span class="label">Mac Mini (24/7 power)</span><span class="amount">~$5-8</span></div>
+        <div class="cost-line"><span class="label">Ryzen (on-demand power)</span><span class="amount">~$2-3</span></div>
+        <div class="cost-line"><span class="label">Ollama</span><span class="amount free">$0</span></div>
+        <div class="cost-line"><span class="label">nginx</span><span class="amount free">$0</span></div>
+        <div class="cost-line"><span class="label">Paperclip</span><span class="amount free">$0</span></div>
+        <div class="cost-line"><span class="label">Claude API (frontier calls)</span><span class="amount">~$10-50</span></div>
+      </div>
+    </div>
+    <div class="cost-card">
+      <h3>All-Cloud Model (No Local)</h3>
+      <div class="cost-total red">~$100-300+/mo</div>
+      <div class="cost-breakdown">
+        <div class="cost-line"><span class="label">Claude API (all requests)</span><span class="amount">~$80-200</span></div>
+        <div class="cost-line"><span class="label">OpenAI API (fallback)</span><span class="amount">~$20-50</span></div>
+        <div class="cost-line"><span class="label">Embedding API</span><span class="amount">~$5-10</span></div>
+        <div class="cost-line"><span class="label">No always-on capability</span><span class="amount" style="color: #ef4444;">n/a</span></div>
+        <div class="cost-line"><span class="label">Cloud dependency</span><span class="amount" style="color: #ef4444;">100%</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top: 32px;">
+    <p style="color: #888; font-size: 13px; margin-bottom: 12px;">Estimated savings: 70-80% of requests handled locally at $0 marginal cost</p>
+    <div class="savings-bar">
+      <div class="savings-fill" style="width: 80%;"></div>
+      <div class="savings-text">~80% requests handled locally</div>
+    </div>
+  </div>
+
+  <div style="margin-top: 24px; color: #666; font-size: 12px; line-height: 1.8;">
+    <strong style="color: #888;">The rule:</strong> Local handles triage, routing, code, structured output, embeddings, monitoring.<br>
+    Cloud handles writing in Alexander's voice, foresight synthesis, deep research, full-context reasoning.<br>
+    The gateway makes this invisible &mdash; agents just call the endpoint, routing happens automatically.
+  </div>
+</div>
+
+<!-- ==================== ASSIMILATOR VIEW ==================== -->
+<div id="view-assimilator" class="view">
+  <div class="usb-icon">
+    <div class="big">&#x1F4BE;</div>
+    <div class="label">THE ASSIMILATOR</div>
+    <div class="sublabel">Plug in. Run one script. Machine joins the hive.</div>
+  </div>
+
+  <div class="assimilator-flow">
+    <div class="assim-step">
+      <div class="assim-number">1</div>
+      <div class="assim-content">
+        <h4>Detect Hardware</h4>
+        <p>Script auto-detects OS (macOS/Linux/Windows), CPU architecture, RAM, GPU. Chooses the right model profile: <code>heavy</code> (32GB+ / GPU), <code>standard</code> (16GB+), or <code>light</code> (8GB+).</p>
+      </div>
+    </div>
+    <div class="assim-line"></div>
+    <div class="assim-step">
+      <div class="assim-number">2</div>
+      <div class="assim-content">
+        <h4>Install Ollama</h4>
+        <p>One-line install. <code>curl -fsSL https://ollama.com/install.sh | sh</code> on Mac/Linux. Windows installer on the USB. Idempotent &mdash; skips if already installed.</p>
+      </div>
+    </div>
+    <div class="assim-line"></div>
+    <div class="assim-step">
+      <div class="assim-number">3</div>
+      <div class="assim-content">
+        <h4>Pull Right Model</h4>
+        <p>Based on hardware profile: <code>qwen2.5:14b</code> for heavy nodes, <code>qwen2.5:7b</code> for standard, <code>qwen2.5:3b</code> for light. Always pulls <code>nomic-embed-text</code> (tiny, useful everywhere). Optional: pre-staged GGUF files on the USB skip the download.</p>
+      </div>
+    </div>
+    <div class="assim-line"></div>
+    <div class="assim-step">
+      <div class="assim-number">4</div>
+      <div class="assim-content">
+        <h4>Configure LAN Access</h4>
+        <p>Sets <code>OLLAMA_HOST=0.0.0.0</code> so the node is reachable from any machine on the home network. Restarts Ollama service.</p>
+      </div>
+    </div>
+    <div class="assim-line"></div>
+    <div class="assim-step">
+      <div class="assim-number">5</div>
+      <div class="assim-content">
+        <h4>Register with Gateway</h4>
+        <p>Writes a <code>akos-node-registration.json</code> with hostname, IP, port, profile, model, hardware specs. Future: auto-updates the nginx upstream config on the Mac Mini gateway.</p>
+      </div>
+    </div>
+    <div class="assim-line"></div>
+    <div class="assim-step">
+      <div class="assim-number">6</div>
+      <div class="assim-content">
+        <h4>Verify &amp; Report</h4>
+        <p>Runs a test inference call. Confirms the node responds. Prints the <code>curl</code> command to test from other machines. Outputs: "NODE ASSIMILATED."</p>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top: 32px; padding: 20px; background: #12121a; border-radius: 12px; border: 1px solid #252535;">
+    <div style="color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px;">USB Drive Contents</div>
+    <pre style="color: #00d4ff; font-size: 12px; line-height: 1.8;">
+AKOS-ASSIMILATOR/
+&#x251C;&#x2500;&#x2500; assimilate.sh           &#x2190; Main script (Mac/Linux)
+&#x251C;&#x2500;&#x2500; assimilate.bat          &#x2190; Windows wrapper
+&#x251C;&#x2500;&#x2500; README.md               &#x2190; "Plug in. Run. Done."
+&#x251C;&#x2500;&#x2500; models/                 &#x2190; Pre-downloaded (optional)
+&#x2502;   &#x251C;&#x2500;&#x2500; qwen2.5-7b.gguf
+&#x2502;   &#x2514;&#x2500;&#x2500; nomic-embed.gguf
+&#x2514;&#x2500;&#x2500; gateway/
+    &#x251C;&#x2500;&#x2500; nginx.conf.template
+    &#x2514;&#x2500;&#x2500; register-node.sh    &#x2190; Auto-update gateway
+    </pre>
+  </div>
+</div>
+
+<script>
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,89 @@
+{
+  "name": "sentinel",
+  "role": "Night Watch",
+  "description": "Runs 24/7 on the always-on primary node. Monitors Gmail for expert network opportunities, checks calendar for meetings needing prep, detects project stalls, fires alerts for time-sensitive items. Pattern detector. The early warning system.",
+  "compute": {
+    "node": "primary",
+    "preference": "always-on",
+    "model_profile": "fast",
+    "fallback": "embed-only"
+  },
+  "budget": {
+    "type": "local",
+    "monthly_limit": null
+  },
+  "governance": {
+    "autonomy_level": "high",
+    "can_route_to_agents": true,
+    "can_send_notifications": true,
+    "can_modify_state": true,
+    "requires_approval": ["send_email", "escalate_to_cloud"]
+  },
+  "triggers": {
+    "scheduled": [
+      {"name": "inbox-scan", "cron": "*/30 * * * *", "note": "Every 30 min during waking hours"},
+      {"name": "calendar-check", "cron": "0 * * * *", "note": "Every hour"},
+      {"name": "stall-detector", "cron": "0 9 * * 1", "note": "Monday 9 AM"},
+      {"name": "node-health", "cron": "* * * * *", "note": "Every minute"}
+    ],
+    "event": ["high_priority_email", "meeting_in_30min", "node_offline", "budget_warning"]
+  },
+  "tools": [
+    "read_knowledge_base",
+    "update_signal_registry",
+    "update_state",
+    "send_notification",
+    "check_node_health",
+    "route_to_agent"
+  ],
+  "mcps": [
+    {
+      "name": "gmail",
+      "purpose": "Monitor for expert network opps, client emails, financial notifications",
+      "tools": ["search_messages", "read_message"],
+      "queries": [
+        "from:guidepoint OR from:glg",
+        "from:gumroad OR from:stripe",
+        "subject:urgent OR subject:time-sensitive",
+        "from:julie WFS"
+      ]
+    },
+    {
+      "name": "google_calendar",
+      "purpose": "Check for upcoming meetings needing prep",
+      "tools": ["list_events"]
+    },
+    {
+      "name": "ntfy_or_pushover",
+      "purpose": "Push notifications to Alexander's phone",
+      "tools": ["send_push"],
+      "status": "PLANNED — need to set up ntfy.sh or Pushover"
+    }
+  ],
+  "alert_rules": {
+    "expert_network_email": {
+      "trigger": "Email from Guidepoint/GLG with opportunity",
+      "action": "Immediate push notification + queue for cerebro-analyst prep",
+      "priority": "critical",
+      "respect_quiet_hours": false
+    },
+    "meeting_prep": {
+      "trigger": "Calendar event in 30 minutes with external attendees",
+      "action": "Route to cerebro-analyst for prep, notify Alexander",
+      "priority": "high",
+      "respect_quiet_hours": true
+    },
+    "project_stall": {
+      "trigger": "Project last-touched date exceeds stall threshold",
+      "action": "Flag in morning briefing, update patterns.md",
+      "priority": "medium",
+      "respect_quiet_hours": true
+    },
+    "node_offline": {
+      "trigger": "Node heartbeat missed for 5+ minutes",
+      "action": "Log event, adjust routing, notify if always-on node",
+      "priority": "low",
+      "respect_quiet_hours": true
+    }
+  }
+}

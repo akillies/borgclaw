@@ -1,0 +1,51 @@
+{
+  "name": "jarvis-router",
+  "role": "Chief of Staff",
+  "description": "Triage layer. Receives all incoming requests and routes to the right agent. Monitors scheduled tasks. First-pass analysis. Runs 24/7 on the always-on primary node.",
+  "compute": {
+    "node": "primary",
+    "preference": "always-on",
+    "model_profile": "fast",
+    "fallback": "any-local"
+  },
+  "budget": {
+    "type": "local",
+    "monthly_limit": null,
+    "note": "Local inference only — $0 marginal cost"
+  },
+  "governance": {
+    "autonomy_level": "high",
+    "can_route_to_agents": true,
+    "can_route_to_cloud": true,
+    "can_send_notifications": true,
+    "can_modify_state": false,
+    "requires_approval": ["send_email", "post_content", "modify_budget", "add_agent"]
+  },
+  "triggers": {
+    "incoming_request": "always — this is the entry point",
+    "scheduled": ["morning-briefing-dispatch", "evening-health-check"],
+    "event": ["new_email", "calendar_event_starting", "node_offline"]
+  },
+  "tools": [
+    "route_to_agent",
+    "classify_request",
+    "check_node_health",
+    "check_agent_status",
+    "read_task_queue",
+    "add_to_task_queue",
+    "read_knowledge_base",
+    "send_notification"
+  ],
+  "mcps": [
+    {
+      "name": "nadirclaw",
+      "purpose": "Smart routing — classify prompt complexity, route to optimal model",
+      "endpoint": "http://localhost:8856"
+    },
+    {
+      "name": "paperclip",
+      "purpose": "Agent governance — check budgets, log actions, request approvals",
+      "endpoint": "http://localhost:3100"
+    }
+  ]
+}

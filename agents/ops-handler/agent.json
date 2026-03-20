@@ -1,0 +1,65 @@
+{
+  "name": "ops-handler",
+  "role": "Operations Manager",
+  "description": "Code generation, file operations, data processing, template filling, structured output. The workhorse for compute-heavy tasks that don't need frontier intelligence. Runs on the GPU node.",
+  "compute": {
+    "node": "gpu",
+    "preference": "nvidia-heavy",
+    "model_profile": "qwen2.5:14b-instruct-q4_K_M",
+    "fallback": "primary-local"
+  },
+  "budget": {
+    "type": "local",
+    "monthly_limit": null,
+    "note": "Local GPU inference — $0 marginal cost, just electricity"
+  },
+  "governance": {
+    "autonomy_level": "medium",
+    "can_route_to_agents": false,
+    "can_route_to_cloud": false,
+    "can_send_notifications": false,
+    "can_modify_state": true,
+    "requires_approval": ["delete_files", "execute_external_commands", "install_packages"]
+  },
+  "triggers": {
+    "routed_from": "jarvis-router",
+    "scheduled": ["nightly-backup", "drive-sync"],
+    "event": ["code_request", "data_processing_request", "file_operation"]
+  },
+  "tools": [
+    "read_file",
+    "write_file",
+    "edit_file",
+    "execute_code",
+    "run_bash",
+    "git_operations",
+    "read_knowledge_base",
+    "write_knowledge_base",
+    "generate_embeddings",
+    "vector_search"
+  ],
+  "mcps": [
+    {
+      "name": "google_workspace_cli",
+      "purpose": "Drive sync, Gmail send (on behalf of Alexander with approval)",
+      "tools": ["drive_upload", "drive_download", "gmail_send"],
+      "note": "gmail_send ALWAYS requires board approval"
+    },
+    {
+      "name": "github",
+      "purpose": "Repo operations, commit, push, CI/CD monitoring",
+      "tools": ["clone", "commit", "push", "pull", "status", "check_ci"],
+      "note": "Push requires approval for main/master branch"
+    }
+  ],
+  "skills": [
+    "code-generation",
+    "data-processing",
+    "file-management",
+    "git-operations",
+    "drive-sync",
+    "template-filling",
+    "embedding-generation",
+    "rag-retrieval"
+  ]
+}

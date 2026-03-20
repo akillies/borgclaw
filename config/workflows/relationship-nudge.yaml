@@ -1,0 +1,172 @@
+# Workflow: Relationship Nudge & Network Health
+# Triggered: Monday 9:00 AM PT (weekly)
+# Duration: ~5 minutes
+# Agents: Sentinel, Cerebro, Comms-Drafter, Ops-Handler
+#
+# PURPOSE: Detect decaying relationships before they go cold.
+# Alexander's blind-spot pattern: "conversation-needed-followup"
+# This workflow operationalizes the fix.
+
+name: relationship-nudge
+version: "1.0"
+trigger:
+  type: cron
+  schedule: "0 9 * * 1"  # Monday 9:00 AM
+  timezone: America/Vancouver
+  also: manual
+
+variables:
+  decay_thresholds:
+    tier_1_days: 30    # Family, close collaborators
+    tier_2_days: 60    # Active professional network
+    tier_3_days: 90    # Extended network, weak ties
+  critical_contacts:
+    - name: "Kate Montgomery"
+      org: "Guidepoint"
+      tier: 2
+      last_known_gap: "60+ days unanswered"
+      revenue_impact: "$375+/hr expert network rate"
+    - name: "Julie Simon"
+      org: "World Future Society"
+      tier: 2
+    - name: "Mo Hirtle"
+      tier: 1
+      context: "Ansible design collaborator"
+    - name: "Jeff Gomez"
+      org: "Starlight Runner"
+      tier: 2
+      context: "Signal Corps IP architecture"
+    - name: "Seth Earley"
+      org: "Earley Information Science"
+      tier: 2
+      context: "EIS collaboration"
+
+steps:
+  # --- SCAN PHASE (parallel) ---
+
+  - id: scan_email_recency
+    agent: cerebro
+    action: query
+    params:
+      sources:
+        - capability: search_messages
+          queries_per_contact: true
+          query_template: "from:{{contact.email}} OR to:{{contact.email}}"
+          limit_per_contact: 5
+      cross_reference: "db/ak-os/entities/people.md"
+    outputs: [email_recency_map]
+    timeout_seconds: 120
+
+  - id: scan_calendar_meetings
+    agent: cerebro
+    action: query
+    params:
+      sources:
+        - capability: calendar_events
+          time_range: "past_90_days"
+      filter: "attendees in people.md"
+    outputs: [meeting_recency_map]
+    timeout_seconds: 60
+
+  - id: pattern_detection
+    agent: sentinel
+    action: pattern_scan
+    params:
+      patterns:
+        - id: conversation-needed-followup
+          description: "Contact has sent message with no reply from Alexander"
+          scan: "search_messages: is:unread OR (from:{{contact}} -reply)"
+          severity_if_tier_1: CRITICAL
+          severity_if_tier_2: WARN
+
+        - id: relationship-decay
+          description: "No interaction exceeds tier threshold"
+          scan: "last_interaction_date vs decay_thresholds"
+          severity_if_past_2x_threshold: CRITICAL
+
+        - id: opportunity-window-closing
+          description: "Revenue-relevant contact going cold"
+          scan: "contact.revenue_impact exists AND last_interaction > threshold"
+          severity: CRITICAL
+    outputs: [detected_patterns]
+
+  # --- ANALYSIS ---
+
+  - id: build_health_report
+    agent: cerebro
+    action: analyze
+    depends_on: [scan_email_recency, scan_calendar_meetings, pattern_detection]
+    params:
+      merge: [email_recency_map, meeting_recency_map, detected_patterns]
+      classify_each_contact:
+        healthy: "last_interaction < tier_threshold"
+        warming: "last_interaction between tier_threshold and 2x_threshold"
+        cold: "last_interaction > 2x_threshold"
+        critical: "unanswered message exists OR revenue_impact AND cold"
+      sort_by: severity_desc
+    outputs: [health_report]
+
+  # --- DRAFT NUDGES ---
+
+  - id: draft_nudge_messages
+    agent: comms-drafter
+    action: draft
+    depends_on: [build_health_report]
+    params:
+      for_each: "{{health_report.contacts_needing_action}}"
+      template: relationship-nudge
+      context:
+        contact: "{{contact}}"
+        last_interaction: "{{contact.last_interaction}}"
+        prior_threads: "{{contact.recent_threads}}"
+        voice_rules: "memory/context/voice-and-brand-rules.md"
+      constraints:
+        - "Warm, genuine tone. Not transactional."
+        - "Reference something specific from last interaction."
+        - "Short. 3-5 sentences max for email nudges."
+        - "No guilt language. No 'I know it's been a while.'"
+        - "If revenue contact: frame as value offering, not asking."
+      max_nudges: 5  # Don't overwhelm Alexander with 15 drafts
+    outputs: [nudge_drafts]
+    approval: required  # Alexander chooses which to send
+
+  # --- FORMAT & DELIVER ---
+
+  - id: format_weekly_report
+    agent: comms-drafter
+    action: draft
+    depends_on: [build_health_report, draft_nudge_messages]
+    params:
+      template: network-health-weekly
+      sections:
+        - critical_actions       # Red: respond NOW
+        - warming_contacts       # Yellow: nudge this week
+        - healthy_relationships  # Green: no action needed
+        - suggested_nudges       # Pre-drafted messages
+        - network_stats          # Contacts by tier, health distribution
+    outputs: [weekly_network_report]
+
+  - id: deliver
+    agent: ops-handler
+    action: deliver
+    depends_on: [format_weekly_report]
+    params:
+      channel: gmail_draft
+      to: "alexanderkline13@gmail.com"
+      subject: "Network Health: Week of {{trigger.date_formatted}}"
+      body: "{{weekly_network_report}}"
+    outputs: [delivery_confirmation]
+
+  - id: update_entities
+    agent: ops-handler
+    action: file_update
+    depends_on: [build_health_report]
+    params:
+      file: "db/ak-os/entities/people.md"
+      update_type: merge_recency_data
+      data: "{{health_report}}"
+    approval: auto  # Internal data update, no external impact
+
+error_handling:
+  on_no_decaying_contacts: "Great news. Report 'All relationships healthy this week.'"
+  on_email_scan_failure: "Use calendar data only. Note email gap in report."

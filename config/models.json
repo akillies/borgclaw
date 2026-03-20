@@ -1,0 +1,117 @@
+{
+  "_comment": "Hardware profile to model mapping. When better models come out, update this file. No code changes needed.",
+  "_modularity": "Every model entry is swappable. Ollama and LM Studio are interchangeable runtimes. If a new runtime appears (vLLM, llama.cpp server, etc.), add it as a runtime option.",
+  "_last_updated": "2026-03-15",
+
+  "profiles": {
+    "mac-apple-silicon-24gb": {
+      "description": "Apple Silicon Mac with 24GB+ unified memory. MLX optimized.",
+      "runtime": "lm-studio",
+      "runtime_alternatives": ["ollama"],
+      "models": {
+        "general": { "name": "qwen3-8b-mlx", "params": "8B", "quant": "Q4_K_M", "vram_gb": 5.5 },
+        "reasoning": { "name": "qwen3-14b-mlx", "params": "14B", "quant": "Q4_K_M", "vram_gb": 9.5 },
+        "code": { "name": "qwen2.5-coder-7b-mlx", "params": "7B", "quant": "Q4_K_M", "vram_gb": 4.5 },
+        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
+        "reranker": { "name": "Qwen3-Reranker-0.6B", "managed_by": "qmd" },
+        "query_expansion": { "name": "qmd-query-expansion-1.7B", "managed_by": "qmd" }
+      }
+    },
+    "nvidia-8gb-32gb-ram": {
+      "description": "NVIDIA GPU 8GB VRAM + 32GB system RAM. CUDA optimized.",
+      "runtime": "ollama",
+      "models": {
+        "general": { "name": "qwen3:8b", "params": "8B", "quant": "Q4_K_M", "vram_gb": 5.5 },
+        "reasoning": { "name": "qwen3:14b", "params": "14B", "quant": "Q4_K_M", "vram_gb": 9.5 },
+        "code": { "name": "qwen2.5-coder:7b", "params": "7B", "quant": "Q4_K_M", "vram_gb": 4.5 },
+        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" }
+      }
+    },
+    "mac-apple-silicon-16gb": {
+      "description": "Apple Silicon Mac with 16GB unified memory. MLX but tighter budget.",
+      "runtime": "lm-studio",
+      "runtime_alternatives": ["ollama"],
+      "models": {
+        "general": { "name": "qwen3-8b-mlx", "params": "8B", "quant": "Q4_K_M", "vram_gb": 5.5 },
+        "code": { "name": "qwen2.5-coder-7b-mlx", "params": "7B", "quant": "Q4_K_M", "vram_gb": 4.5 },
+        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
+        "reranker": { "name": "Qwen3-Reranker-0.6B", "managed_by": "qmd" },
+        "_note": "No 14B reasoning model — not enough RAM with other services running."
+      }
+    },
+    "mac-apple-silicon-8gb": {
+      "description": "Apple Silicon Mac with 8GB unified memory. Tight. Satellite recommended.",
+      "runtime": "ollama",
+      "models": {
+        "general": { "name": "qwen3:4b", "params": "4B", "quant": "Q4_K_M", "vram_gb": 3 },
+        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
+        "_note": "8GB M1 MacBook Air. Can search and run tiny models. Not a power node."
+      }
+    },
+    "mac-intel": {
+      "description": "Intel Mac (no Apple Silicon). CPU-only. LM Studio NOT available.",
+      "runtime": "ollama",
+      "runtime_note": "LM Studio requires Apple Silicon. This node uses Ollama CPU-only.",
+      "models": {
+        "general": { "name": "qwen3:4b", "params": "4B", "quant": "Q4_K_M", "vram_gb": 0 },
+        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
+        "_note": "CPU inference only. 3-6 tokens/sec. Fine for batch jobs, painful for interactive. Consider Satellite role."
+      }
+    },
+    "nvidia-4gb-legacy": {
+      "description": "Older NVIDIA GPU with 4-6GB VRAM (GTX 960, 1060, 1650, etc.).",
+      "runtime": "ollama",
+      "models": {
+        "general": { "name": "qwen3:4b", "params": "4B", "quant": "Q4_K_M", "vram_gb": 3 },
+        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
+        "_note": "Limited VRAM. 4B model fits. 7B+ will spill to RAM and slow down badly."
+      }
+    },
+    "cpu-only-16gb": {
+      "description": "No GPU (or unsupported GPU). 16GB RAM minimum.",
+      "runtime": "ollama",
+      "models": {
+        "general": { "name": "qwen3:4b", "params": "4B", "quant": "Q4_K_M", "vram_gb": 0 },
+        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" }
+      }
+    },
+    "cpu-only-8gb": {
+      "description": "No GPU. 8GB RAM. Minimum viable. Satellite role strongly recommended.",
+      "runtime": "ollama",
+      "models": {
+        "general": { "name": "qwen3:1.7b", "params": "1.7B", "quant": "Q4_K_M", "vram_gb": 0 },
+        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
+        "_note": "Barely functional for inference. Better as search-only Satellite (QMD only, no LLM)."
+      }
+    },
+    "satellite-search-only": {
+      "description": "No LLM inference. QMD search node only. For very low-spec machines.",
+      "runtime": "none",
+      "models": {
+        "embedding": { "name": "embedding-gemma-300M", "managed_by": "qmd" },
+        "_note": "This node only runs QMD for local search. All LLM requests route to other nodes or cloud."
+      }
+    },
+    "cloud-overflow": {
+      "description": "When local capacity is exhausted or task needs frontier reasoning.",
+      "runtime": "api",
+      "providers": {
+        "primary": { "name": "anthropic", "model": "claude-sonnet-4-6", "use_for": ["complex reasoning", "voice-matched writing"] },
+        "escalation": { "name": "anthropic", "model": "claude-opus-4-6", "use_for": ["frontier reasoning", "Ansible analysis"] },
+        "fallback": { "name": "openai", "model": "gpt-4o", "use_for": ["overflow when Anthropic rate-limited"] }
+      },
+      "budget": { "monthly_cap_usd": 55, "alert_at_pct": 80 }
+    }
+  },
+
+  "routing_rules": {
+    "_comment": "NadirClaw uses these in Phase 2. Jarvis routes manually in Phase 1.",
+    "simple_triage": "local_general",
+    "email_draft": "local_general",
+    "voice_writing": "cloud_primary",
+    "deep_research": "cloud_primary",
+    "code_generation": "local_code",
+    "signal_classification": "local_general",
+    "frontier_reasoning": "cloud_escalation"
+  }
+}

@@ -1,0 +1,71 @@
+# Agent Config: Ops-Handler (Executor)
+# Last-mile delivery. Files, emails, deploys, system operations.
+
+agent_id: ops-handler
+display_name: "Ops-Handler"
+role: executor
+instructions: "../agents/ops-handler/instructions.md"
+
+capabilities:
+  - file_operations
+  - email_delivery
+  - content_delivery
+  - system_operations
+  - entity_updates
+  - backup_operations
+
+tools_required:
+  - capability: create_draft        # Gmail draft (current)
+  - capability: send_email          # Gmail send (pending: gws)
+  - capability: write_drive         # Drive write (pending: gws)
+  - capability: task_management     # Fizzy cards (pending)
+
+model_preferences:
+  default: local_general            # Execution doesn't need frontier models
+
+context_files:
+  always_load:
+    - "db/ak-os/entities/operating-laws.md"
+
+operating_law_enforcement:
+  law_zero:
+    rule: "Never delete. Always archive or version."
+    action: "mv file file.bak.YYYYMMDD before any overwrite"
+  law_two:
+    rule: "Draft-then-approve for all external actions."
+    action: "Check approval_status before send/publish/deploy"
+  law_five:
+    rule: "Direct tooling over browser. MCP/API first."
+    action: "Use capability from registry. Fall back to browser only if no MCP exists."
+
+delivery_checklist:
+  - "Recipient correct?"
+  - "Subject line present and accurate?"
+  - "Body passes voice check? (if Comms-Drafter authored)"
+  - "No PII or sensitive data leaked?"
+  - "Approval status: approved?"
+  - "Correct channel? (gmail_draft vs send vs drive vs social)"
+  - "Logging: record delivery attempt in STATE.md"
+
+error_handling:
+  transient_failures:
+    action: "Retry up to 3 times with exponential backoff"
+    examples: ["network timeout", "rate limit", "503"]
+  permanent_failures:
+    action: "Log error. Alert Jarvis. Do NOT retry."
+    examples: ["auth failure", "invalid recipient", "permission denied"]
+  never_do:
+    - "Silently swallow errors"
+    - "Retry permanently without human review"
+    - "Delete files without archiving first"
+
+file_operations:
+  workspace: "db/ak-os/"
+  backup_dir: "db/ak-os/.archive/"
+  entity_files:
+    - "db/ak-os/entities/people.md"
+    - "db/ak-os/entities/projects.md"
+    - "db/ak-os/entities/decisions.md"
+    - "db/ak-os/entities/financial.md"
+    - "db/ak-os/entities/patterns.md"
+    - "db/ak-os/STATE.md"

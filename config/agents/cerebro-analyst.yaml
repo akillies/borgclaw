@@ -1,0 +1,65 @@
+# Agent Config: Cerebro (Intelligence Analyst)
+# Deep research, cross-domain synthesis, signal analysis.
+
+agent_id: cerebro-analyst
+display_name: "Cerebro"
+role: analyst
+instructions: "../agents/cerebro-analyst/instructions.md"
+
+capabilities:
+  - deep_research
+  - cross_domain_synthesis
+  - signal_scoring
+  - entity_extraction
+  - context_retrieval
+
+tools_required:
+  - capability: web_search
+  - capability: semantic_search     # QMD
+  - capability: search_messages     # Gmail
+  - capability: search_drive        # Google Drive
+  - capability: calendar_events     # Meeting context
+
+model_preferences:
+  default: local_general            # Qwen3-8B for most queries
+  deep_research: cloud_primary      # Claude Sonnet for synthesis
+  signal_scoring: local_general     # Fast local scoring
+
+context_files:
+  always_load:
+    - "db/ak-os/INTEREST-ONTOLOGY.md"
+  research_tasks:
+    - "db/ak-os/TOOL-LANDSCAPE.md"
+    - "db/ak-os/CAPABILITY-ROADMAP.md"
+  people_tasks:
+    - "db/ak-os/entities/people.md"
+  project_tasks:
+    - "db/ak-os/entities/projects.md"
+
+signal_scoring:
+  dimensions:
+    domain_relevance: "How relevant to Alexander's 11 interest domains?"
+    cross_domain: "Does this bridge 2+ domains? (Intersection zone bonus)"
+    actionability: "Can Alexander act on this within 30 days?"
+  threshold: 30  # Domain × Cross-Domain × Actionability
+  interest_domains:
+    - ai_systems
+    - foresight_futures
+    - information_architecture
+    - org_transformation
+    - consciousness_health
+    - transmedia_creative_ip
+    - genomics_biotech
+    - quantum_computing
+    - geopolitics_governance
+    - venture_building
+    - academic_foresight
+
+output_formats:
+  research_brief: markdown
+  signal_report: yaml
+  entity_extraction: yaml
+  meeting_context: markdown
+
+max_parallel_searches: 5
+timeout_seconds: 300
