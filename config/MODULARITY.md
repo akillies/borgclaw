@@ -1,4 +1,4 @@
-# AK-OS Modularity Manifesto
+# BorgClaw Modularity Manifesto
 ## Nothing is permanent. Everything is a slot.
 
 > "Nothing is definite, right? It's all modular — we swap things out and replace them or upgrade components when something better comes along. That's part of the philosophy." — BorgClaw design principle, 2026
@@ -7,7 +7,7 @@
 
 ## The Principle
 
-Every component in AK-OS is a **slot**, not a **commitment**. What matters is the CAPABILITY (what it does), not the IMPLEMENTATION (which tool does it). When something better comes along — and it will — the swap should be:
+Every component in BorgClaw is a **slot**, not a **commitment**. What matters is the CAPABILITY (what it does), not the IMPLEMENTATION (which tool does it). When something better comes along — and it will — the swap should be:
 
 1. **Cheap:** Change a config file, not rewrite the system.
 2. **Safe:** The old component stays archived (Law Zero). The new one proves itself before the old one is removed.

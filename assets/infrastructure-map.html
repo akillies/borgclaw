@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AK-OS Infrastructure Map</title>
+<title>BorgClaw — Infrastructure Map</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #0a0a0f; color: #e0e0e0; font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; overflow-x: hidden; }
@@ -138,7 +138,7 @@
 <body>
 
 <div class="header">
-  <h1>AK-OS Infrastructure</h1>
+  <h1>BorgClaw Infrastructure</h1>
   <div class="subtitle">Project Assimilator &mdash; Home AI Cluster Blueprint &mdash; 2026-03-14</div>
 </div>
 
@@ -204,9 +204,9 @@
       </div>
       <div class="node-services">
         <span class="service-tag active">Voice & brand</span>
-        <span class="service-tag active">Full AK-OS context</span>
-        <span class="service-tag">Boundary Layer</span>
-        <span class="service-tag">Ansible synthesis</span>
+        <span class="service-tag active">Full knowledge base context</span>
+        <span class="service-tag">Content platform</span>
+        <span class="service-tag">Foresight synthesis</span>
         <span class="service-tag">Cowork skills</span>
       </div>
     </div>
@@ -245,7 +245,7 @@
     <div class="conn-row">
       <span class="conn-from">All Nodes</span>
       <span class="conn-arrow">&harr;</span>
-      <span class="conn-to">akos/ folder</span>
+      <span class="conn-to">knowledge/ folder</span>
       <span class="conn-via">Git sync + Google Drive</span>
       <span class="conn-port">shared state</span>
     </div>
@@ -254,7 +254,7 @@
 
 <!-- ==================== AGENT VIEW ==================== -->
 <div id="view-agents" class="view">
-  <p class="section-desc">Each agent is a folder with a JSON config, instructions, and skill files. The orchestrator (Paperclip) dispatches tasks. Alexander operates as the "Board of Directors" &mdash; nothing ships without approval.</p>
+  <p class="section-desc">Each agent is a folder with a JSON config, instructions, and skill files. The orchestrator (Paperclip) dispatches tasks. The operator acts as the "Board of Directors" &mdash; nothing ships without approval.</p>
   <div class="agent-grid">
     <div class="agent-card">
       <div class="agent-icon">&#x1F916;</div>
@@ -271,7 +271,7 @@
       <div class="agent-icon">&#x1F9E0;</div>
       <div class="agent-name">Cerebro Analyst</div>
       <div class="agent-role">Chief Intelligence Officer</div>
-      <div class="agent-desc">Deep research. Signal analysis. Foresight synthesis. Boundary Layer drafting. Ansible methodology. Needs full AK-OS context and frontier reasoning.</div>
+      <div class="agent-desc">Deep research. Signal analysis. Foresight synthesis. Content platform drafting. Needs full knowledge base context and frontier reasoning.</div>
       <div class="agent-meta">
         <div class="meta-item"><div class="meta-dot cloud"></div> Claude API</div>
         <div class="meta-item">opus/sonnet</div>
@@ -293,7 +293,7 @@
       <div class="agent-icon">&#x1F4E8;</div>
       <div class="agent-name">Comms Drafter</div>
       <div class="agent-role">Communications Director</div>
-      <div class="agent-desc">Draft emails, LinkedIn posts, follow-ups, pitches. Must write in Alexander's voice. Requires full brand context and style guide.</div>
+      <div class="agent-desc">Draft emails, LinkedIn posts, follow-ups, pitches. Must write in the operator's voice. Requires full brand context and style guide.</div>
       <div class="agent-meta">
         <div class="meta-item"><div class="meta-dot cloud"></div> Claude API</div>
         <div class="meta-item">sonnet</div>
@@ -373,12 +373,12 @@
       <div class="flow-arrow">&rarr;</div>
       <div class="flow-step purple"><div class="step-name">Polish (if needed)</div><div class="step-detail">Claude, frontier, voice</div></div>
       <div class="flow-arrow">&rarr;</div>
-      <div class="flow-step green"><div class="step-name">Output</div><div class="step-detail">Alexander reviews</div></div>
+      <div class="flow-step green"><div class="step-name">Output</div><div class="step-detail">Operator reviews</div></div>
     </div>
   </div>
 
   <div class="flow-section">
-    <div class="flow-label">Signal Detection Pipeline (Ansible / Cerebro)</div>
+    <div class="flow-label">Signal Detection Pipeline (Cerebro)</div>
     <div class="flow-pipeline">
       <div class="flow-step cyan"><div class="step-name">Signal Scan</div><div class="step-detail">RSS, web, feeds</div></div>
       <div class="flow-arrow">&rarr;</div>
@@ -395,7 +395,7 @@
   <div class="flow-section">
     <div class="flow-label">Shared State Layer</div>
     <div class="flow-pipeline">
-      <div class="flow-step" style="border-color: #22c55e40;"><div class="step-name" style="color: #22c55e;">akos/ folder</div><div class="step-detail">Markdown files = brain</div></div>
+      <div class="flow-step" style="border-color: #22c55e40;"><div class="step-name" style="color: #22c55e;">knowledge/ folder</div><div class="step-detail">Markdown files = brain</div></div>
       <div class="flow-arrow">&harr;</div>
       <div class="flow-step" style="border-color: #ffffff20;"><div class="step-name" style="color: #ccc;">Git</div><div class="step-detail">Version history</div></div>
       <div class="flow-arrow">&harr;</div>
@@ -444,7 +444,7 @@
 
   <div style="margin-top: 24px; color: #666; font-size: 12px; line-height: 1.8;">
     <strong style="color: #888;">The rule:</strong> Local handles triage, routing, code, structured output, embeddings, monitoring.<br>
-    Cloud handles writing in Alexander's voice, foresight synthesis, deep research, full-context reasoning.<br>
+    Cloud handles writing in the operator's voice, foresight synthesis, deep research, full-context reasoning.<br>
     The gateway makes this invisible &mdash; agents just call the endpoint, routing happens automatically.
   </div>
 </div>
@@ -494,7 +494,7 @@
       <div class="assim-number">5</div>
       <div class="assim-content">
         <h4>Register with Gateway</h4>
-        <p>Writes a <code>akos-node-registration.json</code> with hostname, IP, port, profile, model, hardware specs. Future: auto-updates the nginx upstream config on the Mac Mini gateway.</p>
+        <p>Writes a <code>borgclaw-node-registration.json</code> with hostname, IP, port, profile, model, hardware specs. Future: auto-updates the nginx upstream config on the Mac Mini gateway.</p>
       </div>
     </div>
     <div class="assim-line"></div>
@@ -510,7 +510,7 @@
   <div style="margin-top: 32px; padding: 20px; background: #12121a; border-radius: 12px; border: 1px solid #252535;">
     <div style="color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px;">USB Drive Contents</div>
     <pre style="color: #00d4ff; font-size: 12px; line-height: 1.8;">
-AKOS-ASSIMILATOR/
+BORGCLAW-ASSIMILATOR/
 &#x251C;&#x2500;&#x2500; assimilate.sh           &#x2190; Main script (Mac/Linux)
 &#x251C;&#x2500;&#x2500; assimilate.bat          &#x2190; Windows wrapper
 &#x251C;&#x2500;&#x2500; README.md               &#x2190; "Plug in. Run. Done."

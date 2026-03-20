@@ -4,7 +4,7 @@
 // In-memory ring buffer + file persistence. No database.
 // Everything that happens in the hive gets logged here.
 // Dashboard reads from this. SSE pushes from this.
-// AK-OS hooks into this for cross-system routing.
+// your AI OS hooks into this for cross-system routing.
 // ============================================================
 
 import { readFileSync } from 'fs';
@@ -18,7 +18,7 @@ let dataFile = null;
 // SSE listeners for real-time push
 const listeners = new Set();
 
-// External hooks — other systems (AK-OS, ntfy, etc) register here
+// External hooks — other systems (your AI OS, ntfy, etc) register here
 const hooks = [];
 
 export function initActivity(dataDir) {
@@ -74,7 +74,7 @@ export function addSSEListener(res) {
 }
 
 // Register an external hook — called on every event
-// Use this to route events to AK-OS, ntfy, NATS, etc.
+// Use this to route events to your AI OS, ntfy, NATS, etc.
 export function onEvent(fn) {
   hooks.push(fn);
 }

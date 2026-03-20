@@ -6,7 +6,7 @@
 // No bypass path exists.
 //
 // Storage: in-memory Map + file-backed JSON.
-// Notification: dashboard (primary) + hooks for ntfy/AK-OS.
+// Notification: dashboard (primary) + hooks for ntfy/your AI OS.
 // ============================================================
 
 import { readFileSync } from 'fs';
@@ -17,7 +17,7 @@ import * as activity from './activity.js';
 const queue = new Map(); // id -> approval object
 let dataFile = null;
 
-// Notification hooks — register ntfy, AK-OS, email, etc.
+// Notification hooks — register ntfy, your AI OS, email, etc.
 const notifyHooks = [];
 
 export function initApprovals(dataDir) {

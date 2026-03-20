@@ -19,8 +19,8 @@ param(
 $ErrorActionPreference = "Continue"
 
 # --- Config ---
-$AKOS_DIR = if ($env:AKOS_DIR) { $env:AKOS_DIR } else { "$env:USERPROFILE\borgclaw" }
-$KNOWLEDGE_BASE_PATH = if ($env:KNOWLEDGE_BASE_PATH) { $env:KNOWLEDGE_BASE_PATH } else { "$AKOS_DIR\knowledge" }
+$BORGCLAW_HOME = if ($env:BORGCLAW_HOME) { $env:BORGCLAW_HOME } else { "$env:USERPROFILE\borgclaw" }
+$KNOWLEDGE_BASE_PATH = if ($env:KNOWLEDGE_BASE_PATH) { $env:KNOWLEDGE_BASE_PATH } else { "$BORGCLAW_HOME\knowledge" }
 $MIN_RAM_GB = 8
 $MIN_DISK_GB = 10
 $MIN_NODE_MAJOR = 22
@@ -121,7 +121,7 @@ function Check-Floors {
     Ok "Windows build: $build"
 
     # Disk
-    $drive = (Get-PSDrive -Name ($AKOS_DIR.Substring(0,1)))
+    $drive = (Get-PSDrive -Name ($BORGCLAW_HOME.Substring(0,1)))
     $freeGB = [math]::Round($drive.Free / 1GB)
     if ($freeGB -lt $MIN_DISK_GB) {
         Fail "${freeGB}GB disk free. Minimum ${MIN_DISK_GB}GB required."
@@ -314,19 +314,19 @@ function Install-QMD {
     }
     else {
         Warn "Global install failed. Installing locally..."
-        New-Item -ItemType Directory -Force -Path $AKOS_DIR | Out-Null
-        Push-Location $AKOS_DIR
+        New-Item -ItemType Directory -Force -Path $BORGCLAW_HOME | Out-Null
+        Push-Location $BORGCLAW_HOME
         npm install $QMD_PACKAGE
         Pop-Location
 
-        $binPath = "$AKOS_DIR\node_modules\.bin"
+        $binPath = "$BORGCLAW_HOME\node_modules\.bin"
         if ($env:PATH -notmatch [regex]::Escape($binPath)) {
             $env:PATH = "$binPath;$env:PATH"
             [Environment]::SetEnvironmentVariable("PATH", "$binPath;$([Environment]::GetEnvironmentVariable('PATH', 'User'))", "User")
         }
 
         if (Test-Command "qmd") {
-            Ok "QMD installed locally at $AKOS_DIR"
+            Ok "QMD installed locally at $BORGCLAW_HOME"
         }
         else {
             Err "QMD installation failed. You may need Visual Studio Build Tools + CMake."
@@ -385,7 +385,7 @@ function Pull-OllamaModel($model, $purpose) {
 function Configure-Node {
     Log "Step 9/11: Configuring node..."
 
-    $configDir = "$AKOS_DIR\config\nodes"
+    $configDir = "$BORGCLAW_HOME\config\nodes"
     New-Item -ItemType Directory -Force -Path $configDir | Out-Null
 
     $hostIP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch "Loopback" } | Select-Object -First 1).IPAddress
@@ -481,7 +481,7 @@ function Show-Summary {
         Write-Host ""
     }
 
-    Write-Host "  Config: $AKOS_DIR\config\nodes\$($env:COMPUTERNAME.ToLower()).yaml" -ForegroundColor Green
+    Write-Host "  Config: $BORGCLAW_HOME\config\nodes\$($env:COMPUTERNAME.ToLower()).yaml" -ForegroundColor Green
     Write-Host ""
     Write-Host "Bootstrap complete. Welcome to the Collective." -ForegroundColor Green
 }

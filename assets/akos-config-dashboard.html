@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AK-OS — Config Dashboard</title>
+<title>BorgClaw — Config Dashboard</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0a0a0f; color: #e0e0e8; min-height: 100vh; }
@@ -146,8 +146,8 @@
 
 <div class="header">
   <div class="flash-icon">&#x1F4BE;</div>
-  <h1>AK-OS CONFIG</h1>
-  <div class="sub">PERSONAL AI OPERATING SYSTEM &mdash; CONFIGURATION DASHBOARD</div>
+  <h1>BORGCLAW CONFIG</h1>
+  <div class="sub">YOUR PERSONAL AI OPERATING SYSTEM &mdash; CONFIGURATION DASHBOARD</div>
 </div>
 
 <div class="layout">
@@ -212,7 +212,7 @@
     <!-- ==================== OVERVIEW ==================== -->
     <div class="panel active" id="panel-overview">
       <h2>System Overview</h2>
-      <p class="desc">AK-OS v0.1 &mdash; Flash Drive Architecture</p>
+      <p class="desc">BorgClaw v0.1 &mdash; Flash Drive Architecture</p>
 
       <div class="grid-3" style="margin-bottom: 20px;">
         <div class="card">
@@ -248,11 +248,11 @@
               <div class="flash-body">
                 <div class="flash-led"></div>
               </div>
-              <div class="flash-label">akos/</div>
+              <div class="flash-label">borgclaw/</div>
             </div>
             <div style="flex: 1; min-width: 300px;">
               <p style="font-size: 13px; color: #aaa; line-height: 1.7; margin-bottom: 12px;">
-                AK-OS is a <span style="color: #00ff88;">portable folder</span> that turns any machine into Alexander's AI operating system.
+                BorgClaw is a <span style="color: #00ff88;">portable folder</span> that turns any machine into your personal AI operating system.
                 Plug it into a new computer, run the bootstrap script, and the entire system comes alive &mdash;
                 agents, search index, scheduled tasks, tool connections, operating laws.
               </p>
@@ -361,7 +361,7 @@
         <div class="card-body">
           <p style="font-size: 12px; color: #888; margin-bottom: 12px;">Each node runs a <code style="color: #00ff88;">borgclaw-agent</code> process that registers with Queen, reports hardware capabilities, and accepts task assignments.</p>
           <div class="terminal">
-            <span class="comment"># Node config lives at: akos/config/nodes/{node-id}.yaml</span><br><br>
+            <span class="comment"># Node config lives at: borgclaw/config/nodes/{node-id}.yaml</span><br><br>
             <span class="highlight">node_id:</span> <span class="cmd">mac-mini-queen</span><br>
             <span class="highlight">role:</span> <span class="cmd">queen</span><br>
             <span class="highlight">hostname:</span> <span class="cmd">192.168.1.100</span><br>
@@ -383,13 +383,13 @@
     <!-- ==================== PROVISION NEW ==================== -->
     <div class="panel" id="panel-provision">
       <h2>Provision New Machine</h2>
-      <p class="desc">Turn any computer into an AK-OS node. One script, full system.</p>
+      <p class="desc">Turn any computer into a BorgClaw node. One script, full system.</p>
 
       <div class="card">
         <div class="card-header"><h3>&#x1F4BE; Flash Drive Bootstrap</h3></div>
         <div class="card-body">
           <p style="font-size: 13px; color: #aaa; line-height: 1.7; margin-bottom: 16px;">
-            Plug in the akos/ folder (USB, git clone, rsync &mdash; any method). Run the bootstrap script.
+            Plug in the borgclaw/ folder (USB, git clone, rsync &mdash; any method). Run the bootstrap script.
             It detects hardware, installs dependencies, configures the node role, indexes your knowledge base,
             and joins the cluster.
           </p>
@@ -397,16 +397,16 @@
           <div class="section-title">Step 1: Get the folder onto the machine</div>
           <div class="terminal">
             <span class="comment"># Option A: Git clone (recommended)</span><br>
-            <span class="prompt">$</span> <span class="cmd">git clone git@github.com:akline/akos.git ~/akos</span><br><br>
+            <span class="prompt">$</span> <span class="cmd">git clone git@github.com:your-username/borgclaw.git ~/borgclaw</span><br><br>
             <span class="comment"># Option B: USB / external drive</span><br>
-            <span class="prompt">$</span> <span class="cmd">cp -r /Volumes/AKOS ~/akos</span><br><br>
+            <span class="prompt">$</span> <span class="cmd">cp -r /Volumes/BORGCLAW ~/borgclaw</span><br><br>
             <span class="comment"># Option C: rsync from existing node</span><br>
-            <span class="prompt">$</span> <span class="cmd">rsync -avz queen:~/akos/ ~/akos/</span>
+            <span class="prompt">$</span> <span class="cmd">rsync -avz queen:~/borgclaw/ ~/borgclaw/</span>
           </div>
 
           <div class="section-title">Step 2: Run the bootstrap</div>
           <div class="terminal">
-            <span class="prompt">$</span> <span class="cmd">cd ~/akos && ./bootstrap.sh</span><br><br>
+            <span class="prompt">$</span> <span class="cmd">cd ~/borgclaw && ./bootstrap.sh</span><br><br>
             <span class="output">&#x2714; Detecting hardware...</span><br>
             <span class="output">&nbsp;&nbsp;CPU: Apple M4 Pro (14-core ARM)</span><br>
             <span class="output">&nbsp;&nbsp;RAM: 24 GB</span><br>
@@ -427,13 +427,13 @@
             <span class="output">&nbsp;&nbsp;Writing config/nodes/mac-mini-queen.yaml</span><br>
             <span class="output">&nbsp;&nbsp;Starting NATS JetStream...</span><br>
             <span class="output">&nbsp;&nbsp;Starting QMD index (3 GGUF models, ~2GB)...</span><br>
-            <span class="output">&nbsp;&nbsp;Indexing akos/db/ as collection 'ak-os-core'...</span><br>
-            <span class="output">&nbsp;&nbsp;Indexing akos/memory/ as collection 'memory'...</span><br>
+            <span class="output">&nbsp;&nbsp;Indexing borgclaw/knowledge/ as collection 'knowledge-base'...</span><br>
+            <span class="output">&nbsp;&nbsp;Indexing borgclaw/memory/ as collection 'memory'...</span><br>
             <span class="output">&nbsp;&nbsp;Adding context annotations...</span><br>
             <span class="output">&nbsp;&nbsp;Starting QMD MCP server...</span><br>
             <span class="output">&nbsp;&nbsp;Starting Fizzy MCP...</span><br>
             <span class="output">&nbsp;&nbsp;Registering scheduled tasks (6 cron jobs)...</span><br><br>
-            <span class="output" style="color: #00ff88;">&#x2714; AK-OS Queen online. Dashboard: http://localhost:9090</span>
+            <span class="output" style="color: #00ff88;">&#x2714; BorgClaw Queen online. Dashboard: http://localhost:9090</span>
           </div>
 
           <div class="section-title">Step 3: Join existing cluster (workers only)</div>
@@ -442,7 +442,7 @@
             <span class="prompt">$</span> <span class="cmd">./bootstrap.sh --join queen@192.168.1.100</span><br><br>
             <span class="output">&#x2714; Connected to Queen at 192.168.1.100</span><br>
             <span class="output">&#x2714; Registered as worker: tower-ryzen5</span><br>
-            <span class="output">&#x2714; Syncing akos/ knowledge base...</span><br>
+            <span class="output">&#x2714; Syncing borgclaw/ knowledge base...</span><br>
             <span class="output">&#x2714; Ready for task assignments.</span>
           </div>
         </div>
@@ -471,7 +471,7 @@
       <div class="card">
         <div class="card-header"><h3>&#x1F451; Promote Worker to Queen</h3></div>
         <div class="card-body">
-          <p style="font-size: 12px; color: #888; margin-bottom: 12px;">If the Queen goes down, any worker can be promoted. The akos/ folder IS the system &mdash; whoever has the folder can become Queen.</p>
+          <p style="font-size: 12px; color: #888; margin-bottom: 12px;">If the Queen goes down, any worker can be promoted. The borgclaw/ folder IS the system &mdash; whoever has the folder can become Queen.</p>
           <div class="terminal">
             <span class="prompt">$</span> <span class="cmd">borgclaw promote --role queen</span><br><br>
             <span class="output">&#x2714; Stopping worker services...</span><br>
@@ -518,16 +518,16 @@
 
             <div class="section-title" style="margin-top: 16px;">Collections</div>
             <div class="terminal" style="font-size: 11px;">
-              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/akos/db/ak-os --name ak-os-core</span><br>
-              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/akos/db/ak-os/entities --name entities</span><br>
-              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/akos/db/ak-os/projects/borgclaw --name borgclaw</span><br>
-              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/akos/db --name master-context</span><br>
-              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/akos/memory --name memory</span>
+              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/borgclaw/knowledge --name knowledge-base</span><br>
+              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/borgclaw/knowledge/entities --name entities</span><br>
+              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/borgclaw/knowledge/projects/borgclaw --name borgclaw</span><br>
+              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/borgclaw/knowledge --name master-context</span><br>
+              <span class="prompt">$</span> <span class="cmd">qmd collection add ~/borgclaw/memory --name memory</span>
             </div>
 
             <div class="section-title">Context Annotations</div>
             <div class="terminal" style="font-size: 11px;">
-              <span class="prompt">$</span> <span class="cmd">qmd context add qmd://ak-os-core "AK-OS operating system: ontology, workflows, state"</span><br>
+              <span class="prompt">$</span> <span class="cmd">qmd context add qmd://knowledge-base "BorgClaw knowledge base: ontology, workflows, state"</span><br>
               <span class="prompt">$</span> <span class="cmd">qmd context add qmd://entities "Entity registries: people, projects, patterns"</span><br>
               <span class="prompt">$</span> <span class="cmd">qmd context add qmd://borgclaw "BorgClaw infrastructure: specs, research, config"</span><br>
               <span class="prompt">$</span> <span class="cmd">qmd context add qmd://master-context "Deep context: identity, voice, brand, IP"</span><br>
@@ -561,7 +561,7 @@
 
             <div class="section-title" style="margin-top: 16px;">Memory Layers</div>
             <table style="font-size: 11px;">
-              <tr><td style="color: #00ff88;">User Memory</td><td>Alexander's preferences, corrections, voice rules</td></tr>
+              <tr><td style="color: #00ff88;">User Memory</td><td>Operator preferences, corrections, voice rules</td></tr>
               <tr><td style="color: #60a5fa;">Agent Memory</td><td>Per-agent learned behaviors (Comms-Drafter voice, Cerebro patterns)</td></tr>
               <tr><td style="color: #a78bfa;">Session Memory</td><td>Conversation summaries that persist across sessions</td></tr>
             </table>
@@ -613,14 +613,14 @@
         <tr>
           <td style="color: #60a5fa;">Cerebro</td>
           <td>Intelligence Analyst</td>
-          <td>Research, signal scanning, data synthesis, Ansible signal detection</td>
+          <td>Research, signal scanning, data synthesis, foresight signal detection</td>
           <td>Queen / Worker</td>
           <td><span class="status pending">Designed</span></td>
         </tr>
         <tr>
           <td style="color: #a78bfa;">Comms-Drafter</td>
           <td>Communications</td>
-          <td>Email drafts, LinkedIn posts, Boundary Layer articles, voice-matched writing</td>
+          <td>Email drafts, LinkedIn posts, content platform articles, voice-matched writing</td>
           <td>Queen / Worker</td>
           <td><span class="status pending">Designed</span></td>
         </tr>
@@ -643,13 +643,13 @@
       <div class="section-title">Agent Config Location</div>
       <div class="terminal">
         <span class="comment"># Agent prompts and configs live in:</span><br>
-        <span class="cmd">akos/config/agents/{agent-name}.yaml</span><br><br>
+        <span class="cmd">borgclaw/config/agents/{agent-name}.yaml</span><br><br>
         <span class="comment"># Each agent YAML defines:</span><br>
         <span class="highlight">name:</span> <span class="cmd">comms-drafter</span><br>
         <span class="highlight">model:</span> <span class="cmd">claude-sonnet-4-6</span> <span class="comment"># via NadirClaw routing</span><br>
         <span class="highlight">context_files:</span><br>
         <span class="cmd">&nbsp;&nbsp;- memory/context/voice-and-brand-rules.md</span><br>
-        <span class="cmd">&nbsp;&nbsp;- db/Alexander_Kline_Voice_Style_Guide_v3.md</span><br>
+        <span class="cmd">&nbsp;&nbsp;- knowledge/voice-and-style-guide.md</span><br>
         <span class="highlight">tools:</span><br>
         <span class="cmd">&nbsp;&nbsp;- qmd-search</span><br>
         <span class="cmd">&nbsp;&nbsp;- gmail-draft</span><br>
@@ -682,7 +682,7 @@
 
       <div class="section-title">Adding a New MCP</div>
       <div class="terminal">
-        <span class="comment"># MCP registry lives at: akos/config/mcps/registry.yaml</span><br><br>
+        <span class="comment"># MCP registry lives at: borgclaw/config/mcps/registry.yaml</span><br><br>
         <span class="comment"># To add a new MCP connection:</span><br>
         <span class="prompt">1.</span> <span class="cmd">Add entry to config/mcps/registry.yaml</span><br>
         <span class="prompt">2.</span> <span class="cmd">Install the MCP server (npm or pip)</span><br>
@@ -703,7 +703,7 @@
         <div class="card-body">
           <table>
             <tr><th>Workflow</th><th>Trigger</th><th>Agents Involved</th><th>Approval Gates</th></tr>
-            <tr><td>content-publish-pipeline</td><td>label: content + boundary-layer</td><td>Cerebro &rarr; Comms &rarr; Ops</td><td>3 (draft, social, publish)</td></tr>
+            <tr><td>content-publish-pipeline</td><td>label: content + newsletter</td><td>Cerebro &rarr; Comms &rarr; Ops</td><td>3 (draft, social, publish)</td></tr>
             <tr><td>meeting-prep</td><td>calendar event T-24h</td><td>Cerebro &rarr; Comms</td><td>0</td></tr>
             <tr><td>email-response</td><td>priority inbox match</td><td>Comms</td><td>1 (send)</td></tr>
             <tr><td>signal-scan</td><td>cron: weekly Monday</td><td>Cerebro &rarr; Sentinel</td><td>0</td></tr>
@@ -716,7 +716,7 @@
       <div class="section-title">Workflow Config Location</div>
       <div class="terminal">
         <span class="comment"># Workflow templates live in YAML:</span><br>
-        <span class="cmd">akos/config/workflows/{workflow-name}.yaml</span><br><br>
+        <span class="cmd">borgclaw/config/workflows/{workflow-name}.yaml</span><br><br>
         <span class="comment"># To add a new workflow:</span><br>
         <span class="prompt">1.</span> <span class="cmd">Create YAML with steps, dependencies, agents, approval gates</span><br>
         <span class="prompt">2.</span> <span class="cmd">Register trigger (cron, webhook, label match, event)</span><br>
@@ -743,7 +743,7 @@
       <div class="section-title">Task Config</div>
       <div class="terminal">
         <span class="comment"># Scheduled tasks are Cowork skills + cron triggers</span><br>
-        <span class="comment"># Config: akos/config/scheduled/{task-name}.yaml</span><br><br>
+        <span class="comment"># Config: borgclaw/config/scheduled/{task-name}.yaml</span><br><br>
         <span class="highlight">name:</span> <span class="cmd">morning-briefing</span><br>
         <span class="highlight">cron:</span> <span class="cmd">"30 8 * * 1-5"</span> <span class="comment"># weekdays 8:30 AM</span><br>
         <span class="highlight">timezone:</span> <span class="cmd">America/Vancouver</span><br>
@@ -751,7 +751,7 @@
         <span class="highlight">prompt_file:</span> <span class="cmd">prompts/morning-briefing.md</span><br>
         <span class="highlight">output:</span> <span class="cmd">gmail_draft</span><br>
         <span class="highlight">node:</span> <span class="cmd">tower</span><br>
-        <span class="highlight">notify_on_failure:</span> <span class="cmd">ntfy://akos-alerts</span>
+        <span class="highlight">notify_on_failure:</span> <span class="cmd">ntfy://borgclaw-alerts</span>
       </div>
     </div>
 
@@ -767,14 +767,14 @@
         <tr><td>3. Workflow Templates</td><td>Steps-to-completion / error rate</td><td>Weekly (after runs)</td><td>Proposal &rarr; Approve</td></tr>
         <tr><td>4. Context Assembly</td><td>Retrieval precision @ k</td><td>Weekly (QMD metrics)</td><td>Autonomous (ranking)</td></tr>
         <tr><td>5. Signal Detection</td><td>Signal-to-noise ratio / hits</td><td>Weekly</td><td>Autonomous</td></tr>
-        <tr><td>6. Content Quality</td><td>Engagement + Alexander edits</td><td>Per piece</td><td>Proposal &rarr; Approve</td></tr>
+        <tr><td>6. Content Quality</td><td>Engagement + operator edits</td><td>Per piece</td><td>Proposal &rarr; Approve</td></tr>
         <tr><td>7. Relationships</td><td>Response rate / relationship health</td><td>Monthly</td><td>Proposal &rarr; Approve</td></tr>
         <tr><td>8. Financial</td><td>Revenue per hour / pipeline growth</td><td>Monthly</td><td>Data only (no auto)</td></tr>
       </table>
 
       <div class="section-title">Experiment Log</div>
       <div class="terminal">
-        <span class="comment"># Log at: akos/db/ak-os/experiments/META.tsv</span><br>
+        <span class="comment"># Log at: borgclaw/knowledge/experiments/META.tsv</span><br>
         <span class="comment"># Format: date | surface | experiment_id | baseline | result | delta | status | description</span><br><br>
         <span class="output">No experiments logged yet. System instrumentation pending.</span>
       </div>
@@ -824,9 +824,9 @@
       <div class="card">
         <div class="card-body">
           <table>
-            <tr><td style="color: #f87171; width: 80px;">Law Zero</td><td><strong>Never delete.</strong> Append, archive, version &mdash; but never destroy Alexander's data.</td></tr>
+            <tr><td style="color: #f87171; width: 80px;">Law Zero</td><td><strong>Never delete.</strong> Append, archive, version &mdash; but never destroy the operator's data.</td></tr>
             <tr><td style="color: #fb923c;">Law One</td><td><strong>Protect interests.</strong> Family, finances, reputation, IP. Family time is sacred.</td></tr>
-            <tr><td style="color: #00ff88;">Law Two</td><td><strong>Draft, then approve.</strong> Nothing sent, published, or committed without Alexander's review. Autonomy is earned.</td></tr>
+            <tr><td style="color: #00ff88;">Law Two</td><td><strong>Draft, then approve.</strong> Nothing sent, published, or committed without the operator's review. Autonomy is earned.</td></tr>
             <tr><td style="color: #60a5fa;">Law Three</td><td><strong>Self-improve.</strong> Track what works, experiment, evolve. The system that doesn't improve dies.</td></tr>
             <tr><td style="color: #a78bfa;">Law Four</td><td><strong>Mutual respect.</strong> Treat every interaction as collaboration. Challenge constructively.</td></tr>
             <tr><td style="color: #e879f9;">Law Five</td><td><strong>Direct tooling over browser.</strong> MCP/API first, browser automation last resort.</td></tr>
@@ -846,7 +846,7 @@
           <div class="step">
             <div class="step-num done">1</div>
             <div class="step-content">
-              <h4>Edit config files in akos/config/</h4>
+              <h4>Edit config files in borgclaw/config/</h4>
               <p>All changes are YAML/Markdown edits. No compilation, no build step.</p>
             </div>
           </div>
@@ -904,22 +904,22 @@
     <!-- ==================== BACKUP & SYNC ==================== -->
     <div class="panel" id="panel-backup">
       <h2>Backup & Sync</h2>
-      <p class="desc">The akos/ folder IS the backup. Keep it synced, keep it safe.</p>
+      <p class="desc">The borgclaw/ folder IS the backup. Keep it synced, keep it safe.</p>
 
       <div class="card">
         <div class="card-body">
           <table>
             <tr><th>Method</th><th>Frequency</th><th>Destination</th><th>Status</th></tr>
             <tr><td>Git push</td><td>On every change</td><td>GitHub (private repo)</td><td><span class="status pending">Pending setup</span></td></tr>
-            <tr><td>Google Drive sync (gws)</td><td>Nightly 11 PM PT</td><td>Drive AKOS folder</td><td><span class="status pending">Pending gws install</span></td></tr>
+            <tr><td>Google Drive sync (gws)</td><td>Nightly 11 PM PT</td><td>Drive backup folder</td><td><span class="status pending">Pending gws install</span></td></tr>
             <tr><td>Local backup</td><td>Weekly</td><td>External drive</td><td><span class="status offline">Manual</span></td></tr>
           </table>
 
           <div class="section-title">Recovery</div>
           <div class="terminal">
             <span class="comment"># Full system recovery on a new machine:</span><br>
-            <span class="prompt">$</span> <span class="cmd">git clone git@github.com:akline/akos.git ~/akos</span><br>
-            <span class="prompt">$</span> <span class="cmd">cd ~/akos && ./bootstrap.sh</span><br>
+            <span class="prompt">$</span> <span class="cmd">git clone git@github.com:your-username/borgclaw.git ~/borgclaw</span><br>
+            <span class="prompt">$</span> <span class="cmd">cd ~/borgclaw && ./bootstrap.sh</span><br>
             <span class="comment"># That's it. Everything rebuilds from the folder.</span>
           </div>
         </div>

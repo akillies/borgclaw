@@ -12,15 +12,35 @@ import (
 )
 
 // HeartbeatPayload is what the node sends to Queen every interval.
+// Field names must match what Queen's /api/nodes/:nodeId/heartbeat expects.
 type HeartbeatPayload struct {
 	NodeID       string          `json:"node_id"`
 	Addr         string          `json:"addr"`
-	Status       string          `json:"status"` // "online", "busy", "draining"
+	SentAt       time.Time       `json:"sent_at"` // For Queen RTT calculation
+	Status       string          `json:"status"`  // "online", "busy", "draining"
 	Hardware     HardwareProfile `json:"hardware"`
-	Metrics      NodeMetrics     `json:"metrics"`
+	Config       map[string]any  `json:"config,omitempty"`
+	Metrics      QueenMetrics    `json:"metrics"` // Field names match Queen's expected format
 	Contribution int             `json:"contribution"`
 	Models       []string        `json:"models"`
 	Capacity     TaskCapacity    `json:"capacity"`
+}
+
+// QueenMetrics uses field names that match Queen's server.js heartbeat handler.
+type QueenMetrics struct {
+	TokensPerSec   float64 `json:"tokens_per_sec"`
+	CPUPct         float64 `json:"cpu_pct"`
+	RAMUsedGB      float64 `json:"ram_used_gb"`
+	RAMTotalGB     float64 `json:"ram_total_gb"`
+	GPUUtilPct     float64 `json:"gpu_util_pct,omitempty"`
+	GPUVRAMUsedMB  uint64  `json:"gpu_vram_used_mb,omitempty"`
+	GPUVRAMTotalMB uint64  `json:"gpu_vram_total_mb,omitempty"`
+	NetRxMbps      float64 `json:"net_rx_mbps"`
+	NetTxMbps      float64 `json:"net_tx_mbps"`
+	ActiveModel    string  `json:"active_model,omitempty"`
+	RequestsServed int64   `json:"requests_served"`
+	CPUTempC       float64 `json:"cpu_temp_c,omitempty"`
+	GPUTempC       float64 `json:"gpu_temp_c,omitempty"`
 }
 
 // TaskCapacity reports how many tasks the node can handle.
@@ -126,12 +146,31 @@ func (hr *HeartbeatReporter) send(ctx context.Context) error {
 		status = "busy"
 	}
 
+	// Convert internal metrics to Queen's expected field format
+	_, _, avgTok := hr.ollama.Stats()
+	requests, _, _ := hr.ollama.Stats()
+	queenMetrics := QueenMetrics{
+		TokensPerSec:   avgTok,
+		CPUPct:         m.CPUPercent,
+		RAMUsedGB:      float64(m.RAMUsedMB) / 1024.0,
+		RAMTotalGB:     float64(hr.hardware.RAMTotal) / 1024.0,
+		GPUUtilPct:     m.GPUPercent,
+		GPUVRAMTotalMB: hr.hardware.GPUVRAM,
+		NetRxMbps:      m.NetRecvMB,
+		NetTxMbps:      m.NetSentMB,
+		ActiveModel:    m.ActiveModel,
+		RequestsServed: requests,
+		CPUTempC:       0, // TODO: thermal monitoring
+		GPUTempC:       m.GPUTempC,
+	}
+
 	payload := HeartbeatPayload{
 		NodeID:       hr.nodeID,
 		Addr:         hr.listenAddr,
+		SentAt:       time.Now(),
 		Status:       status,
 		Hardware:     hr.hardware,
-		Metrics:      m,
+		Metrics:      queenMetrics,
 		Contribution: hr.throttle.Level(),
 		Models:       modelNames,
 		Capacity: TaskCapacity{
@@ -146,7 +185,7 @@ func (hr *HeartbeatReporter) send(ctx context.Context) error {
 		return fmt.Errorf("marshal heartbeat: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", hr.queenURL+"/api/nodes/heartbeat", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", hr.queenURL+"/api/nodes/"+hr.nodeID+"/heartbeat", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

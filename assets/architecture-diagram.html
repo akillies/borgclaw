@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BorgClaw + AK-OS — Architecture</title>
+<title>BorgClaw — System Architecture</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;600&display=swap');
 
@@ -326,8 +326,8 @@
     line-height: 1.4;
   }
 
-  /* ─── AK-OS LAYER ─────────────────────────────────────── */
-  .akos-grid {
+  /* ─── KNOWLEDGE LAYER ─────────────────────────────────── */
+  .knowledge-grid {
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: 1.5fr 1fr 1fr 1fr;
@@ -453,26 +453,26 @@
 <!-- HEADER -->
 <div class="header">
   <div class="laser">◉━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━►</div>
-  <div class="title">BorgClaw + AK-OS — System Architecture</div>
+  <div class="title">BorgClaw — System Architecture</div>
   <div class="subtitle">March 18, 2026 · Your Machines · Your Models · Your Rules</div>
 </div>
 
 <div class="diagram">
 
   <!-- ═══════════════════════════════════════════════════════ -->
-  <!--  LAYER 0 — AK-OS (The Brain)                          -->
+  <!--  LAYER 0 — Knowledge (The Brain)                      -->
   <!-- ═══════════════════════════════════════════════════════ -->
 
   <div class="divider span-all">
-    <span class="divider-text">AK-OS — The Brain</span>
+    <span class="divider-text">Knowledge Base — The Brain</span>
     <div class="divider-line"></div>
     <span class="divider-text" style="color:#00ff8833">LAYER 0</span>
   </div>
 
-  <div class="akos-grid">
+  <div class="knowledge-grid">
     <div class="card accent-green">
       <div class="card-title">Core Memory</div>
-      <div class="card-label">AK-OS Entity Graph</div>
+      <div class="card-label">Entity Graph</div>
       <div class="card-sub" style="margin-top:6px">
         <ul class="feed-list">
           <li><span class="status-dot dot-green"></span>CLAUDE.md — session bootstrap</li>
@@ -515,12 +515,12 @@
       <div class="card-title">Projects (Active)</div>
       <div class="card-label">Current Workstreams</div>
       <ul class="feed-list" style="margin-top:8px">
-        <li><span class="status-dot dot-green"></span>Pocket Technician ($125/hr)</li>
-        <li><span class="status-dot dot-yellow"></span>Boundary Layer (content)</li>
+        <li><span class="status-dot dot-green"></span>Consulting ($125/hr)</li>
+        <li><span class="status-dot dot-yellow"></span>Content platform</li>
         <li><span class="status-dot dot-yellow"></span>BorgClaw (this build)</li>
-        <li><span class="status-dot dot-yellow"></span>Ansible (fork TBD)</li>
-        <li><span class="status-dot dot-gray"></span>Cervical ebook (98% stalled)</li>
-        <li><span class="status-dot dot-gray"></span>DSV / Expert networks</li>
+        <li><span class="status-dot dot-yellow"></span>Foresight methodology</li>
+        <li><span class="status-dot dot-gray"></span>Ebook (98% stalled)</li>
+        <li><span class="status-dot dot-gray"></span>Research / Expert networks</li>
       </ul>
     </div>
   </div>
@@ -550,7 +550,7 @@
     </div>
     <div class="agent-card" style="border-color:#60a5fa22;">
       <div class="agent-name">⬡ cerebro-analyst</div>
-      <div class="agent-role">Deep research + foresight synthesis. Ansible brain.</div>
+      <div class="agent-role">Deep research + foresight synthesis. Intelligence core.</div>
       <div class="agent-compute"><span class="status-dot dot-blue"></span>cloud · ~$20-40/mo</div>
     </div>
     <div class="agent-card" style="border-color:#a78bfa22;">
@@ -646,7 +646,7 @@
     <div class="mw-card">
       <div class="mw-name">QMD</div>
       <div class="port" style="margin-bottom:6px">MCP server</div>
-      <div class="mw-desc">@tobilu/qmd · 3-layer search over AK-OS markdown: BM25 + vector (nomic-embed-text:v2) + LLM rerank (Qwen3-Reranker-0.6B).</div>
+      <div class="mw-desc">@tobilu/qmd · 3-layer search over knowledge base markdown: BM25 + vector (nomic-embed-text:v2) + LLM rerank (Qwen3-Reranker-0.6B).</div>
     </div>
     <div class="mw-card">
       <div class="mw-name">ntfy</div>
