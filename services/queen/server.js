@@ -34,6 +34,8 @@ const BORGCLAW_HOME = process.env.BORGCLAW_HOME || path.join(process.env.HOME ||
 const CONFIG_DIR = path.join(BORGCLAW_HOME, 'config');
 const DATA_DIR = path.join(BORGCLAW_HOME, 'data');
 const HEARTBEAT_TIMEOUT_MS = 150_000; // 2.5 min
+const LITELLM_CONFIG = path.join(CONFIG_DIR, 'litellm.yaml');
+const LITELLM_URL = process.env.LITELLM_URL || 'http://localhost:4000';
 
 // Ensure data directory exists
 mkdirSync(DATA_DIR, { recursive: true });
@@ -46,6 +48,93 @@ approvals.initApprovals(DATA_DIR);
 const nodes = new Map();
 const startedAt = new Date();
 const VERSION = '0.2.0';
+
+// ============================================================
+// LiteLLM Dynamic Routing — nodes auto-register as endpoints
+// ============================================================
+// When a Claw node reports its models via heartbeat, Queen
+// rebuilds litellm.yaml with all known Ollama endpoints so
+// LiteLLM load-balances across the entire hive automatically.
+// ============================================================
+
+let litellmSyncTimer = null;
+const LITELLM_SYNC_DEBOUNCE_MS = 5000; // batch rapid heartbeats
+
+function scheduleLitellmSync() {
+  if (litellmSyncTimer) return; // already scheduled
+  litellmSyncTimer = setTimeout(async () => {
+    litellmSyncTimer = null;
+    try { await syncLitellmConfig(); }
+    catch (err) { console.warn(`[QUEEN] LiteLLM sync failed: ${err.message}`); }
+  }, LITELLM_SYNC_DEBOUNCE_MS);
+}
+
+async function syncLitellmConfig() {
+  // Read existing config to preserve cloud tiers + router settings
+  let existing = {};
+  try {
+    const raw = readFileSync(LITELLM_CONFIG, 'utf-8');
+    existing = yaml.load(raw) || {};
+  } catch { /* fresh config */ }
+
+  // Separate local (node-generated) from cloud (user-configured) entries
+  const cloudModels = (existing.model_list || []).filter(m =>
+    !m.litellm_params?.model?.startsWith('ollama/') ||
+    m._managed_by === 'user'
+  );
+
+  // Build local model entries from all online nodes
+  const localModels = [];
+  const onlineThreshold = Date.now() - HEARTBEAT_TIMEOUT_MS;
+
+  for (const [nodeId, node] of nodes) {
+    if (!node.lastHeartbeat || node.lastHeartbeat.getTime() < onlineThreshold) continue;
+    const addr = node.config?.addr || node.addr;
+    if (!addr) continue;
+
+    // Determine Ollama URL from node address
+    const ollamaHost = addr.replace(/:\d+$/, ''); // strip Claw port
+    const ollamaUrl = `http://${ollamaHost.replace(/^:/, 'localhost')}:11434`;
+
+    const models = node.models || node.config?.models || [];
+    for (const model of models) {
+      const modelBase = model.replace(/:latest$/, '');
+      localModels.push({
+        model_name: `local-${modelBase.replace(/[/:]/g, '-')}`,
+        litellm_params: {
+          model: `ollama/${model}`,
+          api_base: ollamaUrl,
+        },
+        model_info: {
+          tier: 1,
+          cost_per_token: 0,
+          node_id: nodeId,
+          _managed_by: 'queen', // tag so we can distinguish from user entries
+        },
+      });
+    }
+  }
+
+  // Merge: cloud models (preserved) + local models (regenerated)
+  const merged = {
+    ...existing,
+    model_list: [...cloudModels, ...localModels],
+  };
+
+  // Write updated config
+  const yamlStr = yaml.dump(merged, { lineWidth: -1, noRefs: true });
+  await fs.writeFile(LITELLM_CONFIG, yamlStr);
+
+  // Hot-reload LiteLLM if running
+  try {
+    await fetch(`${LITELLM_URL}/config/reload`, { method: 'POST', signal: AbortSignal.timeout(3000) });
+    console.log(`[QUEEN] LiteLLM config synced: ${localModels.length} local endpoint(s) across ${new Set(localModels.map(m => m.model_info.node_id)).size} node(s)`);
+  } catch {
+    // LiteLLM not running — config will be picked up on next start
+  }
+
+  activity.log({ type: 'litellm_sync', local_endpoints: localModels.length, cloud_endpoints: cloudModels.length });
+}
 
 // --- Workflow state ---
 let workflows = new Map();
@@ -157,6 +246,7 @@ app.post('/api/nodes/register', (req, res) => {
 
   activity.log({ type: 'node_registered', node_id, role: config?.role });
   console.log(`[QUEEN] Node registered: ${node_id} (${config?.role || 'unknown'})`);
+  if (config?.models?.length) scheduleLitellmSync();
   res.json({ ok: true, message: `Node ${node_id} registered.` });
 });
 
@@ -173,6 +263,7 @@ app.post('/api/nodes/:nodeId/heartbeat', (req, res) => {
       metrics: req.body.metrics || {},
     });
     activity.log({ type: 'node_auto_registered', node_id: nodeId });
+    if (req.body.models?.length) scheduleLitellmSync();
     return res.json({ ok: true, registered: true });
   }
 
@@ -205,6 +296,13 @@ app.post('/api/nodes/:nodeId/heartbeat', (req, res) => {
     node.metrics.ping_ms = m.ping_ms ?? node.metrics.ping_ms; // network RTT to Queen
     node.metrics.cpu_temp_c = m.cpu_temp_c ?? node.metrics.cpu_temp_c;
     node.metrics.gpu_temp_c = m.gpu_temp_c ?? node.metrics.gpu_temp_c;
+  }
+  // Store models + addr for LiteLLM routing
+  if (req.body.models) {
+    const prevModels = JSON.stringify(node.models || []);
+    node.models = req.body.models;
+    node.addr = req.body.addr || node.addr;
+    if (JSON.stringify(node.models) !== prevModels) scheduleLitellmSync();
   }
   res.json({ ok: true });
 });
