@@ -203,3 +203,82 @@ The three base personas (researcher/planner/worker) are universal — every dron
 These aren't designed — they emerge. A drone that consistently outperforms on security tasks gets tagged as Warrior-class by Queen. Its persona prompts get refined based on what worked. Next generation of drones inherits that refinement. Evolution, not engineering.
 
 This is conceptual. The three base personas are the foundation. Specialization is a Phase 3+ emergent property, not a Phase 1 feature. But the architecture should never prevent it — drone classes are just persona configs with performance history attached.
+
+---
+
+## The Learning Loop — DRONE.md
+
+Every drone maintains its own `DRONE.md` — a file-based accumulation of everything that drone has learned about itself, its hardware, its strengths, and its corrections.
+
+### The Mechanism
+
+A cron-like `/insight` loop runs on a configurable interval (default: every 48 hours). The drone uses its own local LLM to reflect on:
+
+- **Performance data:** tok/s per model, task completion rates, error patterns, thermal behavior
+- **Queen feedback:** tasks that were approved vs rejected, corrections from the operator ("scolding" = negative signal, approval = positive signal)
+- **Hardware reality:** "I thermal throttle after 30 min at 100% contribution," "phi4-mini runs 2x faster than qwen3:8b on my GPU"
+- **Persona effectiveness:** "Researcher mode produces better output when given 3+ sources," "Worker mode is faster but Planner mode has higher approval rates"
+
+The drone writes structured learnings to `~/.config/borgclaw/DRONE.md`:
+
+```markdown
+# DRONE.md — drone-efef
+# Accumulated learnings. Read on every task.
+
+## Hardware
+- phi4-mini: 28 tok/s sustained, 32 tok/s burst
+- Thermal throttle at 95°C after ~30 min at 100% contribution
+- Optimal contribution: 75% for sustained work, 100% for burst
+
+## Queen Feedback
+- 2 rejections on voice-matched writing — context window too short
+- Morning briefing tasks: 94% approval rate
+- Code generation: 100% approval rate
+
+## Learned Behaviors
+- Researcher mode: always gather 3+ sources before synthesizing
+- Worker mode: check operator voice rules before any writing task
+- Planner mode: break tasks into max 5 subtasks, not 10+
+
+## Self-Assessment
+- Best at: code generation, structured data, fast triage
+- Weakest at: long-form writing (limited by model context)
+- Recommended model upgrade: qwen3:8b for writing tasks
+```
+
+### Why This IS the Evolutionary System
+
+No separate evolution mechanism is needed. This is it:
+
+1. **Drone accumulates learnings** in DRONE.md via periodic /insight loops
+2. **DRONE.md is injected into every task's context** — the drone gets smarter with use
+3. **Queen feedback (approve/reject) shapes the learnings** — natural selection via operator judgment
+4. **Make Disk copies the best-performing drone's DRONE.md** to new drones — inheritance
+5. **New drones start with accumulated wisdom** instead of blank slate — each generation is better
+6. **Over time, drones with different hardware accumulate different learnings** — specialization emerges
+
+The evolutionary pressure is: does the operator approve the output? If yes, the behaviors that produced it are reinforced in DRONE.md. If no, the correction gets logged and the drone adjusts. No gradient descent. No training runs. Just structured notes and a feedback loop.
+
+### The /insight Loop
+
+```
+Every 48 hours (configurable):
+  1. Read current DRONE.md
+  2. Query Queen for: task history, approval rates, corrections, performance metrics
+  3. Run Researcher persona: "What patterns do you see in my recent performance?"
+  4. Run Planner persona: "What should I do differently?"
+  5. Run Worker persona: "Update DRONE.md with new learnings"
+  6. Write updated DRONE.md
+```
+
+The drone uses its own compute to reflect on itself. The insight loop is a pico loop pointed inward.
+
+### Inheritance via Make Disk
+
+When the operator clicks "Make Drone" from the dashboard:
+1. Queen identifies the highest-performing drone (by approval rate, tok/s, uptime)
+2. That drone's DRONE.md is copied to the USB image
+3. New drone boots with the ancestor's accumulated knowledge
+4. New drone's /insight loop continues evolving from that starting point
+
+This is generational inheritance. Not genetic — memetic. The fittest drone's knowledge propagates through the hive.
