@@ -42,7 +42,9 @@ logs/
 dist/
 build/
 
-# Go binaries (The Claw node agent)
+# Go binaries (drone node agent)
+node/drone
+node/drone-*
 node/the-claw
 node/the-claw-*
 *.exe

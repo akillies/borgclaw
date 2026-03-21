@@ -1,4 +1,4 @@
-// The Claw — BorgClaw Node Agent
+// BorgClaw Drone — Node Agent
 //
 // A single-binary agent that turns any machine into a BorgClaw hive node.
 // It detects hardware, connects to Ollama for local LLM inference, registers
@@ -6,9 +6,9 @@
 //
 // Usage:
 //
-//	./the-claw --queen http://192.168.1.100:9090
-//	./the-claw --queen http://queen:9090 --contribution 75 --listen :9091
-//	./the-claw --config claw.json
+//	./drone --queen http://192.168.1.100:9090
+//	./drone --queen http://queen:9090 --contribution 75 --listen :9091
+//	./drone --config drone.json
 package main
 
 import (
@@ -27,8 +27,8 @@ var startTime = time.Now()
 
 const banner = `
   ╔══════════════════════════════════════╗
-  ║         T H E   C L A W             ║
-  ║      BorgClaw Node Agent v0.1       ║
+  ║        B O R G C L A W              ║
+  ║         Drone Agent v0.1            ║
   ╚══════════════════════════════════════╝
 `
 
@@ -39,7 +39,7 @@ func main() {
 	ollamaURL := flag.String("ollama", "http://localhost:11434", "Ollama API URL")
 	contribution := flag.Int("contribution", 50, "Contribution dial 0-100 (percentage of resources for hive)")
 	nodeID := flag.String("id", "", "Node ID (defaults to hostname)")
-	configPath := flag.String("config", "", "Path to config file (claw.json)")
+	configPath := flag.String("config", "", "Path to config file (drone.json)")
 	heartbeatSec := flag.Int("heartbeat", 30, "Heartbeat interval in seconds")
 	maxConcurrent := flag.Int("concurrent", 0, "Max concurrent tasks (0 = auto-detect)")
 	printInfo := flag.Bool("info", false, "Print hardware info and exit")
@@ -86,7 +86,7 @@ func main() {
 	// Validate Queen URL is set
 	if cfg.QueenURL == "" {
 		fmt.Fprintln(os.Stderr, "error: --queen URL is required")
-		fmt.Fprintln(os.Stderr, "usage: ./the-claw --queen http://your-queen:9090")
+		fmt.Fprintln(os.Stderr, "usage: ./drone --queen http://your-queen:9090")
 		os.Exit(1)
 	}
 
@@ -135,7 +135,7 @@ func main() {
 		}
 	}()
 
-	log.Println("[init] the claw is online. Ctrl+C to detach from hive.")
+	log.Println("[init] drone online. Ctrl+C to detach from hive.")
 
 	// Wait for shutdown signal
 	sig := <-sigCh
@@ -146,7 +146,7 @@ func main() {
 	defer shutdownCancel()
 	server.Shutdown(shutdownCtx)
 
-	log.Println("[shutdown] the claw has released.")
+	log.Println("[shutdown] drone detached from hive.")
 }
 
 func printHardwareInfo(cfg Config) {

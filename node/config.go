@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -47,15 +49,22 @@ type HardwareProfile struct {
 	Tier     string `json:"tier"` // "nano", "edge", "worker", "heavy"
 }
 
-// DefaultConfig returns a config with sensible defaults.
-func DefaultConfig() Config {
+// droneID generates a unique "drone-XXXX" identifier based on hostname.
+// Each machine gets a stable, short, distinguishable name.
+func droneID() string {
 	hostname, _ := os.Hostname()
 	if hostname == "" {
-		hostname = "claw-node"
+		hostname = "unknown"
 	}
+	hash := sha256.Sum256([]byte(hostname))
+	short := hex.EncodeToString(hash[:])[:4]
+	return "drone-" + short
+}
 
+// DefaultConfig returns a config with sensible defaults.
+func DefaultConfig() Config {
 	return Config{
-		NodeID:        hostname,
+		NodeID:        droneID(),
 		QueenURL:      "http://localhost:9090",
 		ListenAddr:    ":9091",
 		OllamaURL:     "http://localhost:11434",
@@ -76,7 +85,9 @@ func LoadConfig(path string) (Config, error) {
 	if path == "" {
 		// Try default locations
 		candidates := []string{
-			"claw.json",
+			"drone.json",
+			"claw.json", // backwards compat
+			filepath.Join(os.Getenv("HOME"), ".config", "borgclaw", "drone.json"),
 			filepath.Join(os.Getenv("HOME"), ".config", "borgclaw", "claw.json"),
 		}
 		for _, c := range candidates {
