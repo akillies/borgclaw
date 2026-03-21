@@ -83,4 +83,14 @@ Export the activity log as structured JSON for external analysis. Enables: cost 
 
 ---
 
+## Design Principle: Snap-In, Don't Replace
+
+BorgClaw is compute infrastructure, not a brain. It augments whatever personal AI system you already run. Your AI OS (AK-OS, PAI, KAI, Cowork, custom) calls BorgClaw's LiteLLM endpoint the same way it calls any LLM API — but now that request hits a fleet of local drones instead of one machine or a cloud provider.
+
+BorgClaw doesn't own your workflows, your memory, your voice rules, or your identity. It provides the drones that execute compute, the Queen that coordinates them, and the governance layer that keeps everything safe.
+
+The recursive research loop that runs all night improving a paper? That's YOUR system's workflow engine. BorgClaw's drones just make it fast, cheap, and parallel.
+
+---
+
 *This document will be updated as security features are implemented. The intent is transparency — operators should know exactly what protections exist and what's still planned.*

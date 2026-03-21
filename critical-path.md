@@ -152,9 +152,38 @@ Ordered by "what unblocks the most value."
 | BorgClaw = open source, personal AI OS = private | 2026-03-19 | Permanent split. Identity-agnostic infrastructure. |
 | Be direct about recommendations | 2026-03-19 | Don't hedge when the right answer is clear. Lead with it. |
 
+## Planned: Phase 2+ Features
+
+### Make Disk (Dashboard Button)
+From the Queen dashboard, click "Make Drone" → select a connected USB drive → Queen runs `prepare-usb.sh` with learned optimizations baked in. The hive manufactures its own workers. API: `POST /api/hive/make-disk`. The drone it creates inherits the hive's accumulated knowledge about which models work best on which hardware, based on real performance data from existing drones.
+
+### Drone Self-Improvement Loop
+Each drone tracks: tok/s by model, task success/failure rates, thermal patterns, uptime. Queen aggregates this across the hive. Patterns emerge: "RTX 3070 nodes run qwen3:8b 40% faster than phi4-mini" → next Make Disk for an NVIDIA machine ships with qwen3:8b pre-loaded. The hive learns what works and reproduces better drones.
+
+### Distributed Inference (Junkyard NVLink)
+Current: task routing (whole task → one drone via LiteLLM).
+Planned: model sharding across multiple drones for models too large for any single machine. Research pending on exo integration vs llama.cpp RPC layer offloading. The garage-built equivalent of NVIDIA's NVLink spine.
+
+### Snap-In Architecture
+BorgClaw augments your existing AI environment — it doesn't replace it. Your personal AI OS (AK-OS, PAI, Cowork, custom) calls BorgClaw's LiteLLM endpoint like any LLM API. BorgClaw's drones execute the compute. The recursive research loop that improves a paper overnight? That's YOUR system's workflow. BorgClaw just makes it fast, cheap, and parallel across every machine in your house.
+
+### Knowledge-Specialized Drones
+Different drone USBs ship with different knowledge packs (ZIM files + sqlite-vec indexes). "The Medic" has WikiMed. "The Engineer" has DevDocs + Stack Overflow subsets. Queen routes queries to drones that have the right knowledge domain.
+
+## Decisions Resolved (March 20)
+
+| Decision | Resolution | Date |
+|----------|-----------|------|
+| USB device name | Folder = BORGCLAW, binary = drone | 2026-03-20 |
+| Drone vs PicoClaw naming | Drones with unique IDs (drone-XXXX) | 2026-03-20 |
+| Fork Sipeed's or build custom | Custom Go binary built (~1,500 LOC) | 2026-03-20 |
+| Multi-node routing mechanism | LiteLLM dynamic routing (Queen rebuilds config on heartbeat) | 2026-03-20 |
+| Kill switch | POST /api/hive/halt + ./borgclaw halt CLI | 2026-03-20 |
+
 ## Decisions Open
 
-| Decision | Recommendation | Blocking |
-|----------|---------------|----------|
-| USB device name | **"The Claw"** — it's the brand, it's simple, it's recognizable | README, any public reference |
-| PicoClaw: fork Sipeed's or build custom | **Evaluate first, then decide.** Fork if architecture supports hive features. Build if it doesn't. 2 hour evaluation. | Step 2 of critical path |
+| Decision | Status | Blocking |
+|----------|--------|----------|
+| Distributed inference approach | CTO researching exo vs llama.cpp RPC | Phase 2+ |
+| Knowledge pack format | ZIM + sqlite-vec validated, spec needed | Phase 2+ |
+| Voice interface stack | Pipecat + Whisper.cpp + Kokoro recommended | Phase 2+ |
