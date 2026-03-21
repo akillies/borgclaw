@@ -184,3 +184,22 @@ A fleet of drones, each capable of research-plan-work, coordinated by Queen:
 - **Cascading improvement:** drone A researches → drone B plans → drone C executes → drone D reviews
 
 The hive isn't a cluster of GPUs. It's a team of adaptable workers.
+
+---
+
+## Future: Evolved Drone Classes (conceptual, not planned)
+
+The three base personas (researcher/planner/worker) are universal — every drone ships with them. But as the hive learns which drones excel at what, specialized classes could emerge organically:
+
+| Class | Evolved From | Specialization |
+|-------|-------------|---------------|
+| **Warrior** | Worker + Researcher | Security sentinel. Monitors for threats, validates inputs, guards the Queen. Firewall-aware. |
+| **Messenger** | Worker | Communications relay. Aggregates inbox, Slack, notifications. Drafts and routes messages across all channels. |
+| **Scientist** | Researcher | Deep analysis. Academic papers, long-context synthesis, hypothesis testing. Runs the autoresearch loop. |
+| **Architect** | Planner | System design. Generates workflow DAGs, optimizes hive topology, plans drone deployments. |
+| **Scribe** | Worker | Documentation. Voice-matched writing, content production, long-form drafts. Owns the operator's written voice. |
+| **Oracle** | Researcher + Planner | Foresight. Trend analysis, scenario modeling, signal-to-noise filtering. The strategic thinker. |
+
+These aren't designed — they emerge. A drone that consistently outperforms on security tasks gets tagged as Warrior-class by Queen. Its persona prompts get refined based on what worked. Next generation of drones inherits that refinement. Evolution, not engineering.
+
+This is conceptual. The three base personas are the foundation. Specialization is a Phase 3+ emergent property, not a Phase 1 feature. But the architecture should never prevent it — drone classes are just persona configs with performance history attached.
