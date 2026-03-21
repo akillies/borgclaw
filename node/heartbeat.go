@@ -52,10 +52,10 @@ type TaskCapacity struct {
 
 // HeartbeatReporter sends periodic heartbeats to Queen.
 type HeartbeatReporter struct {
-	queenURL   string
-	nodeID     string
-	listenAddr string
-	interval   time.Duration
+	queenURL      string
+	nodeID        string
+	advertiseAddr string
+	interval      time.Duration
 
 	metrics  *MetricsCollector
 	ollama   *OllamaClient
@@ -69,9 +69,9 @@ type HeartbeatReporter struct {
 // NewHeartbeatReporter creates a reporter targeting the given Queen URL.
 func NewHeartbeatReporter(cfg Config, metrics *MetricsCollector, ollama *OllamaClient, throttle *Throttle, worker *TaskWorker) *HeartbeatReporter {
 	return &HeartbeatReporter{
-		queenURL:   cfg.QueenURL,
-		nodeID:     cfg.NodeID,
-		listenAddr: cfg.ListenAddr,
+		queenURL:      cfg.QueenURL,
+		nodeID:        cfg.NodeID,
+		advertiseAddr: cfg.AdvertiseAddr,
 		interval:   time.Duration(cfg.HeartbeatSec) * time.Second,
 		metrics:    metrics,
 		ollama:     ollama,
@@ -166,7 +166,7 @@ func (hr *HeartbeatReporter) send(ctx context.Context) error {
 
 	payload := HeartbeatPayload{
 		NodeID:       hr.nodeID,
-		Addr:         hr.listenAddr,
+		Addr:         hr.advertiseAddr,
 		SentAt:       time.Now(),
 		Status:       status,
 		Hardware:     hr.hardware,

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,10 +17,11 @@ import (
 
 // Config holds all node configuration.
 type Config struct {
-	NodeID     string `json:"node_id"`
-	QueenURL   string `json:"queen_url"`
-	ListenAddr string `json:"listen_addr"`
-	OllamaURL  string `json:"ollama_url"`
+	NodeID        string `json:"node_id"`
+	QueenURL      string `json:"queen_url"`
+	ListenAddr    string `json:"listen_addr"`
+	AdvertiseAddr string `json:"advertise_addr"` // LAN IP:port — how Queen reaches this drone
+	OllamaURL     string `json:"ollama_url"`
 
 	// Contribution dial: 0-100, percentage of resources to offer the hive
 	Contribution int `json:"contribution"`
@@ -47,6 +49,18 @@ type HardwareProfile struct {
 	GPUName  string `json:"gpu_name,omitempty"`
 	GPUVRAM  uint64 `json:"gpu_vram_mb,omitempty"`
 	Tier     string `json:"tier"` // "nano", "edge", "worker", "heavy"
+}
+
+// detectLANIP finds the machine's LAN IP by dialing a UDP socket.
+// This works on all platforms without parsing ifconfig output.
+func detectLANIP() string {
+	conn, err := net.Dial("udp4", "8.8.8.8:80")
+	if err != nil {
+		return "127.0.0.1"
+	}
+	defer conn.Close()
+	addr := conn.LocalAddr().(*net.UDPAddr)
+	return addr.IP.String()
 }
 
 // droneID generates a unique "drone-XXXX" identifier based on hostname.
@@ -106,6 +120,16 @@ func LoadConfig(path string) (Config, error) {
 		if err := json.Unmarshal(data, &cfg); err != nil {
 			return cfg, fmt.Errorf("parsing config %s: %w", path, err)
 		}
+	}
+
+	// Auto-detect advertise address (LAN IP + listen port)
+	if cfg.AdvertiseAddr == "" {
+		lanIP := detectLANIP()
+		port := cfg.ListenAddr
+		if strings.HasPrefix(port, ":") {
+			port = port[1:]
+		}
+		cfg.AdvertiseAddr = lanIP + ":" + port
 	}
 
 	// Auto-detect hardware

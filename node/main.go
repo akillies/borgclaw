@@ -90,8 +90,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Printf("[init] node_id=%s queen=%s listen=%s ollama=%s contribution=%d%%",
-		cfg.NodeID, cfg.QueenURL, cfg.ListenAddr, cfg.OllamaURL, cfg.Contribution)
+	log.Printf("[init] node_id=%s queen=%s advertise=%s ollama=%s contribution=%d%%",
+		cfg.NodeID, cfg.QueenURL, cfg.AdvertiseAddr, cfg.OllamaURL, cfg.Contribution)
 	log.Printf("[init] hardware: %s/%s, %d cores, %d MB RAM, tier=%s",
 		cfg.Hardware.OS, cfg.Hardware.Arch, cfg.Hardware.CPUCores, cfg.Hardware.RAMTotal, cfg.Hardware.Tier)
 	if cfg.Hardware.GPUName != "" {
@@ -151,12 +151,13 @@ func main() {
 
 func printHardwareInfo(cfg Config) {
 	hw := cfg.Hardware
-	fmt.Printf("Node ID:     %s\n", cfg.NodeID)
-	fmt.Printf("OS/Arch:     %s/%s\n", hw.OS, hw.Arch)
-	fmt.Printf("Go version:  %s\n", runtime.Version())
-	fmt.Printf("CPU:         %s\n", hw.CPUModel)
-	fmt.Printf("CPU Cores:   %d\n", hw.CPUCores)
-	fmt.Printf("RAM:         %d MB\n", hw.RAMTotal)
+	fmt.Printf("Node ID:      %s\n", cfg.NodeID)
+	fmt.Printf("Advertise:    %s\n", cfg.AdvertiseAddr)
+	fmt.Printf("OS/Arch:      %s/%s\n", hw.OS, hw.Arch)
+	fmt.Printf("Go version:   %s\n", runtime.Version())
+	fmt.Printf("CPU:          %s\n", hw.CPUModel)
+	fmt.Printf("CPU Cores:    %d\n", hw.CPUCores)
+	fmt.Printf("RAM:          %d MB\n", hw.RAMTotal)
 	if hw.GPUName != "" {
 		fmt.Printf("GPU:         %s\n", hw.GPUName)
 		fmt.Printf("GPU VRAM:    %d MB\n", hw.GPUVRAM)
