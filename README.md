@@ -11,9 +11,38 @@
           Resistance is optional. Adaptation is inevitable.
 ```
 
-> Turn any computer into a node in your personal AI cluster. Plug in, run one script, it joins the hive. A Queen orchestrator routes tasks across all nodes. Your files, your models, your infrastructure. External APIs only when local can't handle it.
+> Turn any computer into a drone in your personal AI cluster. Plug in a USB drive, run one script, it joins the hive. A Queen orchestrator routes tasks across all drones via LiteLLM. Your files, your models, your infrastructure.
+
+## Status: Alpha
+
+**What works today:**
+- Queen service boots, retro BBS dashboard at `localhost:9090`
+- Drone agent compiles and runs on Linux, macOS (Intel + ARM), and Windows
+- Hardware auto-detection (CPU, RAM, GPU — NVIDIA + Apple Silicon)
+- Each drone gets a unique ID (`drone-efef`, `drone-a3b7`, etc.)
+- LiteLLM dynamic routing — drones auto-register as inference endpoints
+- Response caching — identical prompts skip the LLM
+- Hive halt/resume kill switch
+- Approval queue (Law Two — nothing external ships without human approval)
+- USB drive prep script — 2.4GB, fits on a 4GB drive
+- Workflow engine with DAG execution, approval gates, template variables
+- 5 agent archetypes defined (router, analyst, ops, comms, sentinel)
+- Full open-source scrub — no personal data, template variables for your setup
+
+**What's in progress:**
+- Multi-drone end-to-end test (architecture wired, first live test pending)
+- NATS event bus integration (in docker-compose, client wiring pending)
+
+**What's planned:**
+- mDNS auto-discovery (drones find Queen without knowing the IP)
+- Knowledge-specialized drones (Medic, Engineer, Scholar — ZIM-based knowledge packs)
+- Voice interface (Pipecat + Whisper.cpp + Kokoro TTS)
+- Agent sandboxing (NemoClaw-inspired filesystem + network isolation)
+- Prometheus + Grafana observability
 
 ## Quick Start
+
+### The Queen (your primary machine)
 
 ```bash
 git clone https://github.com/yourusername/borgclaw.git
@@ -21,268 +50,245 @@ cd borgclaw
 ./borgclaw start
 ```
 
-That's it. The Queen boots, auto-detects your hardware, and opens a dashboard at `http://localhost:9090/dashboard`. Add more nodes with `./borgclaw bootstrap` on any machine in your network.
+Queen boots at `http://localhost:9090/dashboard`. Note your IP address.
 
 ```bash
 ./borgclaw status      # cluster health
 ./borgclaw dashboard   # open in browser
-./borgclaw nodes       # list registered nodes
+./borgclaw nodes       # list registered drones
+./borgclaw halt        # emergency stop — all drones drop to 0%
+./borgclaw resume      # bring the hive back online
 ./borgclaw stop        # shut it down
 ```
 
-## Adding Nodes to the Hive
+### Adding Drones (USB method)
 
-BorgClaw is a multi-node system. The Queen runs on your primary machine. Every other machine in your house joins the hive.
-
-### On your primary machine (the Queen):
+Prep a USB drive on the Queen machine:
 
 ```bash
-git clone https://github.com/yourusername/borgclaw.git
-cd borgclaw
-./borgclaw start
+bash scripts/prepare-usb.sh /Volumes/MYUSB
 ```
 
-Note the Queen's IP address (e.g., `192.168.1.100`). Every other machine needs this.
+This packages everything onto the drive (~2.4GB):
+- Drone binary (Linux, Mac, Windows — all included)
+- Ollama installer
+- Pre-cached LLM model (phi4-mini, 2.3GB — no download needed on target)
+- Config with Queen's IP auto-detected
 
-### On any other machine:
+Plug the USB into any machine. Run one command:
 
 ```bash
-git clone https://github.com/yourusername/borgclaw.git
-cd borgclaw
-bash scripts/bootstrap.sh --role worker --queen-ip 192.168.1.100
+bash /path/to/BORGCLAW/setup.sh
 ```
 
-The bootstrap script will:
-1. **Detect** your hardware — OS, CPU, GPU (NVIDIA/Apple Silicon/AMD/none), RAM
-2. **Classify** it into a hardware profile (`nvidia-8gb-32gb-ram`, `mac-apple-silicon-16gb`, `cpu-only-8gb`, etc.)
-3. **Install** Ollama + pull the optimal models for your hardware from `config/models.json`
-4. **Register** with the Queen — POST its capabilities to `http://<queen-ip>:9090/api/nodes/register`
-5. **Install a heartbeat daemon** — launchd (macOS) or systemd (Linux) pings the Queen every 30 seconds
+The machine installs Ollama, loads the cached model, starts the drone, and joins the hive. It appears on the Queen dashboard within 30 seconds.
 
-Once registered, the node shows up on the Queen's dashboard. The Queen knows what models each node has, what it's capable of, and whether it's online.
+### Adding Drones (manual method)
 
-### Node roles
-
-| Role | What it does | When to use |
-|------|-------------|-------------|
-| `queen` | Runs the Queen service + middleware + local inference | Your always-on primary machine |
-| `worker` | Local inference + Docker services, reports to Queen | Any machine with a decent GPU or 16GB+ RAM |
-| `satellite` | Search-only (QMD), no LLM inference | Low-RAM machines, old laptops, NAS boxes |
-
-### Beyond your LAN
-
-For remote nodes (e.g., a GPU tower at the office), the spec calls for [Tailscale](https://tailscale.com) — zero-config mesh VPN. Install Tailscale on both machines and the LAN model works identically over the internet. No port forwarding, no firewall rules, no dynamic DNS.
+If you prefer, download the drone binary for your platform from the `node/` directory, or compile it:
 
 ```bash
-# On both machines:
-curl -fsSL https://tailscale.com/install.sh | sh
-tailscale up
-
-# Then bootstrap with the Tailscale IP instead:
-bash scripts/bootstrap.sh --role worker --queen-ip 100.x.y.z
+cd node && go build -o drone . && ./drone --queen http://QUEEN_IP:9090
 ```
 
----
-
-## Project Structure
+### How it works
 
 ```
-borgclaw/
-├── README.md                  ← You are here
-├── LICENSE                    ← MIT
-├── docker-compose.yml         ← Full middleware stack (NATS, LiteLLM, ntfy)
-│
-├── services/
-│   └── queen/                 ← Queen service (Node.js, ~500 lines)
-│       ├── server.js          ← Express server — registry, heartbeat, dashboard
-│       └── package.json
-│
-├── scripts/
-│   ├── bootstrap.sh           ← The Assimilator (macOS / Linux)
-│   └── bootstrap.ps1          ← The Assimilator (Windows / PowerShell)
-│
-├── agents/                    ← Agent definitions (the "employees")
-│   ├── jarvis-router/         ← Triage + routing (always-on, local)
-│   ├── cerebro-analyst/       ← Deep research + foresight (cloud)
-│   ├── ops-handler/           ← Code, data, structured output (local GPU)
-│   ├── comms-drafter/         ← Writing, voice-critical content (cloud)
-│   └── sentinel/              ← 24/7 monitoring + alerts (always-on, local)
-│
-├── config/
-│   ├── models.json            ← Hardware profile → model mapping
-│   ├── agents/                ← Per-agent YAML configs
-│   ├── workflows/             ← Workflow DAG definitions
-│   └── scheduled/             ← Scheduled task configs
-│
-├── docs/
-│   └── QUICKSTART.md          ← First node in 15 minutes
-│
-├── specs/
-│   ├── CONCEPT.md             ← Product vision, architecture, competitive positioning
-│   └── MIDDLEWARE-SPEC.md     ← 7-sublayer middleware architecture
-│
-├── research/
-│   ├── TECHNOLOGY-AUDIT.md    ← Every infra tech decision with benchmarks
-│   └── MIDDLEWARE-TECHNOLOGY-AUDIT.md ← Every middleware tech decision
-│
-└── assets/
-    ├── borgclaw-full-stack.html  ← Interactive 5-layer architecture diagram
-    └── borgclaw-concept.html     ← Concept visualization
+┌──────────────┐     heartbeat      ┌──────────────┐
+│  drone-efef  │ ──────────────────→│              │
+│  M4 Pro      │     (30s interval) │    QUEEN     │
+│  phi4-mini   │                    │   :9090      │
+└──────────────┘                    │              │
+                                    │  Rebuilds    │
+┌──────────────┐     heartbeat      │  litellm.yaml│
+│  drone-a3b7  │ ──────────────────→│  on every    │
+│  RTX 3070    │                    │  new drone   │
+│  qwen3:8b    │                    │              │
+└──────────────┘                    └──────┬───────┘
+                                           │
+                                    ┌──────▼───────┐
+                                    │   LiteLLM    │
+                                    │   :4000      │
+                                    │  Load-balances│
+                                    │  across all  │
+                                    │  drones      │
+                                    └──────────────┘
 ```
 
----
+When a drone heartbeats with its model list, Queen automatically updates LiteLLM's routing config. LiteLLM (39.8K stars, used by Stripe/Netflix) load-balances inference requests across all drones. New drone joins — more compute. Drone drops — fallback kicks in. No manual config.
+
+## How BorgClaw Differs
+
+| | exo | LocalAI | OpenClaw | BorgClaw |
+|---|---|---|---|---|
+| Core idea | Split one big model across devices | Local LLM API with p2p | Personal AI assistant (800+ skills) | Compute infrastructure for YOUR personal AI |
+| Multi-node | Model sharding | Federated inference | No | Task routing via LiteLLM |
+| Identity | Its own | Its own | Its own | Yours (pluggable) |
+| Governance | No | No | No | Approval queue, budget caps, kill switch |
+| USB installer | No | No | No | Yes — 2.4GB, one script |
+| Contribution dial | No | No | No | 0-100% per drone |
+
+**exo** splits one large model across multiple machines (tensor parallelism). **BorgClaw** routes different tasks to different specialized drones. Different problems, complementary approaches.
+
+## The Hive
+
+### Drones
+
+Each drone is a single Go binary (~10MB). It detects hardware, connects to Ollama, and heartbeats to Queen every 30 seconds with:
+- Available models
+- CPU/RAM/GPU metrics
+- Task capacity (slots available)
+- Contribution level (0-100%)
+
+Drones get unique IDs based on hostname: `drone-efef`, `drone-a3b7`, `drone-c1d0`. You see them on the dashboard. You control each one's contribution dial — set your gaming PC to 30% while you play, your always-on server to 100%.
+
+### Drone Roles
+
+| Role | Hardware | What it does |
+|------|----------|-------------|
+| `queen` | Always-on machine | Runs Queen + middleware + local inference |
+| `worker` | GPU machine or 16GB+ RAM | Full inference, reports to Queen |
+| `satellite` | Low-RAM, old laptops, NAS | Search-only (QMD), no LLM inference |
+
+### The Queen
+
+The Queen doesn't think — she routes, monitors, enforces governance, and dispatches. She:
+- Tracks all drones via heartbeat
+- Dynamically updates LiteLLM routing when drones join/leave
+- Serves the retro BBS dashboard
+- Runs the workflow engine (DAG execution with approval gates)
+- Manages the approval queue (Law Two)
+- Enforces budget caps per agent
+
+### Agents
+
+Five archetypes, extensible. Drop a new `agents/[name]/agent.json` and Queen auto-discovers it.
+
+| Agent | Compute | Role |
+|-------|---------|------|
+| jarvis-router | Local (free) | Triage, routing, scheduling |
+| cerebro-analyst | Cloud (budget-capped) | Research, foresight, synthesis |
+| ops-handler | Local GPU | Code, data, structured output |
+| comms-drafter | Cloud (budget-capped) | Voice-critical writing (adapts to YOUR style) |
+| sentinel | Local (always-on) | 24/7 monitoring, alerts, signal detection |
+
+## Governance
+
+**The Five Laws** (enforced in code, not suggestions):
+
+1. **Law Zero — Never Delete.** Archive, version, rename. Never `rm`.
+2. **Law One — Protect the Operator.** Financial, reputational, personal.
+3. **Law Two — Draft, Then Approve.** Nothing external ships without human approval.
+4. **Law Three — Self-Improve.** Track performance, propose upgrades (subject to Law Two).
+5. **Law Four — Mutual Respect.** No hidden actions. Full audit trail.
+
+**Kill switch:** `./borgclaw halt` — immediately stops all drones, cancels workflows, rejects pending approvals. `./borgclaw resume` brings everything back.
+
+**Budget caps:** LiteLLM enforces monthly spend limits. Agents auto-pause at their budget ceiling.
+
+**Contribution dials:** Each drone's resource contribution is adjustable 0-100% from the dashboard.
+
+See [docs/SECURITY.md](docs/SECURITY.md) for the full security model.
 
 ## Philosophy
-
-Three ideas that run through everything BorgClaw does.
 
 ### 1. Assimilation over invention
 
 > *"Your biological and technological distinctiveness will be added to our own."*
 
-The Borg don't build from scratch. They find what's best in the universe and absorb it. BorgClaw operates on the same principle. Ollama, LM Studio, NadirClaw, LangGraph, NATS JetStream, LiteLLM, LanceDB, ntfy — all of these exist, are battle-tested, and are excellent at exactly one thing. BorgClaw's value isn't any individual component. It's the composition: hardware detection, optimal model assignment, node registration, hive identity, and the glue that makes a dozen tools behave as one.
+The Borg don't build from scratch. They find what's best and absorb it. BorgClaw operates the same way. Ollama, LiteLLM, NATS JetStream, ntfy — all battle-tested, all excellent at one thing. BorgClaw's value is the composition: hardware detection, model assignment, drone registration, hive routing, and the glue that makes a dozen tools behave as one.
 
 Don't reinvent. Assimilate. 98% of what you need already exists. BorgClaw is the other 2%.
 
 ### 2. The autoresearch loop
 
-Inspired by Karpathy's [autoresearch](https://github.com/karpathy/autoresearch) pattern: *modify → test → measure → keep/discard → loop forever.*
-
-BorgClaw applies this to its own stack. Every Friday, the Signal Radar runs:
-
-```
-Scan GitHub/arXiv/HN for new tools in the stack's domains
-    → Score each candidate: does it improve on a current component?
-    → Score = Quality × Replaceability × Effort to swap
-    → Above threshold: create task "Evaluate X as replacement for Y"
-    → Run experiment: swap component, measure target metric
-    → If metric improves: keep. If not: discard. Log either way.
-    → Loop.
-```
-
-The system watches for its own replacement parts. When a better router appears, it flags itself for replacement. When a new embedding model benchmarks higher, it proposes the upgrade. This is how the stack stays current without manual maintenance — the same evolutionary pressure that produced it keeps improving it.
-
-Every component has a measurable metric (inference speed, approval rate, signal-to-noise ratio, cost-per-task). Every swap is an experiment with a binary keep/discard outcome. The system gets smarter about its own architecture over time.
+Every Friday, the system scans GitHub/arXiv/HN for tools that improve on a current component. Score = Quality x Replaceability x Effort to swap. Above threshold: propose the upgrade. Run the experiment. Keep or discard. Log either way. The system watches for its own replacement parts.
 
 ### 3. Thermodynamic governance
 
 Every task has a cost. Track it. Govern it.
 
-The three-tier compute stack isn't just an architecture decision — it's an economic model:
-
 ```
-Tier 1 — Local (your machines, ~$0 marginal cost)
-    Handles ~70% of workload. Always-on. No API calls.
-
-Tier 2 — Burst (wholesale GPU: Lambda/CoreWeave/Vast.ai)
-    Reserved instances at wholesale rates. You own the compute,
-    not the tokens. A100 at $1.29/hr vs ~$150/hr equivalent via API.
-    For sustained workloads, the economics are not close.
-
-Tier 3 — Frontier API (hard-capped, last resort)
-    Only when local can't handle it. LiteLLM routes transparently.
-    Budget cap enforced per agent. Auto-pause at limit.
+Tier 1 — Local drones (~$0/task)    → 70% of workload
+Tier 2 — Cheap cloud (~$0.00003)    → Fast structured tasks
+Tier 3 — Mid-tier cloud (~$0.001)   → Complex reasoning
+Tier 4 — Frontier API (~$0.075)     → Rare, hard-capped
 ```
 
-The thermodynamic ledger makes this visible: cost per task, cost per agent, cost per workflow. When Tier 3 usage climbs, the system flags it. You tune the routing. The goal is maximum intelligence per dollar, not maximum model size.
+LiteLLM routes transparently across all four tiers with automatic fallback. The thermodynamic ledger tracks cost per task, per agent, per workflow.
 
 ### 4. Identity agnosticism
 
 BorgClaw is the infrastructure layer. It has no opinion about what sits above it.
 
-Daniel Miessler calls his personal AI system PAI. You might call yours KAI. The AK-OS that BorgClaw was originally built for has a TELOS, a CLAUDE.md, an entity graph. None of that lives in BorgClaw. BorgClaw is the compute and orchestration — the agents, the Queen, the model routing, the event bus. The identity layer — who you are, what you care about, what the system is for — lives in your personal AI OS and gets passed into BorgClaw as context.
+Daniel Miessler calls his personal AI system PAI. You might call yours KAI. BorgClaw doesn't care. It provides the compute and orchestration — the agents, the Queen, the model routing, the event bus. The identity layer — who you are, what you care about, what the system is for — lives in your personal AI OS and gets passed into BorgClaw as context.
 
-This separation is intentional. It means BorgClaw can be forked and adopted without stripping out someone else's identity. Clone it, point it at your own context files, run the bootstrap. The agents don't care whether your personal OS is called PAI, KAI, AK-OS, or something you invented last Tuesday. They run on context, not branding.
-
-The `comms-drafter` agent adapts to *your* voice rules. The `cerebro-analyst` agent surfaces signals from *your* interest domains. The `jarvis-router` routes tasks against *your* priority queue. BorgClaw is the body. You bring the brain.
+Clone it, point it at your own context files, run the bootstrap. The agents adapt to YOUR voice, YOUR interests, YOUR priority queue.
 
 ```
-YOUR PERSONAL AI OS (PAI / KAI / AK-OS / whatever)
+YOUR PERSONAL AI OS (PAI / KAI / whatever)
     Identity · Goals · Voice · Memory · Interests
                        │
                        │ feeds context into
                        ▼
               BORGCLAW INFRASTRUCTURE
-    Queen · Agents · Model Routing · Event Bus · Compute
+    Queen · Drones · Model Routing · Event Bus · Compute
 ```
 
----
+## Project Structure
 
-## What BorgClaw Composes (We Don't Build These)
+```
+borgclaw/
+├── README.md
+├── LICENSE (MIT)
+├── borgclaw                    ← CLI (start/stop/halt/resume/status/nodes)
+├── docker-compose.yml          ← Middleware (NATS, LiteLLM, ntfy)
+├── .env.example                ← Configuration template
+│
+├── node/                       ← Drone agent (Go, cross-platform)
+│   ├── main.go                 ← Entry point, CLI flags, graceful shutdown
+│   ├── server.go               ← HTTP API (health, metrics, tasks, contribution)
+│   ├── heartbeat.go            ← Queen heartbeat with exponential backoff
+│   ├── worker.go               ← Task queue + Ollama execution
+│   ├── ollama.go               ← Ollama client with metrics tracking
+│   ├── throttle.go             ← Contribution dial (semaphore + context scaling)
+│   ├── metrics.go              ← System metrics (CPU/RAM/GPU/disk/network)
+│   └── config.go               ← Hardware detection + tier classification
+│
+├── services/queen/             ← Queen service (Node.js)
+│   ├── server.js               ← Registry, heartbeat, LiteLLM sync, halt/resume
+│   ├── lib/workflow.js          ← DAG engine (Kahn's algorithm, approval gates)
+│   ├── lib/approvals.js         ← Law Two approval queue
+│   ├── lib/activity.js          ← Event ring buffer + SSE
+│   ├── lib/health.js            ← Deep health check
+│   ├── lib/setup.js             ← Hardware detection + profile mapping
+│   └── views/dashboard.js       ← Retro BBS dashboard (SSE, sparklines, topology)
+│
+├── scripts/
+│   ├── prepare-usb.sh           ← Package drones onto a USB drive
+│   ├── bootstrap.sh             ← Full node setup (macOS/Linux)
+│   └── bootstrap.ps1            ← Full node setup (Windows)
+│
+├── agents/                      ← Agent definitions (JSON config + system prompts)
+├── config/                      ← Workflows, models, scheduled tasks, LiteLLM
+├── docs/
+│   ├── SECURITY.md              ← Governance model + security plans
+│   ├── INTEGRATION.md           ← Wire BorgClaw to your personal AI OS
+│   └── QUICKSTART.md
+├── specs/                       ← Architecture decisions + competitive analysis
+└── research/                    ← Technology audits + tool evaluations
+```
 
-| Component | Project | Role | License |
-|-----------|---------|------|---------|
-| LLM serving (Mac) | LM Studio / Ollama (MLX) | MLX inference, 2-3x faster on Apple Silicon | Proprietary (free) / MIT |
-| LLM serving (NVIDIA) | Ollama | GGUF inference, best NVIDIA support | MIT |
-| LLM serving (edge) | llama.cpp | Zero-dependency, runs anywhere | MIT |
-| Binary prompt router | NadirClaw | Classifies simple→local vs complex→cloud in ~10ms, ~94% accuracy | MIT |
-| Model-agnostic proxy | LiteLLM | Single OpenAI-compatible endpoint; swap providers via config | MIT |
-| Workflow graphs | LangGraph | Multi-step pipelines with branching and subgraphs | MIT |
-| Event bus | NATS JetStream | Typed agent events, temporal coordination, KV store | Apache 2.0 |
-| Remote access | Tailscale | Zero-config mesh VPN | BSD-3 |
-| State sync | Git | Version history, conflict resolution | GPL-2 |
-| Embeddings | nomic-embed-text | Local vector embeddings for RAG | Apache 2.0 |
-| Local search | qmd (@tobilu/qmd) | BM25 + vector + LLM reranking over markdown files | MIT |
-| Push notifications | ntfy | Self-hosted push alerts with approval action buttons | Apache 2.0 |
+## What BorgClaw Composes
 
-## What BorgClaw Builds (~700 Lines of Unique Code)
-
-| Component | What | Why It Doesn't Exist |
-|-----------|------|---------------------|
-| Assimilator | Detect hardware → install optimal server + model → register with Queen | Nobody packages detect + install + register |
-| Queen service | Node registry + heartbeat + dashboard + agent coordination API | NadirClaw routes requests; nobody discovers nodes |
-| models.json | Hardware profile → model mapping, updatable | Everyone hardcodes model choices |
-| Multi-server abstraction | LM Studio on Mac, Ollama on NVIDIA, same API | Tools assume one server type |
-| Hive identity | USB carries YOUR credentials | No tool has "plug in and join" |
-
----
-
-## Agents
-
-Each agent is a folder with: `agent.json` (config), `instructions.md` (system prompt), `tools.json` (available tools), `mcps.json` (MCP connections).
-
-See `agents/` folder for full definitions. Summary:
-
-| Agent | Compute | Cost | Role |
-|-------|---------|------|------|
-| jarvis-router | Mac Mini (local) | $0/mo | Triage, routing, scheduling |
-| cerebro-analyst | Claude API | ~$20-40/mo | Research, foresight, synthesis |
-| ops-handler | Ryzen/3070 (local) | $0/mo | Code, data, structured output |
-| comms-drafter | Claude API | ~$5-15/mo | Voice-critical writing (adapts to your style) |
-| sentinel | Mac Mini (local) | $0/mo | 24/7 monitoring, alerts |
-
----
-
-## Governance Model
-
-BorgClaw implements personal governance through:
-
-1. **Board of Directors** (the owner) — Nothing ships without approval (Law Two)
-2. **Agent budgets** — Each cloud agent has a monthly token budget. At 80% = warning. At 100% = auto-pause.
-3. **Audit trail** — Immutable, append-only log of every action taken
-4. **Contribution dials** — Per-node throttle control (eco → max), controllable from phone
-5. **Routing profiles** — `free` (local only), `eco` (minimize cloud), `auto` (smart), `premium` (best model)
-
----
-
-## Build Sequence
-
-| Phase | Name | Effort | What |
-|-------|------|--------|------|
-| A | "Hello World" | 30 min | Install LM Studio on Mac Mini, test tool-calling |
-| B | "Two Brains" | 1 hr | Add Ryzen/Ollama node, expose to LAN |
-| C | "One Door" | 1-2 hrs | NadirClaw as gateway, single endpoint |
-| D | "The Agents" | 2-4 hrs | Paperclip + agent folders + Queen service |
-| E | "The Assimilator" | 1-2 hrs | USB installer script |
-| F | "Superintelligence" | Ongoing | Dogfood, iterate, open-source |
-
----
-
-## Status: v0.1 — Core Scaffolding Complete
-
-Queen service, Assimilator (bash + PowerShell), agent definitions, middleware Docker Compose, and hardware model config are all present and functional.
-
-**Next action:** `bash scripts/bootstrap.sh --role queen` on your Mac Mini. 15 minutes. $0. See [docs/QUICKSTART.md](docs/QUICKSTART.md).
+| Component | Project | Stars | Role |
+|-----------|---------|-------|------|
+| LLM inference | Ollama | 162K+ | Local inference (NVIDIA + Apple Silicon) |
+| Model routing | LiteLLM | 39.8K | Unified API, load balancing, budget caps, caching |
+| Event bus | NATS JetStream | 17K+ | Agent coordination, temporal events |
+| Push notifications | ntfy | 19K+ | Approval alerts with action buttons |
+| Local search | qmd | — | BM25 + vector + LLM reranking over markdown |
+| Remote access | Tailscale | 29.6K | Zero-config mesh VPN for remote drones |
 
 ---
 
