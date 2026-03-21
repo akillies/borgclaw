@@ -260,6 +260,39 @@ cmd_help() {
 # DISPATCH
 # ============================================================
 
+cmd_connect() {
+  local QUEEN_IP
+  QUEEN_IP=$(ipconfig getifaddr en0 2>/dev/null || ip route get 1 2>/dev/null | awk '{print $7; exit}' || echo "localhost")
+
+  echo ""
+  echo -e "  ${CYAN}╔══════════════════════════════════════════╗${NC}"
+  echo -e "  ${CYAN}║   BORGCLAW HIVE — CONNECTION INFO        ║${NC}"
+  echo -e "  ${CYAN}╚══════════════════════════════════════════╝${NC}"
+  echo ""
+  echo -e "  ${GREEN}LiteLLM Proxy:${NC}    http://${QUEEN_IP}:4000"
+  echo -e "  ${GREEN}Ollama (direct):${NC}  http://${QUEEN_IP}:11434"
+  echo -e "  ${GREEN}Queen Dashboard:${NC}  http://${QUEEN_IP}:${QUEEN_PORT}"
+  echo -e "  ${GREEN}Queen API:${NC}        http://${QUEEN_IP}:${QUEEN_PORT}/api"
+  echo ""
+  echo "  ── OpenAI-compatible apps (Cursor, Aider, Continue, etc.) ──"
+  echo ""
+  echo "    export OPENAI_API_KEY=borgclaw"
+  echo "    export OPENAI_BASE_URL=http://${QUEEN_IP}:4000"
+  echo ""
+  echo "  ── Anthropic-compatible apps (Claude Code, Claude SDK) ──"
+  echo ""
+  echo "    export ANTHROPIC_API_KEY=borgclaw"
+  echo "    export ANTHROPIC_BASE_URL=http://${QUEEN_IP}:4000"
+  echo ""
+  echo "  ── Ollama-native apps (Open WebUI, Enchanted, etc.) ──"
+  echo ""
+  echo "    OLLAMA_HOST=http://${QUEEN_IP}:11434"
+  echo ""
+  echo -e "  ${YELLOW}LiteLLM speaks OpenAI, Anthropic, Ollama, and 100+ provider"
+  echo -e "  formats. Your hive is the backend. Any app, one URL.${NC}"
+  echo ""
+}
+
 cmd_halt() {
   warn "⚠️  HIVE HALT — stopping all nodes and cancelling all work"
   local response
@@ -283,6 +316,7 @@ cmd_resume() {
 case "${1:-help}" in
   start)     cmd_start ;;
   stop)      cmd_stop ;;
+  connect)   cmd_connect ;;
   halt)      cmd_halt ;;
   resume)    cmd_resume ;;
   status)    cmd_status ;;
