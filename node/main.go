@@ -42,6 +42,7 @@ func main() {
 	configPath := flag.String("config", "", "Path to config file (drone.json)")
 	heartbeatSec := flag.Int("heartbeat", 30, "Heartbeat interval in seconds")
 	maxConcurrent := flag.Int("concurrent", 0, "Max concurrent tasks (0 = auto-detect)")
+	hiveSecret := flag.String("secret", "", "Hive secret for Queen authentication")
 	printInfo := flag.Bool("info", false, "Print hardware info and exit")
 
 	flag.Parse()
@@ -75,6 +76,15 @@ func main() {
 	}
 	if *maxConcurrent > 0 {
 		cfg.MaxConcurrent = *maxConcurrent
+	}
+	if *hiveSecret != "" {
+		cfg.HiveSecret = *hiveSecret
+	}
+	// Also check HIVE_SECRET env var
+	if cfg.HiveSecret == "" {
+		if envSecret := os.Getenv("HIVE_SECRET"); envSecret != "" {
+			cfg.HiveSecret = envSecret
+		}
 	}
 
 	// Info mode — print hardware and exit

@@ -156,9 +156,111 @@ try {
   console.warn(`[QUEEN] Failed to load workflows: ${err.message}`);
 }
 
+// ============================================================
+// HIVE SECRET — Auth for all API routes
+// ============================================================
+// Generated on first boot, stored in data/hive-identity.json.
+// Every API request must include: Authorization: Bearer <secret>
+// Dashboard serves a login page. Drones send it in heartbeat headers.
+// ============================================================
+
+import crypto from 'crypto';
+
+const HIVE_IDENTITY_FILE = path.join(DATA_DIR, 'hive-identity.json');
+let HIVE_SECRET = '';
+
+function initHiveSecret() {
+  try {
+    const raw = readFileSync(HIVE_IDENTITY_FILE, 'utf-8');
+    const identity = JSON.parse(raw);
+    HIVE_SECRET = identity.secret;
+    console.log(`[QUEEN] Hive secret loaded (${HIVE_SECRET.slice(0, 8)}...)`);
+  } catch {
+    // First boot — generate new secret
+    HIVE_SECRET = crypto.randomBytes(32).toString('hex');
+    const identity = {
+      secret: HIVE_SECRET,
+      created_at: new Date().toISOString(),
+      queen_id: `queen-${crypto.randomBytes(2).toString('hex')}`,
+    };
+    require('fs').writeFileSync(HIVE_IDENTITY_FILE, JSON.stringify(identity, null, 2));
+    console.log(`[QUEEN] ═══════════════════════════════════════════`);
+    console.log(`[QUEEN]   NEW HIVE SECRET GENERATED`);
+    console.log(`[QUEEN]   ${HIVE_SECRET}`);
+    console.log(`[QUEEN]   Save this. Drones need it to join.`);
+    console.log(`[QUEEN] ═══════════════════════════════════════════`);
+    activity.log({ type: 'hive_created', queen_id: identity.queen_id });
+  }
+}
+
+initHiveSecret();
+
+// Persist node registrations across restarts
+const NODES_FILE = path.join(DATA_DIR, 'nodes.json');
+function loadNodes() {
+  try {
+    const raw = readFileSync(NODES_FILE, 'utf-8');
+    const loaded = JSON.parse(raw);
+    for (const [id, node] of Object.entries(loaded)) {
+      node.lastHeartbeat = new Date(node.lastHeartbeat);
+      node.registeredAt = new Date(node.registeredAt);
+      node.status = 'offline'; // assume offline until heartbeat
+      nodes.set(id, node);
+    }
+    console.log(`[QUEEN] Restored ${nodes.size} node(s) from disk`);
+  } catch { /* fresh start */ }
+}
+
+function persistNodes() {
+  const obj = Object.fromEntries(nodes);
+  fs.writeFile(NODES_FILE, JSON.stringify(obj, null, 2)).catch(() => {});
+}
+
+loadNodes();
+
 // --- Express App ---
 const app = express();
 app.use(express.json());
+
+// Auth middleware — check hive secret on API routes
+// Public routes: GET / (dashboard), GET /dashboard, GET /api/hive/info (for drone discovery)
+const PUBLIC_ROUTES = ['/', '/dashboard', '/api/hive/info'];
+
+app.use((req, res, next) => {
+  // Public routes skip auth
+  if (PUBLIC_ROUTES.includes(req.path)) return next();
+  // Static assets skip auth
+  if (req.path.startsWith('/views/') || req.path.endsWith('.css') || req.path.endsWith('.js')) return next();
+
+  // Check bearer token
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) {
+    // Check query param fallback (for dashboard SSE)
+    const token = req.query.token;
+    if (token === HIVE_SECRET) return next();
+    return res.status(401).json({ error: 'Unauthorized — include Authorization: Bearer <hive-secret>' });
+  }
+
+  const token = auth.slice(7);
+  if (token !== HIVE_SECRET) {
+    return res.status(403).json({ error: 'Invalid hive secret' });
+  }
+
+  next();
+});
+
+// Public endpoint — drones can discover hive info without auth
+app.get('/api/hive/info', (_req, res) => {
+  res.json({
+    queen: true,
+    version: VERSION,
+    auth_required: true,
+    endpoints: {
+      api: `http://localhost:${PORT}`,
+      litellm: LITELLM_URL,
+    },
+  });
+});
 
 // Serve static views
 const VIEWS_DIR = path.join(__dirname, 'views');
@@ -307,6 +409,7 @@ app.post('/api/nodes/register', (req, res) => {
   activity.log({ type: 'node_registered', node_id, role: config?.role });
   console.log(`[QUEEN] Node registered: ${node_id} (${config?.role || 'unknown'})`);
   if (config?.models?.length) scheduleLitellmSync();
+  persistNodes();
   res.json({ ok: true, message: `Node ${node_id} registered.` });
 });
 
@@ -364,6 +467,7 @@ app.post('/api/nodes/:nodeId/heartbeat', (req, res) => {
     node.addr = req.body.addr || node.addr;
     if (JSON.stringify(node.models) !== prevModels) scheduleLitellmSync();
   }
+  persistNodes();
   res.json({ ok: true });
 });
 

@@ -104,18 +104,29 @@ else
   warn "No local Ollama models found — node will pull on first boot"
 fi
 
+# --- Read hive secret ---
+HIVE_SECRET=""
+HIVE_IDENTITY="$DATA_DIR/hive-identity.json"
+if [ -f "$HIVE_IDENTITY" ]; then
+  HIVE_SECRET=$(python3 -c "import json; print(json.load(open('$HIVE_IDENTITY'))['secret'])" 2>/dev/null || echo "")
+fi
+if [ -z "$HIVE_SECRET" ]; then
+  warn "No hive-identity.json found — drone will need --secret flag manually"
+fi
+
 # --- Write node config ---
-cat > "$CLAW_DIR/config/claw.json" << CJSON
+cat > "$CLAW_DIR/config/drone.json" << CJSON
 {
   "queen_url": "http://${QUEEN_IP}:9090",
   "listen_addr": ":9091",
   "ollama_url": "http://localhost:11434",
+  "hive_secret": "${HIVE_SECRET}",
   "contribution": 50,
   "heartbeat_sec": 30,
   "preferred_models": ["phi4-mini", "qwen3:8b"]
 }
 CJSON
-ok "Node config written (Queen: http://${QUEEN_IP}:9090)"
+ok "Node config written (Queen: http://${QUEEN_IP}:9090, secret: ${HIVE_SECRET:+included}${HIVE_SECRET:-NOT FOUND})"
 
 # --- Write setup script (this is what the user runs) ---
 cat > "$CLAW_DIR/setup.sh" << 'SETUP'

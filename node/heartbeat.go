@@ -55,6 +55,7 @@ type HeartbeatReporter struct {
 	queenURL      string
 	nodeID        string
 	advertiseAddr string
+	hiveSecret    string
 	interval      time.Duration
 
 	metrics  *MetricsCollector
@@ -72,6 +73,7 @@ func NewHeartbeatReporter(cfg Config, metrics *MetricsCollector, ollama *OllamaC
 		queenURL:      cfg.QueenURL,
 		nodeID:        cfg.NodeID,
 		advertiseAddr: cfg.AdvertiseAddr,
+		hiveSecret:    cfg.HiveSecret,
 		interval:   time.Duration(cfg.HeartbeatSec) * time.Second,
 		metrics:    metrics,
 		ollama:     ollama,
@@ -190,6 +192,9 @@ func (hr *HeartbeatReporter) send(ctx context.Context) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if hr.hiveSecret != "" {
+		req.Header.Set("Authorization", "Bearer "+hr.hiveSecret)
+	}
 
 	resp, err := hr.httpClient.Do(req)
 	if err != nil {

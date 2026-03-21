@@ -22,6 +22,7 @@ type Config struct {
 	ListenAddr    string `json:"listen_addr"`
 	AdvertiseAddr string `json:"advertise_addr"` // LAN IP:port — how Queen reaches this drone
 	OllamaURL     string `json:"ollama_url"`
+	HiveSecret    string `json:"hive_secret"` // Auth token for Queen API
 
 	// Contribution dial: 0-100, percentage of resources to offer the hive
 	Contribution int `json:"contribution"`
