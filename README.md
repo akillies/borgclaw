@@ -34,8 +34,10 @@ Queen boots. Drones join. Telemetry flows. The hive works.
 - Scheduled workflows with cron and real LLM execution
 - NATS event bus for real-time hive coordination
 - Self-improvement scan — weekly check for better models and tools
+- NAS shared knowledge — mount a drive, every drone in the hive sees it
 - BBS dashboard with Queen status, chat, connect panel, security panel
 - Each drone serves its own BBS terminal at its port
+- Plug-in MCP slots for Home Assistant, energy grid, and more — zero bloat, add what you need
 
 ## Quick Start
 
