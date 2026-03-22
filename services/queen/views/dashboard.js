@@ -1750,7 +1750,7 @@ input[type="range"].dial:disabled {
           html += '<div class="model-swap-item">'
             + '<span class="model-swap-name">' + nameEsc + '</span>'
             + '<span class="model-swap-size">' + escHtml(size) + '</span>'
-            + '<button class="btn btn-view" onclick="pullModel(\'' + nameEsc + '\',\'' + escHtml(nodeId) + '\')">PULL</button>'
+            + '<button class="btn btn-view" onclick="pullModel(&quot;' + nameEsc + '&quot;,&quot;' + escHtml(nodeId) + '&quot;)">PULL</button>'
             + '</div>';
         });
         html += '</div>';

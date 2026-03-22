@@ -1,16 +1,10 @@
 [
   {
-    "id": "evt-1773986180699-y4rj",
-    "ts": "2026-03-20T05:56:20.699Z",
+    "id": "evt-1774160877466-kxxm",
+    "ts": "2026-03-22T06:27:57.466Z",
     "type": "queen_started",
     "version": "0.2.0",
-    "node_id": "mac-mini",
-    "profile": "mac-apple-silicon-24gb"
-  },
-  {
-    "id": "evt-1773986330703-dw0o",
-    "ts": "2026-03-20T05:58:50.703Z",
-    "type": "node_offline",
-    "node_id": "mac-mini"
+    "node_id": "queen",
+    "profile": "unknown"
   }
 ]
