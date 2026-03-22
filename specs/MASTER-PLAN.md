@@ -12,11 +12,13 @@ Created by [Alexander Kline](https://alexanderkline.com)
 ## Timeline
 
 ```
-Phase 0 ████                                    This week (20 hrs)
-Phase 1      ████████████████                    April 2026 (80 hrs)
-Phase 2                      ████████████████    May-June 2026 (120 hrs)
+Phase 0 ████                                              This week (20 hrs)
+Phase 1      ████████████████                              April 2026 (80 hrs)
+Phase 2                      ████████████████              May-June 2026 (120 hrs)
+Phase 5                      ████████████████              Launch (alongside Phase 2)
 Phase 3                                      ████████████  Q3 2026 (60 hrs)
 Phase 4                                                  ████████→  Q4+ (40+ hrs)
+Phase 6                                      ████████████████████→  Community (ongoing)
         ─────────────────────────────────────────────────────────────────
         Mar        Apr          May-Jun         Jul-Sep       Oct+
 ```
@@ -189,6 +191,47 @@ Everything else amplifies these five.
 
 ---
 
+## Phase 5: "They Know It Exists" — Launch (alongside Phase 2)
+**Goal:** The world sees BorgClaw. OpenClaw community discovers it. First external contributors.
+**Exit criteria:** Show HN front page. 100+ stars. First external PR.
+
+| # | Task | Depends On | Effort | Status |
+|---|------|-----------|--------|--------|
+| 5.1 | Record "The Awakening" demo video (USB into 4 devices, they think together) | Phase 0 complete | 4 hrs | TODO |
+| 5.2 | Write "Use BorgClaw with OpenClaw" integration guide | Phase 1 | 4 hrs | TODO |
+| 5.3 | Test NanoClaw pointing at BorgClaw's LiteLLM :4000 — prove snap-in works | 5.2 | 2 hrs | TODO |
+| 5.4 | Reference OpenClaw Issue #47871 in integration guide | 5.2 | 30 min | TODO |
+| 5.5 | Write Boundary Layer blog post — "I turned my garage into a data center for $0" | Phase 2 | 4 hrs | TODO |
+| 5.6 | Submit to Show HN — "Turn every computer you own into one AI" | 5.1, 5.5 | 1 hr | TODO |
+| 5.7 | Post to r/LocalLLaMA, r/selfhosted, r/homelab | 5.6 | 2 hrs | TODO |
+| 5.8 | DM Brian Roemmele — "your ZHC vision, open source, runs on your hardware" | 5.6 | 30 min | TODO |
+| 5.9 | Post demo video to X/Twitter with alexanderkline.com | 5.1 | 1 hr | TODO |
+
+**Demo moment:** The 60-second video. 4 devices. USB into each. Dashboard lights up. "I plugged a USB drive into 4 old computers. Now they think together."
+
+---
+
+## Phase 6: "They're Using It" — Community (Q3-Q4 2026)
+**Goal:** External contributors. Drone profiles shared. Knowledge packs created by others. BorgClaw is a project, not just a repo.
+**Exit criteria:** 10+ contributors. 3+ community-contributed drone profiles. 1000+ stars.
+
+| # | Task | Depends On | Effort | Status |
+|---|------|-----------|--------|--------|
+| 6.1 | GitHub issue templates (bug report, feature request, drone profile submission) | Phase 5 | 2 hrs | TODO |
+| 6.2 | GitHub Actions CI (go build + node --check on every PR) | Phase 5 | 3 hrs | TODO |
+| 6.3 | First external PR — review, merge, celebrate | 6.1 | ongoing | TODO |
+| 6.4 | Community drone profile template + submission process | Phase 3 | 4 hrs | TODO |
+| 6.5 | Knowledge pack contribution guide (how to create ZIM-based packs) | Phase 3 | 4 hrs | TODO |
+| 6.6 | Discord or GitHub Discussions for community | Phase 5 | 2 hrs | TODO |
+| 6.7 | Monthly changelog / release notes | Phase 5 | ongoing | TODO |
+| 6.8 | Respond to every issue within 24 hours | 6.1 | ongoing | TODO |
+| 6.9 | "Built with BorgClaw" showcase — highlight community deployments | 6.3 | ongoing | TODO |
+| 6.10 | Conference talk / podcast pitch — "Sovereign AI for Everyone" | Phase 5 | 4 hrs | TODO |
+
+**Demo moment:** "50 people are running BorgClaw. Here's what they built."
+
+---
+
 ## CTO Assessment
 
 - **Total effort:** ~320 hours across all phases
@@ -200,6 +243,6 @@ Everything else amplifies these five.
 
 ---
 
-*Last updated: 2026-03-21*
+*Last updated: 2026-03-22*
 
 *Resistance is optional. Adaptation is inevitable.*
