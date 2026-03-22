@@ -32,6 +32,24 @@
 
 **Exit criteria:** Two drones visible on dashboard. One LLM request routed to a remote drone and response returned.
 
+### Dashboard UX Requirements (apply across all phases)
+
+The dashboard is the operator's control surface. Every major feature needs a GUI hook, not just an API endpoint. If it can't be done from the dashboard, it doesn't exist for most users.
+
+**Required panels:**
+- **Connect** — copy-paste URLs for OpenClaw, DeerFlow, Cursor, Aider, any OpenAI/Anthropic-compatible app. `borgclaw connect` output but in the GUI with copy buttons.
+- **Integrations** — toggle switches for supported systems. Each integration shows: status (connected/disconnected), setup instructions inline, config fields. Covers: OpenClaw/NanoClaw, DeerFlow, Paperclip, MCP servers, Tailscale, Prometheus.
+- **Make Disk** — select connected USB drive, choose drone profile (compute/workstation/knowledge), click "Create Drone." Progress bar with chiptune audio.
+- **Drone Manager** — per-drone: contribution dial, role assignment, model swap, kill/restart, view DRONE.md learnings, performance history sparklines.
+- **Security** — view all open ports/doors, toggle each on/off, view auth status, rotate hive secret.
+- **Autoresearch** — last scan results, proposed upgrades awaiting approval, upgrade history.
+
+**Chiptune audio:**
+- Plays during USB prep / drone assimilation (the "assimilation sequence")
+- Plays on drone first heartbeat (the "welcome to the hive" chime)
+- Plays on hive halt (alarm tone)
+- Always mutable. Default muted. localStorage persist. Already implemented in dashboard.js — extend to new events.
+
 ---
 
 ## Phase 1: Functional Hive (April 2026)
