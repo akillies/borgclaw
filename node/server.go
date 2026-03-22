@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
 // droneBBSHTML is the inline BBS terminal page served at GET /.
 // Verbs (in order): NodeID×2, Tier, Contribution, CPUPercent, RAMPercent,
-// GPUName, ActiveModel, AvgTokPerSec, uptime, TasksCompleted, TasksActive.
+// GPUName, ActiveModel, AvgTokPerSec, uptime, TasksCompleted, TasksActive,
+// KnowledgeDomains, PersonaMode, LearnedInsights, LearnTasksDone, LearnApprovalRate.
 // Note: no HiveSecret in the template — /chat is exempt from auth so the
 // BBS page can talk to the drone without exposing the secret in public HTML.
 const droneBBSHTML = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>%s</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#00ff88;font-family:monospace;font-size:13px;padding:16px;min-height:100vh}pre{white-space:pre}.dim{color:#005533}.hi{color:#00ffaa}input{background:#0a0a0a;border:1px solid #00ff88;color:#00ff88;font-family:monospace;font-size:13px;padding:4px 8px;width:calc(100%% - 80px);outline:none}button{background:#003322;border:1px solid #00ff88;color:#00ff88;font-family:monospace;font-size:13px;padding:4px 12px;cursor:pointer;margin-left:4px}button:hover{background:#00ff88;color:#0a0a0a}#resp{margin-top:8px;color:#00cc66;min-height:1em;white-space:pre-wrap;word-break:break-word}.blink{animation:blink 1s step-end infinite}@keyframes blink{0%%,100%%{opacity:1}50%%{opacity:0}}</style></head><body><pre>
@@ -25,6 +27,11 @@ const droneBBSHTML = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"
 &#x2502;  MDL  %-22s %6.1f t/s &#x2502;
 &#x251C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2524;
 &#x2502;  UP   %-14s  DONE %5d  ACT %3d &#x2502;
+&#x2502;  KNOW %-30s&#x2502;
+&#x2502;  MODE %-30s&#x2502;
+&#x251C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2524;
+&#x2502;  INTEL %-29s&#x2502;
+&#x2502;  LEARN %5d tasks  APPR %5.1f%%      &#x2502;
 &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
 </pre><div style="margin-top:12px"><input id="msg" type="text" placeholder="transmit to drone..." autocomplete="off"><button onclick="send()">TX</button></div><div id="resp"><span class="dim">awaiting transmission<span class="blink">_</span></span></div><script>function send(){var m=document.getElementById('msg').value.trim();if(!m)return;document.getElementById('resp').textContent='...';fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})}).then(function(r){return r.json()}).then(function(d){document.getElementById('resp').textContent=d.response||d.error||'no response'}).catch(function(e){document.getElementById('resp').textContent='ERR: '+e})}</script></body></html>`
 
@@ -169,6 +176,41 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		int(uptime.Minutes())%60,
 	)
 
+	// Knowledge domains — from installed ZIM packs
+	domains := ScanKnowledgeDomains(s.cfg.KnowledgeDir)
+	knowStr := "none"
+	if len(domains) > 0 {
+		knowStr = strings.Join(domains, " ")
+		if len(knowStr) > 30 {
+			knowStr = knowStr[:27] + "..."
+		}
+	}
+
+	// Persona mode — derived from the first preferred model's role context
+	personaMode := "WORKER"
+	if len(s.cfg.PreferredModels) > 0 {
+		personaMode = strings.ToUpper(s.cfg.PreferredModels[0])
+		if len(personaMode) > 30 {
+			personaMode = personaMode[:27] + "..."
+		}
+	}
+
+	// Learning stats
+	var learnDone int64
+	var learnApprRate float64
+	intelLine := "no operational history yet"
+	if s.learning != nil {
+		stats := s.learning.Stats()
+		learnDone = stats.TasksCompleted
+		learnApprRate = stats.ApprovalRate
+		if insight := s.learning.LastInsights(3); insight != "" {
+			intelLine = insight
+		}
+		if len(intelLine) > 29 {
+			intelLine = intelLine[:26] + "..."
+		}
+	}
+
 	page := fmt.Sprintf(droneBBSHTML,
 		s.cfg.NodeID,       // <title>
 		s.cfg.NodeID,       // NODE: display
@@ -182,6 +224,11 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		uptimeStr,          // UP
 		m.TasksCompleted,   // DONE
 		m.TasksActive,      // ACT
+		knowStr,            // KNOW
+		personaMode,        // MODE
+		intelLine,          // INTEL
+		learnDone,          // LEARN tasks
+		learnApprRate,      // APPR %
 	)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

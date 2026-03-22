@@ -238,6 +238,47 @@ func (ls *LearningStore) GetContext() string {
 	return sb.String()
 }
 
+// LearningStats holds a minimal snapshot of the drone's accumulated
+// learning data for display in the BBS terminal and heartbeat payloads.
+type LearningStats struct {
+	TasksCompleted int64
+	ApprovalRate   float64 // 0–100
+}
+
+// Stats returns a lightweight snapshot of accumulated learning state.
+// Safe to call from any goroutine.
+func (ls *LearningStore) Stats() LearningStats {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	total := ls.totalCompleted + ls.totalFailed
+	rate := 0.0
+	if total > 0 {
+		rate = float64(ls.approvals) / float64(total) * 100.0
+	}
+	return LearningStats{
+		TasksCompleted: ls.totalCompleted,
+		ApprovalRate:   rate,
+	}
+}
+
+// LastInsights returns up to n non-empty lines from the tail of GetContext().
+// Returns an empty string when nothing is available.
+func (ls *LearningStore) LastInsights(n int) string {
+	ctx := ls.GetContext()
+	if ctx == "" {
+		return ""
+	}
+	lines := strings.Split(ctx, "\n")
+	var out []string
+	for i := len(lines) - 1; i >= 0 && len(out) < n; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" && !strings.HasPrefix(line, "#") {
+			out = append([]string{line}, out...)
+		}
+	}
+	return strings.Join(out, " | ")
+}
+
 // --- private ---
 
 // writeFile renders and atomically writes DRONE.md.

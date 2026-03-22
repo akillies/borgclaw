@@ -30,6 +30,9 @@ export default function renderDashboard(data) {
     // The full secret is NEVER sent to the browser. Client JS reads it from the
     // session cookie set by POST /auth/login via a helper below.
     hiveSecretPrefix = '',
+    clusters: clusterList = [],
+    sandboxRoots = [],
+    sandboxDomains = [],
   } = data;
   const port = data.port || process.env.QUEEN_PORT || '9090';
   const queenHost = data.queenHost || 'localhost';
@@ -42,8 +45,12 @@ export default function renderDashboard(data) {
   }
 
   const nodeRows = nodes.length === 0
-    ? `<tr><td colspan="8" class="empty-row">── NO NODES REGISTERED ── run bootstrap.sh on a machine to join the hive</td></tr>`
-    : nodes.map(n => `<tr class="data-row">
+    ? `<tr><td colspan="9" class="empty-row">── NO NODES REGISTERED ── run bootstrap.sh on a machine to join the hive</td></tr>`
+    : nodes.map(n => {
+      const domainTags = Array.isArray(n.knowledge_domains) && n.knowledge_domains.length > 0
+        ? n.knowledge_domains.map(d => `<span class="cap-tag" style="border-color:rgba(0,255,136,0.25);color:var(--green)">${escHtml(d)}</span>`).join(' ')
+        : '<span class="dim">—</span>';
+      return `<tr class="data-row">
         <td>${statusDot(n.status)} <span class="node-id">${escHtml(n.node_id || 'unknown')}</span>${n.hostname ? `<br><span class="dim" style="font-size:9px">${escHtml(n.hostname)}</span>` : ''}</td>
         <td>${escHtml(n.role || '—')}</td>
         <td class="dim">${escHtml(n.profile || '—')}</td>
@@ -51,7 +58,9 @@ export default function renderDashboard(data) {
         <td class="dim" style="font-size:10px">${n.ip ? escHtml(n.ip) : '—'}${n.connection_speed ? `<br><span style="color:var(--cyan);font-size:9px">${escHtml(n.connection_speed)}</span>` : ''}</td>
         <td class="dim">${escHtml(n.age || n.last_heartbeat || 'never')}</td>
         <td class="caps">${Array.isArray(n.capabilities) ? n.capabilities.map(c => `<span class="cap-tag">${escHtml(c)}</span>`).join(' ') : '—'}</td>
-      </tr>`).join('');
+        <td class="caps">${domainTags}</td>
+      </tr>`;
+    }).join('');
 
   // ── Service tiles ──────────────────────────────────────────
   const SERVICE_DEFS = [
@@ -910,6 +919,7 @@ input[type="range"].dial:disabled {
             <th>ADDRESS</th>
             <th>LAST HB</th>
             <th>CAPABILITIES</th>
+            <th>KNOWLEDGE</th>
           </tr>
         </thead>
         <tbody id="nodes-tbody">
@@ -929,6 +939,28 @@ input[type="range"].dial:disabled {
       ${renderTopology(nodes)}
     </div>
   </div>
+
+  <!-- ═══ CLUSTERS ════════════════════════════════════════ -->
+  ${clusterList.length === 0 ? '' : `<div class="section" id="clusters-section">
+    <div class="section-header">
+      <span class="section-title">CLUSTERS</span>
+      <span class="section-badge">${clusterList.length} INFERENCE CLUSTER${clusterList.length !== 1 ? 'S' : ''} · RPC-WORKER SHARDS</span>
+    </div>
+    <div class="section-body">
+      <table>
+        <thead><tr><th>CLUSTER</th><th>MEMBERS</th><th>RULE</th><th>NOTES</th><th>CREATED</th></tr></thead>
+        <tbody>
+          ${clusterList.map(c => `<tr class="data-row">
+            <td style="color:var(--cyan);font-weight:700">${escHtml(c.name)}</td>
+            <td class="caps">${(c.members || []).map(m => `<span class="cap-tag">${escHtml(m)}</span>`).join(' ')}</td>
+            <td class="dim">${escHtml(c.formation_rule || '—')}</td>
+            <td class="dim">${escHtml(c.notes || '—')}</td>
+            <td class="dim" style="font-size:10px">${escHtml(c.created_at ? new Date(c.created_at).toISOString().slice(0, 10) : '—')}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`}
 
   <!-- ═══ SERVICES ═══════════════════════════════════════ -->
   <div class="section">
@@ -1021,6 +1053,7 @@ input[type="range"].dial:disabled {
       <button class="btn btn-approve" onclick="refreshHealth()">⟳ REFRESH HEALTH</button>
       <button class="btn btn-view" onclick="refreshApprovals()">⟳ RELOAD APPROVALS</button>
       <button class="btn btn-view" onclick="fetchModels()">◈ LIST MODELS</button>
+      <button class="btn btn-view" onclick="scanAvailableModels()">◈ SCAN MODELS</button>
       <button class="btn btn-view" onclick="showSearch()">◇ QMD SEARCH</button>
       ${wfList.map(wf => `<button class="btn btn-approve" onclick="runWorkflow('${escHtml(wf.name)}')" title="${escHtml(wf.description)}">▶ ${escHtml(wf.name.toUpperCase())}</button>`).join(' ')}
     </div>
@@ -1146,6 +1179,8 @@ input[type="range"].dial:disabled {
         <tr><td>NATS (:4222)</td><td style="color:var(--cyan)">● INTERNAL ONLY</td><td style="color:var(--muted)">Not exposed externally</td></tr>
         <tr><td>ntfy (:2586)</td><td style="color:${services.ntfy?.status === 'online' ? 'var(--green)' : 'var(--muted)'}">● ${services.ntfy?.status === 'online' ? 'ONLINE' : 'OFFLINE'}</td><td style="color:var(--muted)">Push notifications</td></tr>
         <tr><td>Dashboard</td><td style="color:var(--green)">● AUTHENTICATED</td><td style="color:var(--muted)">All API calls use Bearer token</td></tr>
+        <tr><td>Sandbox roots</td><td style="color:var(--cyan)">● ${sandboxRoots.length > 0 ? 'ACTIVE' : 'NONE'}</td><td style="color:var(--muted);font-size:10px">${sandboxRoots.length > 0 ? sandboxRoots.map(r => escHtml(r)).join(' · ') : 'no filesystem restrictions'}</td></tr>
+        <tr><td>Allowed domains</td><td style="color:var(--cyan)">● ${sandboxDomains.length > 0 ? 'FILTERED' : 'OPEN'}</td><td style="color:var(--muted);font-size:10px">${sandboxDomains.length > 0 ? sandboxDomains.map(d => escHtml(d)).join(' · ') : 'all domains permitted'}</td></tr>
       </table>
       <div style="margin-top:8px">
         <button class="btn btn-reject" onclick="if(confirm('HALT THE HIVE?')){authFetch('/api/hive/halt',{method:'POST'}).then(function(){this.textContent='HALTED'}.bind(this))}">⚠ HALT HIVE</button>
@@ -2217,6 +2252,75 @@ input[type="range"].dial:disabled {
     var btn=document.getElementById('makedisk-btn');
     if(btn)btn.addEventListener('click',function(){window.makeDisk();});
   });
+})();
+</script>
+
+<script>
+// ════════════════════════════════════════════════════════
+// SCAN MODELS — Standalone block
+// Calls GET /api/models/available and renders results
+// in the shared modal. Standalone so it survives any
+// main IIFE failures.
+// ════════════════════════════════════════════════════════
+(function(){
+  'use strict';
+  var SECRET=(document.cookie.match(/(?:^|; )bc_api_token=([^;]*)/)||[])[1];
+  if(SECRET)SECRET=decodeURIComponent(SECRET);else SECRET='';
+
+  function authHdr(){
+    var h={};
+    if(SECRET)h['Authorization']='Bearer '+SECRET;
+    return h;
+  }
+
+  function escH(s){
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function showModal(title,html){
+    var overlay=document.getElementById('modal-overlay');
+    var hdr=overlay&&overlay.querySelector('#modal-header span');
+    var body=document.getElementById('modal-body');
+    if(!overlay||!body)return;
+    if(hdr)hdr.textContent=title;
+    body.innerHTML=html;
+    overlay.classList.add('show');
+  }
+
+  window.scanAvailableModels=function(){
+    showModal('╠══ SCANNING MODEL LEADERBOARD… ══╣','<div style="color:var(--muted);padding:0.5rem">◈ Probing Ollama library — this may take 10-20s…</div>');
+    fetch('/api/models/available',{headers:authHdr()})
+      .then(function(r){return r.json();})
+      .then(function(data){
+        var candidates=data.candidates||[];
+        if(candidates.length===0){
+          showModal('╠══ MODEL LEADERBOARD ══╣','<div style="color:var(--muted);padding:0.75rem">── No candidates found. Check Ollama connectivity. ──</div>');
+          return;
+        }
+        var rows=candidates.map(function(m){
+          var tier=escH(m.tier||'—');
+          var name=escH(m.name||m.model||'?');
+          var size=m.size_gb?m.size_gb.toFixed(1)+' GB':'—';
+          var pulls=m.pull_count!=null?Number(m.pull_count).toLocaleString():'—';
+          var tierColor=tier==='nano'?'var(--green)':tier==='edge'?'var(--cyan)':tier==='worker'?'var(--amber)':'var(--grey)';
+          return '<div class="model-swap-item">'
+            +'<span class="model-swap-name">'+name+'</span>'
+            +'<span style="color:'+tierColor+';font-size:10px;min-width:4rem;text-align:right">'+tier+'</span>'
+            +'<span class="model-swap-size">'+escH(size)+'</span>'
+            +'<span style="color:var(--muted);font-size:10px;min-width:5rem;text-align:right">▼ '+escH(pulls)+'</span>'
+            +'<button class="btn btn-view" data-action="pull" data-model="'+name+'" data-node="">PULL</button>'
+            +'</div>';
+        }).join('');
+        var header='<div style="color:var(--grey);font-size:10px;padding:0.4rem 1rem;border-bottom:1px solid var(--border)">'
+          +'SCANNED '+escH(data.scanned_at?new Date(data.scanned_at).toISOString().slice(11,19):'?')
+          +' · '+escH(String(candidates.length))+' CANDIDATES'
+          +'</div>';
+        showModal('╠══ MODEL LEADERBOARD ══╣',header+'<div class="model-swap-list">'+rows+'</div>');
+      })
+      .catch(function(e){
+        showModal('╠══ MODEL LEADERBOARD ══╣','<div style="color:var(--red);padding:0.75rem">✗ Scan failed: '+escH(e.message)+'</div>');
+      });
+  };
 })();
 </script>
 </body>

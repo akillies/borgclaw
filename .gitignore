@@ -45,6 +45,7 @@ build/
 # Go binaries (drone node agent)
 node/drone
 node/drone-*
+node/node
 node/the-claw
 node/the-claw-*
 *.exe

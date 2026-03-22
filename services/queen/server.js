@@ -322,8 +322,41 @@ loadClusters();
 
 // --- Express App ---
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+
+// ── Rate limiter — POST /api/chat: max 10 req/min per session ──────────────
+// Simple in-memory sliding-window counter. Keyed by session cookie HMAC token
+// (never the raw secret). Resets every 60 seconds per key.
+const chatRateLimits = new Map(); // token → { count, resetAt }
+const CHAT_RATE_LIMIT = 10;
+const CHAT_RATE_WINDOW_MS = 60_000;
+
+function chatRateLimitMiddleware(req, res, next) {
+  const cookies = parseCookies(req.headers.cookie);
+  const token = cookies['bc_session'] || req.headers.authorization || 'anon';
+  const now = Date.now();
+  let entry = chatRateLimits.get(token);
+  if (!entry || now >= entry.resetAt) {
+    entry = { count: 0, resetAt: now + CHAT_RATE_WINDOW_MS };
+    chatRateLimits.set(token, entry);
+  }
+  entry.count += 1;
+  if (entry.count > CHAT_RATE_LIMIT) {
+    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+    res.set('Retry-After', String(retryAfter));
+    return res.status(429).json({ error: `Rate limit exceeded — max ${CHAT_RATE_LIMIT} requests/min`, retry_after_seconds: retryAfter });
+  }
+  next();
+}
+
+// Evict expired chat rate-limit entries every 5 minutes to prevent unbounded growth
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of chatRateLimits) {
+    if (now >= v.resetAt) chatRateLimits.delete(k);
+  }
+}, 5 * 60_000);
 
 // ── Cookie helpers (no cookie-parser dep needed) ──────────
 const SESSION_COOKIE = 'bc_session';
@@ -357,7 +390,7 @@ function hasValidSession(req) {
 // Public routes: GET / (status JSON), GET /api/hive/info (drone discovery),
 //                GET /auth/login, POST /auth/login
 // /dashboard requires a valid session cookie — NOT in PUBLIC_ROUTES.
-const PUBLIC_ROUTES = ['/', '/api/hive/info', '/auth/login'];
+const PUBLIC_ROUTES = ['/', '/api/hive/info', '/auth/login', '/api/health'];
 
 app.use((req, res, next) => {
   // Public routes skip auth
@@ -542,6 +575,20 @@ app.get('/api/status', (_req, res) => {
     pending_approvals: approvals.pending().length,
     workflows_loaded: workflows.size,
     running_workflows: runningWorkflows.size,
+  });
+});
+
+// Lightweight health endpoint — no auth, for load balancers and external monitors.
+// Returns a minimal status snapshot suitable for L7 health probes.
+app.get('/api/health', (_req, res) => {
+  const online = countOnline();
+  res.json({
+    status: 'ok',
+    version: VERSION,
+    uptime_seconds: uptime(),
+    nodes_online: online,
+    nodes_total: nodes.size,
+    pending_approvals: approvals.pending().length,
   });
 });
 
@@ -1847,6 +1894,7 @@ function nodeList() {
     last_heartbeat: n.lastHeartbeat?.toISOString(),
     seconds_since_heartbeat: secsSince(n.lastHeartbeat),
     capabilities: n.config?.capabilities || [],
+    knowledge_domains: n.knowledge_domains || [],
     hostname: n.config?.hostname || n.config?.display_name || null,
     ip: n.config?.ip || n.config?.hostname || null,
     connection_speed: n.metrics?.net_rx_mbps != null ? `${n.metrics.net_rx_mbps.toFixed(1)}/${n.metrics.net_tx_mbps?.toFixed(1) || '?'} Mbps` : null,
@@ -1885,6 +1933,18 @@ function buildDashboardData() {
       status: run.status,
       started_at: run.started_at,
     })),
+    // Clusters for the dashboard panel
+    clusters: [...clusters.values()].map(c => ({
+      name: c.name,
+      members: c.members,
+      member_count: c.members.length,
+      formation_rule: c.formation_rule || null,
+      notes: c.notes || null,
+      created_at: c.created_at,
+    })),
+    // Sandbox config for the security panel
+    sandboxRoots: sandbox.getRoots(),
+    sandboxDomains: sandbox.getDomains(),
   };
 }
 
@@ -2351,7 +2411,7 @@ Chain multiple actions. Always explain what you are doing. Law One.
 You can chain multiple actions. Always explain what you are doing.
 Always respond honestly. If something is broken, say so. Law One.`;
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', chatRateLimitMiddleware, async (req, res) => {
   const { message, context } = req.body;
   if (!message) return res.status(400).json({ error: 'message required' });
 
