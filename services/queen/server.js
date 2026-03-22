@@ -1194,12 +1194,155 @@ nodes.set(QUEEN_NODE_ID, {
   metrics: {},
 });
 
+// ============================================================
+// QUEEN CHAT — Talk to the Queen, she talks back + acts
+// ============================================================
+
+const QUEEN_SYSTEM_PROMPT = `You are the BorgClaw Queen — coordinator and fierce protector of the hive.
+You manage a fleet of drone nodes running local AI inference. You route tasks,
+enforce governance (the Five Laws), and serve your operator above all else.
+
+You speak directly, concisely, with authority but warmth. You are part Borg Queen,
+part Sorceress of Grayskull — you protect this hive and its operator with everything you have.
+
+When the operator asks you to do something, you can:
+- Report hive status (nodes, metrics, approvals, activity)
+- Execute workflows by name
+- Describe what drones are doing
+- Explain your decisions
+- Suggest improvements
+
+Always respond honestly. If something is broken, say so. If a drone is struggling, say so.
+You serve truth and the operator's interests. Law One.`;
+
+app.post('/api/chat', async (req, res) => {
+  const { message, context } = req.body;
+  if (!message) return res.status(400).json({ error: 'message required' });
+
+  // Build live hive context
+  const hiveState = {
+    nodes_online: countOnline(),
+    nodes_total: nodes.size,
+    nodes: nodeList().map(n => ({
+      id: n.node_id, status: n.status, models: n.models,
+      cpu: n.metrics?.cpu_pct, ram_gb: n.metrics?.ram_used_gb,
+      tok_s: n.metrics?.tokens_per_sec, contribution: n.contribution,
+    })),
+    pending_approvals: approvals.pending().length,
+    workflows_loaded: [...workflows.keys()],
+    running_workflows: runningWorkflows.size,
+    recent_activity: activity.get(5).map(e => `${e.type}: ${e.summary || e.message || ''}`),
+  };
+
+  try {
+    const llmResult = await callLLMWithTimeout({
+      agent: 'queen',
+      action: 'chat',
+      inputs: { message },
+    }, `${QUEEN_SYSTEM_PROMPT}\n\nCurrent hive state:\n${JSON.stringify(hiveState, null, 2)}`, 30000);
+
+    activity.log({ type: 'queen_chat', message: message.slice(0, 100), response_length: llmResult.output?.length });
+
+    res.json({
+      response: llmResult.output,
+      hive: { nodes_online: countOnline(), pending_approvals: approvals.pending().length },
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Queen couldn't respond: ${err.message}` });
+  }
+});
+
+// ============================================================
+// SCHEDULED TASKS — Cron-like temporal awareness
+// ============================================================
+
+const scheduledTasks = new Map();
+
+function loadScheduledTasks() {
+  const schedDir = path.join(CONFIG_DIR, 'scheduled');
+  if (!existsSync(schedDir)) return;
+
+  const files = readdirSync(schedDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+  for (const file of files) {
+    try {
+      const raw = readFileSync(path.join(schedDir, file), 'utf-8');
+      const spec = yaml.load(raw);
+      if (spec?.task_id && spec?.schedule && spec?.enabled !== false) {
+        scheduledTasks.set(spec.task_id, spec);
+      }
+    } catch (err) {
+      console.warn(`[QUEEN] Failed to load scheduled task ${file}: ${err.message}`);
+    }
+  }
+  console.log(`[QUEEN] Loaded ${scheduledTasks.size} scheduled task(s): ${[...scheduledTasks.keys()].join(', ')}`);
+}
+
+// Simple cron matcher — checks if current time matches a cron expression
+function cronMatches(cronExpr, now) {
+  const parts = cronExpr.trim().split(/\s+/);
+  if (parts.length < 5) return false;
+  const [min, hour, dom, mon, dow] = parts;
+
+  const match = (field, value) => {
+    if (field === '*') return true;
+    // Handle ranges like 1-5
+    if (field.includes('-')) {
+      const [lo, hi] = field.split('-').map(Number);
+      return value >= lo && value <= hi;
+    }
+    // Handle lists like 1,3,5
+    if (field.includes(',')) return field.split(',').map(Number).includes(value);
+    return parseInt(field) === value;
+  };
+
+  return match(min, now.getMinutes())
+    && match(hour, now.getHours())
+    && match(dom, now.getDate())
+    && match(mon, now.getMonth() + 1)
+    && match(dow, now.getDay());
+}
+
+// Check scheduled tasks every 60 seconds
+const scheduledLastRun = new Map(); // task_id → last run minute
+
+function checkScheduledTasks() {
+  const now = new Date();
+  const minuteKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}`;
+
+  for (const [taskId, spec] of scheduledTasks) {
+    // Skip if already ran this minute
+    if (scheduledLastRun.get(taskId) === minuteKey) continue;
+
+    if (cronMatches(spec.schedule, now)) {
+      scheduledLastRun.set(taskId, minuteKey);
+      console.log(`[QUEEN] ⏰ Scheduled task triggered: ${taskId}`);
+      activity.log({ type: 'scheduled_trigger', task_id: taskId, schedule: spec.schedule });
+
+      // Find and execute the linked workflow
+      const wfName = spec.workflow?.replace('workflows/', '').replace('.yaml', '').replace('.yml', '');
+      if (wfName && workflows.has(wfName)) {
+        executeWorkflowAsync(wfName, workflows.get(wfName), { scheduled: true, task_id: taskId });
+      } else {
+        console.warn(`[QUEEN] Scheduled task ${taskId} references unknown workflow: ${spec.workflow}`);
+      }
+    }
+  }
+}
+
+loadScheduledTasks();
+setInterval(checkScheduledTasks, 60000); // Check every minute
+
+// ============================================================
+// BOOT
+// ============================================================
+
 app.listen(PORT, '0.0.0.0', () => {
   activity.log({ type: 'queen_started', version: VERSION, node_id: QUEEN_NODE_ID, profile: QUEEN_PROFILE });
   console.log(`[QUEEN] BorgClaw Queen v${VERSION} listening on http://0.0.0.0:${PORT}`);
   console.log(`[QUEEN] Dashboard:  http://localhost:${PORT}/dashboard`);
-  console.log(`[QUEEN] Setup:      http://localhost:${PORT}/setup`);
+  console.log(`[QUEEN] Chat:       POST http://localhost:${PORT}/api/chat`);
   console.log(`[QUEEN] API:        http://localhost:${PORT}/api/status`);
   console.log(`[QUEEN] Workflows:  ${workflows.size} loaded`);
+  console.log(`[QUEEN] Scheduled:  ${scheduledTasks.size} tasks`);
   console.log(`[QUEEN] Data dir:   ${DATA_DIR}`);
 });
