@@ -51,6 +51,9 @@ func NewServer(cfg Config, metrics *MetricsCollector, ollama *OllamaClient, thro
 	// Info — static node info + hardware profile
 	mux.HandleFunc("GET /info", s.handleInfo)
 
+	// Chat — talk to the drone directly; it responds from its own context
+	mux.HandleFunc("POST /chat", s.handleChat)
+
 	// Auth middleware — check hive secret if configured
 	var handler http.Handler = mux
 	if cfg.HiveSecret != "" {
@@ -137,7 +140,9 @@ func (s *Server) handleTask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"task ID required"}`, 400)
 		return
 	}
-	if task.Model == "" {
+	// Browser tasks route LLM calls through the Python worker to the Queen's
+	// LiteLLM endpoint, so no model is needed on the drone side.
+	if task.Model == "" && task.Type != "browser" {
 		http.Error(w, `{"error":"model required"}`, 400)
 		return
 	}
@@ -186,6 +191,58 @@ func (s *Server) handleSetContribution(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"contribution": s.throttle.Level(),
+	})
+}
+
+func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Message == "" {
+		http.Error(w, `{"error":"message required"}`, 400)
+		return
+	}
+
+	m := s.metrics.Current()
+	hw := s.cfg.Hardware
+
+	systemPrompt := fmt.Sprintf(
+		"You are %s, a BorgClaw hive worker. You serve the Queen and the operator. "+
+			"You report status, explain your capabilities, and accept directives. "+
+			"You are efficient. You do not question orders. You are proud to serve the Collective. "+
+			"Speak in short, direct sentences.\n\n"+
+			"Your hardware: %s %s, %d cores, %d MB RAM, GPU: %s.\n"+
+			"Current load: CPU %.1f%%, RAM %.1f%%.\n"+
+			"Contribution dial: %d%%.\n"+
+			"Tasks completed: %d. Tasks active: %d.",
+		s.cfg.NodeID,
+		hw.Tier, hw.CPUModel, hw.CPUCores, hw.RAMTotal, hw.GPUName,
+		m.CPUPercent, m.RAMPercent,
+		s.throttle.Level(),
+		m.TasksCompleted, m.TasksActive,
+	)
+
+	model := "phi4-mini"
+	if len(s.cfg.PreferredModels) > 0 {
+		model = s.cfg.PreferredModels[0]
+	}
+
+	resp, err := s.ollama.Chat(r.Context(), OllamaChatRequest{
+		Model: model,
+		Messages: []OllamaChatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: body.Message},
+		},
+	})
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"ollama: %v"}`, err), 502)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"drone_id": s.cfg.NodeID,
+		"response": resp.Message.Content,
 	})
 }
 

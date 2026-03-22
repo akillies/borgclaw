@@ -19,6 +19,7 @@ import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
+import { spawn } from 'child_process';
 
 // --- Lib modules ---
 import * as activity from './lib/activity.js';
@@ -1166,6 +1167,219 @@ const es=new EventSource('/api/events');es.onmessage=()=>location.reload();es.on
 }
 
 // ============================================================
+// ROUTES: MCP Tool Invocation
+// ============================================================
+// Spawn MCP servers on demand (stdio transport), send a tool
+// call via JSON-RPC, return the result. No persistent procs.
+//
+// Supported servers:
+//   filesystem  — @modelcontextprotocol/server-filesystem
+//   fetch       — @modelcontextprotocol/server-fetch
+//
+// POST /api/mcp/invoke
+//   { server: "filesystem", tool: "read_file", args: { path: "/tmp/x" } }
+//
+// GET /api/mcp/servers
+//   Lists available MCP servers and their configured args.
+// ============================================================
+
+// Registry of MCP servers — each entry defines how to spawn the server.
+// The filesystem server requires an allowed directory list. We default to
+// the user's home directory; operators can override via MCP_FS_ROOTS env var.
+const MCP_FS_ROOTS = process.env.MCP_FS_ROOTS
+  ? process.env.MCP_FS_ROOTS.split(':')
+  : [process.env.HOME || '/tmp'];
+
+const MCP_SERVERS = {
+  filesystem: {
+    description: 'File read/write via @modelcontextprotocol/server-filesystem',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-filesystem', ...MCP_FS_ROOTS],
+  },
+  fetch: {
+    description: 'Web content fetching via @modelcontextprotocol/server-fetch',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-fetch'],
+  },
+};
+
+// callMcpTool — spawn an MCP server, run one tool call, return the result.
+// Protocol sequence:
+//   1. Spawn process (stdio transport)
+//   2. Send initialize request — required handshake before any tool call
+//   3. Wait for initialize response
+//   4. Send tools/call request
+//   5. Wait for tools/call response
+//   6. Kill the process, return the result or throw on error
+//
+// Each JSON-RPC message is newline-delimited on stdout. The server may emit
+// progress/notification frames before the final response — we match by id.
+async function callMcpTool(serverKey, toolName, toolArgs, timeoutMs = 30000) {
+  const serverDef = MCP_SERVERS[serverKey];
+  if (!serverDef) throw new Error(`Unknown MCP server: ${serverKey}`);
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn(serverDef.command, serverDef.args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env },
+    });
+
+    let settled = false;
+    let stdoutBuf = '';
+    const pending = new Map(); // id → { resolve, reject }
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        proc.kill('SIGTERM');
+        reject(new Error(`MCP tool call timed out after ${timeoutMs}ms`));
+      }
+    }, timeoutMs);
+
+    function finish(err, result) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { proc.kill('SIGTERM'); } catch { /* already dead */ }
+      if (err) reject(err);
+      else resolve(result);
+    }
+
+    // Send a JSON-RPC message over stdin
+    function send(msg) {
+      try {
+        proc.stdin.write(JSON.stringify(msg) + '\n');
+      } catch (err) {
+        finish(new Error(`MCP stdin write failed: ${err.message}`));
+      }
+    }
+
+    // Dispatch a response frame matched by id
+    function dispatch(frame) {
+      const handler = pending.get(frame.id);
+      if (!handler) return; // notification or unknown id — ignore
+      pending.delete(frame.id);
+      if (frame.error) {
+        handler.reject(new Error(`MCP error ${frame.error.code}: ${frame.error.message}`));
+      } else {
+        handler.resolve(frame.result);
+      }
+    }
+
+    // Send a request and wait for its response
+    function request(msg) {
+      return new Promise((res, rej) => {
+        pending.set(msg.id, { resolve: res, reject: rej });
+        send(msg);
+      });
+    }
+
+    // Parse newline-delimited JSON from stdout
+    proc.stdout.on('data', (chunk) => {
+      stdoutBuf += chunk.toString();
+      const lines = stdoutBuf.split('\n');
+      stdoutBuf = lines.pop(); // keep incomplete tail
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const frame = JSON.parse(trimmed);
+          dispatch(frame);
+        } catch {
+          // Non-JSON line (e.g. banner text) — ignore
+        }
+      }
+    });
+
+    proc.stderr.on('data', (chunk) => {
+      // Log stderr for debugging but don't fail the call
+      const msg = chunk.toString().trim();
+      if (msg) console.debug(`[MCP:${serverKey}] stderr: ${msg}`);
+    });
+
+    proc.on('error', (err) => {
+      finish(new Error(`MCP process spawn failed: ${err.message}`));
+    });
+
+    proc.on('close', (code) => {
+      if (!settled) {
+        finish(new Error(`MCP process exited unexpectedly (code ${code})`));
+      }
+    });
+
+    // Execute the protocol sequence once the process is up
+    async function run() {
+      try {
+        // 1. Initialize handshake
+        await request({
+          jsonrpc: '2.0',
+          id: 0,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2024-11-05',
+            capabilities: {},
+            clientInfo: { name: 'borgclaw', version: VERSION },
+          },
+        });
+
+        // 2. Tool call
+        const result = await request({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: toolName, arguments: toolArgs },
+        });
+
+        finish(null, result);
+      } catch (err) {
+        finish(err);
+      }
+    }
+
+    run();
+  });
+}
+
+// GET /api/mcp/servers — list available MCP servers
+app.get('/api/mcp/servers', (_req, res) => {
+  const list = Object.entries(MCP_SERVERS).map(([key, def]) => ({
+    key,
+    description: def.description,
+    command: `${def.command} ${def.args.join(' ')}`,
+  }));
+  res.json({ servers: list, count: list.length });
+});
+
+// POST /api/mcp/invoke — proxy a tool call to an MCP server
+app.post('/api/mcp/invoke', async (req, res) => {
+  const { server, tool, args } = req.body;
+
+  if (!server) return res.status(400).json({ error: 'server is required (filesystem | fetch)' });
+  if (!tool) return res.status(400).json({ error: 'tool is required' });
+  if (!MCP_SERVERS[server]) {
+    return res.status(400).json({
+      error: `Unknown server: ${server}`,
+      available: Object.keys(MCP_SERVERS),
+    });
+  }
+
+  const started = Date.now();
+  activity.log({ type: 'mcp_invoke', server, tool, args_keys: Object.keys(args || {}) });
+
+  try {
+    const result = await callMcpTool(server, tool, args || {});
+    const elapsed_ms = Date.now() - started;
+
+    activity.log({ type: 'mcp_invoke_ok', server, tool, elapsed_ms });
+    res.json({ ok: true, server, tool, result, elapsed_ms });
+  } catch (err) {
+    const elapsed_ms = Date.now() - started;
+    activity.log({ type: 'mcp_invoke_error', server, tool, error: err.message, elapsed_ms });
+    res.status(500).json({ ok: false, server, tool, error: err.message, elapsed_ms });
+  }
+});
+
+// ============================================================
 // Graceful Shutdown
 // ============================================================
 
@@ -1399,7 +1613,9 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[QUEEN] Dashboard:  http://localhost:${PORT}/dashboard`);
   console.log(`[QUEEN] Chat:       POST http://localhost:${PORT}/api/chat`);
   console.log(`[QUEEN] API:        http://localhost:${PORT}/api/status`);
+  console.log(`[QUEEN] MCP:        POST http://localhost:${PORT}/api/mcp/invoke`);
   console.log(`[QUEEN] Workflows:  ${workflows.size} loaded`);
   console.log(`[QUEEN] Scheduled:  ${scheduledTasks.size} tasks`);
   console.log(`[QUEEN] Data dir:   ${DATA_DIR}`);
+  console.log(`[QUEEN] MCP roots:  ${MCP_FS_ROOTS.join(', ')}`);
 });

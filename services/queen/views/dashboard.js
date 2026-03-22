@@ -734,6 +734,36 @@ input[type="range"].dial:disabled {
   letter-spacing: 1px;
 }
 .snd-btn.active { color: var(--green); }
+
+/* ── QUEEN STATUS PANEL ───────────────────────────────── */
+.queen-stats {
+  padding: 0.75rem 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 0.3rem 2.5rem;
+  align-items: center;
+  justify-content: start;
+  font-size: 12px;
+}
+.queen-stat-row { display: contents; }
+.queen-stat-label { color: var(--grey); letter-spacing: 1px; font-size: 11px; white-space: nowrap; }
+.queen-stat-value { color: var(--green); font-weight: 700; white-space: nowrap; }
+.queen-stat-value.alert { color: var(--amber); }
+.queen-online-line {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.3rem;
+  font-size: 12px;
+}
+.queen-online-dot { color: var(--green); font-size: 14px; }
+.queen-online-label { color: var(--green); font-weight: 700; letter-spacing: 2px; }
+.queen-online-version { color: var(--grey); letter-spacing: 1px; }
+.queen-online-uptime { color: var(--cyan); letter-spacing: 1px; }
+.queen-secret { color: var(--muted); font-size: 11px; letter-spacing: 0.5px; font-family: var(--font); }
 </style>
 </head>
 <body>
@@ -782,6 +812,33 @@ input[type="range"].dial:disabled {
     </div>
   </div>
   <span class="box-bottom">╚══════════════════════════════════════════════════════════════════════════════════════════╝</span>
+
+  <!-- ═══ QUEEN ═════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">QUEEN</span>
+      <span class="section-badge">HIVE COORDINATOR · THIS NODE</span>
+    </div>
+    <div class="section-body">
+      <div class="queen-stats">
+        <div class="queen-online-line">
+          <span class="queen-online-dot">●</span>
+          <span class="queen-online-label">ONLINE</span>
+          <span class="queen-online-version">v${escHtml(version)}</span>
+          <span class="queen-online-uptime">UP: ${escHtml(uptime)}</span>
+          <span class="queen-secret">SECRET: ${escHtml((hiveSecret || '').slice(0, 8))}${hiveSecret ? '...' : '(not set)'}</span>
+        </div>
+        <span class="queen-stat-label">WORKFLOWS</span>
+        <span class="queen-stat-value">${workflowsLoaded} loaded</span>
+        <span class="queen-stat-label">RUNNING</span>
+        <span class="queen-stat-value ${runningCount > 0 ? 'alert' : ''}">${runningCount} active</span>
+        <span class="queen-stat-label">SCHEDULED</span>
+        <span class="queen-stat-value">${(data.scheduledTasks || data.scheduled_tasks || []).length || '—'} tasks</span>
+        <span class="queen-stat-label">APPROVALS</span>
+        <span class="queen-stat-value ${pendingApprovals > 0 ? 'alert' : ''}">${pendingApprovals} pending</span>
+      </div>
+    </div>
+  </div>
 
   <!-- ═══ NODES ══════════════════════════════════════════ -->
   <div class="section">
@@ -1563,11 +1620,11 @@ input[type="range"].dial:disabled {
         var body = document.getElementById('modal-body');
         if (body) {
           if (data.models && data.models.length > 0) {
-            body.textContent = 'SOURCE: ' + data.source + '\\n\\n' + data.models.map(function (m) {
+            body.textContent = 'SOURCE: ' + data.source + '\\\\n\\\\n' + data.models.map(function (m) {
               return '  ' + (m.name || m) + (m.size ? ' (' + Math.round(m.size / 1e9 * 10) / 10 + 'GB)' : '');
-            }).join('\\n');
+            }).join('\\\\n');
           } else {
-            body.textContent = 'No models loaded.\\n\\nSource: ' + (data.source || 'none') + '\\nError: ' + (data.error || 'Ollama not running');
+            body.textContent = 'No models loaded.\\\\n\\\\nSource: ' + (data.source || 'none') + '\\\\nError: ' + (data.error || 'Ollama not running');
           }
         }
         var overlay = document.getElementById('modal-overlay');
@@ -1961,7 +2018,7 @@ input[type="range"].dial:disabled {
     if(a==='reject')fetch('/api/approvals/'+id+'/reject',{method:'POST',headers:hdr}).then(function(){btn.closest('tr').style.opacity='0.3';btn.closest('tr').querySelector('.appr-type').textContent='REJECTED'});
     if(a==='view')fetch('/api/approvals/'+id,{headers:hdr}).then(function(r){return r.json()}).then(function(d){alert(JSON.stringify(d,null,2))});
     if(a==='pull'){btn.textContent='PULLING...';fetch('/api/models/pull',{method:'POST',headers:hdr,body:JSON.stringify({model:md,node_id:nd})}).then(function(){btn.textContent='DONE'}).catch(function(){btn.textContent='FAILED'})}
-    if(a==='modelswap')fetch('/api/config/models'+(pr?'?profile='+pr:''),{headers:hdr}).then(function(r){return r.json()}).then(function(d){alert('Available models:\\n'+JSON.stringify(d.models||d,null,2))});
+    if(a==='modelswap')fetch('/api/config/models'+(pr?'?profile='+pr:''),{headers:hdr}).then(function(r){return r.json()}).then(function(d){alert('Available models:\\\\n'+JSON.stringify(d.models||d,null,2))});
   });
 
   window.sendChat=function(){

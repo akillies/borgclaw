@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -14,12 +17,23 @@ import (
 
 // Task represents a unit of work received from Queen.
 type Task struct {
-	ID       string         `json:"id"`
-	Type     string         `json:"type"` // "chat", "generate", "embed"
-	Model    string         `json:"model"`
+	ID       string          `json:"id"`
+	Type     string          `json:"type"` // "chat", "generate", "embed", "browser"
+	Model    string          `json:"model"`
 	Payload  json.RawMessage `json:"payload"`
-	Priority int            `json:"priority"` // 0=P0 (revenue), 3=P3 (research)
-	Callback string         `json:"callback"` // URL to POST results back to
+	Priority int             `json:"priority"` // 0=P0 (revenue), 3=P3 (research)
+	Callback string          `json:"callback"` // URL to POST results back to
+}
+
+// BrowserPayload is the task payload for browser-type tasks.
+// The Python worker accepts this as JSON on stdin.
+type BrowserPayload struct {
+	Goal       string `json:"goal"`
+	QueenURL   string `json:"queen_url"`
+	HiveSecret string `json:"hive_secret,omitempty"`
+	MaxSteps   int    `json:"max_steps,omitempty"`
+	Timeout    int    `json:"timeout,omitempty"`
+	Model      string `json:"model,omitempty"`
 }
 
 // TaskResult is returned to Queen after task completion.
@@ -31,7 +45,7 @@ type TaskResult struct {
 	Error     string        `json:"error,omitempty"`
 	Model     string        `json:"model"`
 	Tokens    int           `json:"tokens"`
-	TokPerSec float64      `json:"tok_per_sec"`
+	TokPerSec float64       `json:"tok_per_sec"`
 	Duration  time.Duration `json:"duration_ms"`
 }
 
@@ -91,9 +105,9 @@ func (tw *TaskWorker) Run(ctx context.Context) {
 			log.Println("[worker] shutting down")
 			return
 		case task := <-tw.queue:
-			// Acquire a throttle slot — blocks if at capacity
+			// Acquire a throttle slot -- blocks if at capacity
 			if !tw.throttle.Acquire() {
-				log.Printf("[worker] task %s rejected — contribution dial at 0%%", task.ID)
+				log.Printf("[worker] task %s rejected -- contribution dial at 0%%", task.ID)
 				tw.reportResult(ctx, task.Callback, TaskResult{
 					TaskID: task.ID,
 					NodeID: tw.nodeID,
@@ -144,6 +158,8 @@ func (tw *TaskWorker) execute(ctx context.Context, task Task) {
 		result = tw.executeChat(ctx, task, result)
 	case "generate":
 		result = tw.executeGenerate(ctx, task, result)
+	case "browser":
+		result = tw.executeBrowser(ctx, task, result)
 	default:
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("unknown task type: %s", task.Type)
@@ -231,6 +247,105 @@ func (tw *TaskWorker) executeGenerate(ctx context.Context, task Task, result Tas
 		result.TokPerSec = float64(resp.EvalCount) / (float64(resp.EvalDur) / 1e9)
 	}
 	return result
+}
+
+// executeBrowser spawns the Python ghost worker as a subprocess and pipes
+// the task payload as JSON to its stdin. All LLM calls go to the Queen's
+// LiteLLM endpoint -- no local inference required.
+func (tw *TaskWorker) executeBrowser(ctx context.Context, task Task, result TaskResult) TaskResult {
+	var payload BrowserPayload
+	if err := json.Unmarshal(task.Payload, &payload); err != nil {
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("invalid browser payload: %v", err)
+		return result
+	}
+
+	if payload.Goal == "" {
+		result.Status = "failed"
+		result.Error = "browser task requires 'goal' in payload"
+		return result
+	}
+
+	workerScript := resolveWorkerScript()
+
+	taskJSON, err := json.Marshal(payload)
+	if err != nil {
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("failed to serialize browser payload: %v", err)
+		return result
+	}
+
+	// Use payload.Timeout if set, else default to 5 minutes.
+	timeout := 300 * time.Second
+	if payload.Timeout > 0 {
+		timeout = time.Duration(payload.Timeout) * time.Second
+	}
+	cmdCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(cmdCtx, "python3", workerScript)
+	cmd.Stdin = bytes.NewReader(taskJSON)
+
+	log.Printf("[worker] browser task %s: spawning python worker (goal=%q)", task.ID, truncate(payload.Goal, 60))
+
+	out, err := cmd.Output()
+	if err != nil {
+		var stderr string
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			stderr = string(exitErr.Stderr)
+		}
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("python worker failed: %v\n%s", err, stderr)
+		return result
+	}
+
+	// Parse the JSON line written by worker.py to stdout.
+	var workerResult struct {
+		Status    string  `json:"status"`
+		Result    *string `json:"result"`
+		StepsUsed int     `json:"steps_used"`
+		Error     *string `json:"error"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(out), &workerResult); err != nil {
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("failed to parse worker output: %v\nraw: %s", err, string(out))
+		return result
+	}
+
+	result.Status = workerResult.Status
+	if workerResult.Result != nil {
+		result.Output = *workerResult.Result
+	}
+	if workerResult.Error != nil && *workerResult.Error != "" {
+		result.Error = *workerResult.Error
+	}
+
+	log.Printf("[worker] browser task %s: %s (%d steps)", task.ID, result.Status, workerResult.StepsUsed)
+	return result
+}
+
+// resolveWorkerScript finds worker.py relative to the drone binary.
+// Priority: BORGCLAW_BROWSER_WORKER env var > sibling scripts/ dir > cwd fallback.
+func resolveWorkerScript() string {
+	if env := os.Getenv("BORGCLAW_BROWSER_WORKER"); env != "" {
+		return env
+	}
+	exe, err := os.Executable()
+	if err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), "..", "scripts", "browser-worker", "worker.py")
+		if _, statErr := os.Stat(candidate); statErr == nil {
+			return candidate
+		}
+	}
+	return "scripts/browser-worker/worker.py"
+}
+
+// truncate clips s to max chars for log lines.
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }
 
 // reportResult POSTs a task result back to Queen's callback URL.
