@@ -37,6 +37,7 @@ Queen boots. Drones join. Telemetry flows. The hive works.
 - Knowledge-specialized drones (Medic, Engineer, Scholar)
 - Distributed inference across multiple machines
 - Drone learning + memetic evolution
+- Agent sandboxing (NemoClaw-inspired filesystem + network isolation)
 - DeerFlow integration for sandboxed execution
 
 ## Quick Start
