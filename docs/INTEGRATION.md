@@ -158,6 +158,89 @@ You can also use the `borgclaw-private/` directory to override default configs. 
 
 ---
 
+## NAS Shared Knowledge Store
+
+If you have a NAS on your LAN (Synology, TrueNAS, a Raspberry Pi with an external drive — anything), you can make its knowledge packs available to every drone in the hive simultaneously. No per-machine copies, no sync scripts. One mount point. All machines read the same files.
+
+### How it works
+
+The NAS is just a directory. BorgClaw does not care whether it is a local drive, an NFS mount, or an SMB share. If the path is readable, it is used. If it is not mounted, nothing breaks — the drone falls back to its local knowledge directory silently.
+
+### Setup
+
+**1. Mount the NAS on every machine in the hive.**
+
+NFS (Linux):
+
+```bash
+sudo mount -t nfs 192.168.1.10:/volume1/borgclaw /mnt/borgclaw-nas
+```
+
+SMB/CIFS (Linux):
+
+```bash
+sudo mount -t cifs //192.168.1.10/borgclaw /mnt/borgclaw-nas -o username=...,password=...
+```
+
+macOS (SMB via Finder or):
+
+```bash
+open smb://192.168.1.10/borgclaw
+# or: mount_smbfs //user@192.168.1.10/borgclaw /mnt/borgclaw-nas
+```
+
+For persistence across reboots, add the mount to `/etc/fstab` (Linux) or use `auto_master` / Login Items (macOS).
+
+**2. Set `NAS_MOUNT_PATH` in your `.env`:**
+
+```bash
+NAS_MOUNT_PATH=/mnt/borgclaw-nas
+```
+
+**3. Place `.zim` knowledge packs on the NAS:**
+
+```
+/mnt/borgclaw-nas/
+  wikipedia-mini.zim
+  wiktionary.zim
+  your-custom-pack.zim
+```
+
+**4. Restart Queen and any drones.** They will pick up the NAS path on startup, add it to the sandbox allowed roots, and include NAS-sourced ZIM domains in their heartbeat.
+
+### Verifying the connection
+
+Queen exposes two endpoints for checking NAS state:
+
+```
+GET /api/nas/status
+```
+
+Returns:
+
+```json
+{
+  "configured": true,
+  "accessible": true,
+  "path": "/mnt/borgclaw-nas",
+  "message": "mounted"
+}
+```
+
+If the mount drops, `accessible` becomes `false` and `message` explains why (`not mounted`, `inaccessible: EIO`, etc.). The Queen dashboard security panel shows NAS mount status live — it checks `/api/nas/status` on page load.
+
+```
+GET /api/nas/browse?path=subdir
+```
+
+Lists files within the NAS directory. The `path` parameter is relative to `NAS_MOUNT_PATH` and is sandbox-checked (no path traversal outside the NAS root).
+
+### Graceful degradation
+
+The NAS being unavailable — mount dropped, NAS rebooting, network interruption — never crashes Queen or any drone. Drones report only their local ZIM domains in heartbeats. Queen routes knowledge queries to drones that have the required domain regardless of whether it came from the NAS or a local copy.
+
+---
+
 ## What You Do Not Need to Change
 
 The middleware stack (NATS, ntfy, LiteLLM), the Queen service, the bootstrap script, and the node registry — none of these care about your knowledge base. They are infrastructure. The only layer that touches your files is the agent layer, and that layer is fully configurable through `instructions.md` files and workflow YAMLs.

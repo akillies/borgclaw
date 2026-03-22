@@ -176,8 +176,8 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		int(uptime.Minutes())%60,
 	)
 
-	// Knowledge domains — from installed ZIM packs
-	domains := ScanKnowledgeDomains(s.cfg.KnowledgeDir)
+	// Knowledge domains — from installed ZIM packs (local + NAS if configured)
+	domains := ScanKnowledgeDomainsAll(s.cfg.KnowledgeDir, s.cfg.NASPath)
 	knowStr := "none"
 	if len(domains) > 0 {
 		knowStr = strings.Join(domains, " ")
@@ -416,7 +416,7 @@ func (s *Server) handleKnowledgeSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domains := ScanKnowledgeDomains(s.cfg.KnowledgeDir)
+	domains := ScanKnowledgeDomainsAll(s.cfg.KnowledgeDir, s.cfg.NASPath)
 
 	w.Header().Set("Content-Type", "application/json")
 
@@ -430,7 +430,7 @@ func (s *Server) handleKnowledgeSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results, err := SearchKnowledge(s.cfg.KnowledgeDir, query, domain)
+	results, err := SearchKnowledgeAll(s.cfg.KnowledgeDir, s.cfg.NASPath, query, domain)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"knowledge search failed: %v"}`, err), 500)
 		return

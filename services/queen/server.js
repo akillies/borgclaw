@@ -56,9 +56,19 @@ approvals.initApprovals(DATA_DIR, { queenBaseUrl: `http://localhost:${PORT}` });
 // SANDBOX_ALLOWED_DOMAINS env vars (colon-separated). Defaults cover the
 // knowledge base, data dir, and /tmp/borgclaw/. See docs/SECURITY.md.
 const KNOWLEDGE_BASE_PATH = process.env.KNOWLEDGE_BASE_PATH || null;
+
+// NAS_MOUNT_PATH — optional shared network knowledge store. Set this to the
+// local mount point of a NAS share (NFS/SMB/CIFS). When set, the NAS is
+// added to the sandbox allowed roots so agents can read shared knowledge packs,
+// and the /api/nas/* endpoints become functional. The NAS being unmounted or
+// unreachable degrades gracefully — nothing crashes, status endpoints just
+// report "not accessible".
+const NAS_MOUNT_PATH = process.env.NAS_MOUNT_PATH || null;
+
 sandbox.initSandbox({
   roots: [
     ...(KNOWLEDGE_BASE_PATH ? [KNOWLEDGE_BASE_PATH] : []),
+    ...(NAS_MOUNT_PATH ? [NAS_MOUNT_PATH] : []),
     path.join(BORGCLAW_HOME, 'data'),
     '/tmp/borgclaw',
   ],
@@ -1502,6 +1512,87 @@ app.post('/api/search', async (req, res) => {
 });
 
 // ============================================================
+// ROUTES: NAS Shared Knowledge Store
+// ============================================================
+// The NAS is just a directory on the filesystem — NFS/SMB/CIFS
+// mounted at NAS_MOUNT_PATH. All machines on the LAN mount the
+// SAME path and share one knowledge layer automatically.
+//
+// GET /api/nas/status
+//   Returns whether the NAS mount is configured and accessible.
+//   Uses stat() so it works even on empty mounts. Never throws.
+//
+// GET /api/nas/browse?path=...
+//   Lists files within the NAS directory (sandbox enforced).
+//   Optional ?path= is relative to NAS_MOUNT_PATH.
+//   Returns a file listing suitable for the dashboard.
+// ============================================================
+
+app.get('/api/nas/status', async (_req, res) => {
+  if (!NAS_MOUNT_PATH) {
+    return res.json({
+      configured: false,
+      accessible: false,
+      path: null,
+      message: 'NAS_MOUNT_PATH not set',
+    });
+  }
+
+  try {
+    const stat = await fs.stat(NAS_MOUNT_PATH);
+    res.json({
+      configured: true,
+      accessible: stat.isDirectory(),
+      path: NAS_MOUNT_PATH,
+      message: stat.isDirectory() ? 'mounted' : 'path exists but is not a directory',
+    });
+  } catch (err) {
+    // Mount dropped, share offline, path doesn't exist — all graceful.
+    res.json({
+      configured: true,
+      accessible: false,
+      path: NAS_MOUNT_PATH,
+      message: err.code === 'ENOENT' ? 'not mounted' : `inaccessible: ${err.code}`,
+    });
+  }
+});
+
+app.get('/api/nas/browse', async (req, res) => {
+  if (!NAS_MOUNT_PATH) {
+    return res.status(404).json({ ok: false, error: 'NAS_MOUNT_PATH not configured' });
+  }
+
+  // Resolve the requested sub-path within the NAS root.
+  // path.join normalises traversal — path.resolve then sandbox-checks.
+  const subPath = req.query.path ? String(req.query.path) : '';
+  const targetPath = path.join(NAS_MOUNT_PATH, subPath);
+
+  // Sandbox: the resolved path must still be inside NAS_MOUNT_PATH.
+  const resolvedNasRoot = path.resolve(NAS_MOUNT_PATH);
+  const resolvedTarget = path.resolve(targetPath);
+  const prefix = resolvedNasRoot.endsWith(path.sep) ? resolvedNasRoot : resolvedNasRoot + path.sep;
+  if (resolvedTarget !== resolvedNasRoot && !resolvedTarget.startsWith(prefix)) {
+    return res.status(403).json({ ok: false, error: 'Path outside NAS root' });
+  }
+
+  try {
+    const entries = await fs.readdir(resolvedTarget, { withFileTypes: true });
+    const files = entries.map(e => ({
+      name: e.name,
+      type: e.isDirectory() ? 'directory' : 'file',
+      path: path.join(subPath || '', e.name),
+    }));
+    res.json({ ok: true, root: NAS_MOUNT_PATH, path: subPath || '/', entries: files });
+  } catch (err) {
+    // Mount dropped mid-request — return a clean error, don't crash.
+    if (err.code === 'ENOENT' || err.code === 'ENOTDIR' || err.code === 'EIO') {
+      return res.status(503).json({ ok: false, error: `NAS not accessible: ${err.code}`, path: subPath || '/' });
+    }
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ============================================================
 // ROUTES: Activity Feed
 // ============================================================
 
@@ -1945,6 +2036,10 @@ function buildDashboardData() {
     // Sandbox config for the security panel
     sandboxRoots: sandbox.getRoots(),
     sandboxDomains: sandbox.getDomains(),
+    // NAS mount status — checked asynchronously in the dashboard via /api/nas/status.
+    // We pass the configured path (or null) so the panel can show "not configured"
+    // without an extra round-trip when NAS_MOUNT_PATH is absent.
+    nasMountPath: NAS_MOUNT_PATH,
   };
 }
 
@@ -2021,9 +2116,14 @@ const es=new EventSource('/api/events');es.onmessage=()=>location.reload();es.on
 // Registry of MCP servers — each entry defines how to spawn the server.
 // The filesystem server requires an allowed directory list. We default to
 // the user's home directory; operators can override via MCP_FS_ROOTS env var.
+// NAS_MOUNT_PATH is automatically appended when configured so the MCP
+// filesystem server can reach shared NAS knowledge packs without extra config.
 const MCP_FS_ROOTS = process.env.MCP_FS_ROOTS
   ? process.env.MCP_FS_ROOTS.split(':')
-  : [process.env.HOME || '/tmp'];
+  : [
+      ...(KNOWLEDGE_BASE_PATH ? [KNOWLEDGE_BASE_PATH] : [process.env.HOME || '/tmp']),
+      ...(NAS_MOUNT_PATH ? [NAS_MOUNT_PATH] : []),
+    ];
 
 const MCP_SERVERS = {
   filesystem: {

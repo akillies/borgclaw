@@ -33,6 +33,7 @@ export default function renderDashboard(data) {
     clusters: clusterList = [],
     sandboxRoots = [],
     sandboxDomains = [],
+    nasMountPath = null,
   } = data;
   const port = data.port || process.env.QUEEN_PORT || '9090';
   const queenHost = data.queenHost || 'localhost';
@@ -1181,6 +1182,7 @@ input[type="range"].dial:disabled {
         <tr><td>Dashboard</td><td style="color:var(--green)">● AUTHENTICATED</td><td style="color:var(--muted)">All API calls use Bearer token</td></tr>
         <tr><td>Sandbox roots</td><td style="color:var(--cyan)">● ${sandboxRoots.length > 0 ? 'ACTIVE' : 'NONE'}</td><td style="color:var(--muted);font-size:10px">${sandboxRoots.length > 0 ? sandboxRoots.map(r => escHtml(r)).join(' · ') : 'no filesystem restrictions'}</td></tr>
         <tr><td>Allowed domains</td><td style="color:var(--cyan)">● ${sandboxDomains.length > 0 ? 'FILTERED' : 'OPEN'}</td><td style="color:var(--muted);font-size:10px">${sandboxDomains.length > 0 ? sandboxDomains.map(d => escHtml(d)).join(' · ') : 'all domains permitted'}</td></tr>
+        <tr><td>NAS knowledge store</td><td id="nas-status-badge" style="color:var(--muted)">● ${nasMountPath ? 'CHECKING...' : 'NOT CONFIGURED'}</td><td id="nas-status-detail" style="color:var(--muted);font-size:10px">${nasMountPath ? escHtml(nasMountPath) : 'set NAS_MOUNT_PATH to enable shared hive knowledge'}</td></tr>
       </table>
       <div style="margin-top:8px">
         <button class="btn btn-reject" onclick="if(confirm('HALT THE HIVE?')){authFetch('/api/hive/halt',{method:'POST'}).then(function(){this.textContent='HALTED'}.bind(this))}">⚠ HALT HIVE</button>
@@ -2321,6 +2323,46 @@ input[type="range"].dial:disabled {
         showModal('╠══ MODEL LEADERBOARD ══╣','<div style="color:var(--red);padding:0.75rem">✗ Scan failed: '+escH(e.message)+'</div>');
       });
   };
+})();
+</script>
+
+<script>
+// ════════════════════════════════════════════════════════
+// NAS STATUS — fetch /api/nas/status once on load and
+// update the security panel row. Non-blocking; if the
+// endpoint fails the row stays in its initial state.
+// ════════════════════════════════════════════════════════
+(function(){
+  'use strict';
+  var badge = document.getElementById('nas-status-badge');
+  var detail = document.getElementById('nas-status-detail');
+  if (!badge || !detail) return; // row not rendered (shouldn't happen)
+
+  var SECRET = (document.cookie.match(/(?:^|; )bc_api_token=([^;]*)/) || [])[1];
+  if (SECRET) SECRET = decodeURIComponent(SECRET);
+
+  fetch('/api/nas/status', {
+    headers: SECRET ? { 'Authorization': 'Bearer ' + SECRET } : {},
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data.configured) {
+      badge.style.color = 'var(--muted)';
+      badge.textContent = '● NOT CONFIGURED';
+      detail.textContent = 'set NAS_MOUNT_PATH to enable shared hive knowledge';
+    } else if (data.accessible) {
+      badge.style.color = 'var(--green)';
+      badge.textContent = '● MOUNTED';
+      detail.textContent = data.path || '';
+    } else {
+      badge.style.color = 'var(--amber)';
+      badge.textContent = '● NOT MOUNTED';
+      detail.textContent = (data.path || '') + (data.message ? '  (' + data.message + ')' : '');
+    }
+  })
+  .catch(function() {
+    // Endpoint unreachable — leave row as-is (server-rendered state)
+  });
 })();
 </script>
 </body>

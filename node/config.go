@@ -42,6 +42,13 @@ type Config struct {
 	// KnowledgeDir is where the drone looks for .zim knowledge pack files.
 	// Defaults to ~/.config/borgclaw/knowledge/
 	KnowledgeDir string `json:"knowledge_dir,omitempty"`
+
+	// NASPath is an optional network-attached storage mount point shared across
+	// all hive nodes. When set, the drone adds this path to its knowledge search
+	// alongside KnowledgeDir. All drones mounting the same NAS path see the same
+	// ZIM packs — no per-drone copies needed.
+	// Empty means no NAS configured (default).
+	NASPath string `json:"nas_path,omitempty"`
 }
 
 // HardwareProfile describes the node's compute capabilities.
@@ -156,6 +163,11 @@ func LoadConfig(path string) (Config, error) {
 	// Apply knowledge directory default if not set in config file
 	if cfg.KnowledgeDir == "" {
 		cfg.KnowledgeDir = filepath.Join(os.Getenv("HOME"), ".config", "borgclaw", "knowledge")
+	}
+
+	// NAS path can be set via env var (overrides config file value)
+	if envNAS := os.Getenv("NAS_MOUNT_PATH"); envNAS != "" {
+		cfg.NASPath = envNAS
 	}
 
 	return cfg, nil

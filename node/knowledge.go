@@ -38,7 +38,35 @@ func ScanKnowledgeDomains(dir string) []string {
 	return domains
 }
 
-// SearchKnowledge performs a stub search across installed knowledge packs.
+// ScanKnowledgeDomainsAll scans both the local knowledge directory and an
+// optional NAS mount path, returning a deduplicated list of domain names.
+// If nasPath is empty or inaccessible, only the local directory is scanned —
+// NAS being unavailable never prevents the drone from starting.
+func ScanKnowledgeDomainsAll(localDir, nasPath string) []string {
+	seen := make(map[string]struct{})
+	domains := []string{}
+
+	for _, domain := range ScanKnowledgeDomains(localDir) {
+		if _, ok := seen[domain]; !ok {
+			seen[domain] = struct{}{}
+			domains = append(domains, domain)
+		}
+	}
+
+	if nasPath != "" {
+		for _, domain := range ScanKnowledgeDomains(nasPath) {
+			if _, ok := seen[domain]; !ok {
+				seen[domain] = struct{}{}
+				domains = append(domains, domain)
+			}
+		}
+	}
+
+	return domains
+}
+
+// SearchKnowledge performs a stub search across installed knowledge packs in a
+// single directory.
 //
 // Full ZIM content parsing is a future enhancement. For now this returns
 // empty results so the endpoint is wired end-to-end and callers can rely
@@ -82,4 +110,28 @@ func SearchKnowledge(dir, query, domain string) ([]KnowledgeResult, error) {
 	}
 
 	return results, nil
+}
+
+// SearchKnowledgeAll searches both the local knowledge directory and an
+// optional NAS mount path, returning merged results. Packs found on the NAS
+// are appended after local results. If nasPath is empty or the mount is not
+// accessible, only local results are returned — the NAS being offline never
+// causes an error, only a reduced result set.
+func SearchKnowledgeAll(localDir, nasPath, query, domain string) ([]KnowledgeResult, error) {
+	local, err := SearchKnowledge(localDir, query, domain)
+	if err != nil {
+		return nil, err
+	}
+
+	if nasPath == "" {
+		return local, nil
+	}
+
+	nas, err := SearchKnowledge(nasPath, query, domain)
+	if err != nil {
+		// NAS search failed (e.g. mount dropped) — return local results only.
+		return local, nil
+	}
+
+	return append(local, nas...), nil
 }

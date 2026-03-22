@@ -69,7 +69,8 @@ type HeartbeatReporter struct {
 	hardware     HardwareProfile
 	worker       *TaskWorker
 	learning     *LearningStore
-	knowledgeDir string // path to scan for .zim files
+	knowledgeDir string // path to scan for .zim files (local)
+	nasPath      string // optional NAS mount to also scan for .zim files
 
 	// RPC worker fields — zero values mean "task" mode (normal operation)
 	mode    string // "task" or "rpc-worker"
@@ -92,6 +93,7 @@ func NewHeartbeatReporter(cfg Config, metrics *MetricsCollector, ollama *OllamaC
 		hardware:      cfg.Hardware,
 		worker:        worker,
 		knowledgeDir:  cfg.KnowledgeDir,
+		nasPath:       cfg.NASPath,
 		httpClient:    &http.Client{Timeout: 10 * time.Second},
 	}
 }
@@ -179,8 +181,10 @@ func (hr *HeartbeatReporter) send(ctx context.Context) error {
 		}
 	}
 
-	// Scan knowledge packs — lightweight directory read, safe to do every heartbeat
-	knowledgeDomains := ScanKnowledgeDomains(hr.knowledgeDir)
+	// Scan knowledge packs — lightweight directory read, safe to do every heartbeat.
+	// ScanKnowledgeDomainsAll includes the NAS path when configured; if the mount
+	// is unavailable it degrades silently to local-only.
+	knowledgeDomains := ScanKnowledgeDomainsAll(hr.knowledgeDir, hr.nasPath)
 
 	// Determine status
 	status := "online"
