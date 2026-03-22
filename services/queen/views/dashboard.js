@@ -28,8 +28,8 @@ export default function renderDashboard(data) {
     runningWorkflows: runningCount = 0,
     hiveSecret = '',
   } = data;
-  const port = process.env.QUEEN_PORT || '9090';
-  const queenHost = (() => { try { return require('os').networkInterfaces().en0?.find(i => i.family === 'IPv4')?.address || 'localhost'; } catch { return 'localhost'; } })();
+  const port = data.port || process.env.QUEEN_PORT || '9090';
+  const queenHost = data.queenHost || 'localhost';
 
   // ── Node rows ──────────────────────────────────────────────
   function statusDot(status) {
@@ -257,8 +257,8 @@ body::after {
     0deg,
     transparent,
     transparent 2px,
-    rgba(0, 0, 0, 0.12) 2px,
-    rgba(0, 0, 0, 0.12) 4px
+    rgba(0, 0, 0, 0.04) 2px,
+    rgba(0, 0, 0, 0.04) 4px
   );
 }
 

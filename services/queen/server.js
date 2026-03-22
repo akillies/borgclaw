@@ -13,6 +13,7 @@
 // ============================================================
 
 import express from 'express';
+import os from 'os';
 import fs from 'fs/promises';
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
@@ -1094,6 +1095,8 @@ function buildDashboardData() {
     workflowsLoaded: workflows.size,
     runningWorkflows: runningWorkflows.size,
     hiveSecret: HIVE_SECRET,
+    port: PORT,
+    queenHost: (() => { try { const nets = os.networkInterfaces(); return (nets.en0 || nets.eth0 || []).find(i => i.family === 'IPv4')?.address || 'localhost'; } catch { return 'localhost'; } })(),
     workflows: [...workflows.entries()].map(([name, spec]) => ({
       name,
       description: spec.description || '',
