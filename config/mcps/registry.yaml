@@ -137,6 +137,12 @@ not_connected:
     status: not_connected
     notes: "Plug-in MCP for Home Assistant. Controls lights, locks, thermostats, scenes. Queen tells drones to control your house."
 
+  - id: energy-grid
+    capability: [energy_monitoring, grid_status, battery_status, solar_production, load_shifting]
+    tool: "TBD — Home Assistant Energy integration or direct API"
+    status: not_connected
+    notes: "Flexible grid / Elastic Energy integration. Monitor solar, battery, grid draw. Queen can shift drone workloads to off-peak or solar-surplus hours. Thermodynamic governance meets actual thermodynamics."
+
 # ============================================================
 # CAPABILITY INDEX (what agents query)
 # ============================================================
@@ -162,3 +168,5 @@ capability_index:
   publish_substack: null                 # GAP: not connected
   smart_home_control: null               # GAP: ha-mcp not connected
   device_status: null                    # GAP: ha-mcp not connected
+  energy_monitoring: null                # GAP: grid integration not connected
+  load_shifting: null                    # GAP: shift compute to solar surplus hours
