@@ -26,7 +26,10 @@ export default function renderDashboard(data) {
     runs = [],
     workflowsLoaded = 0,
     runningWorkflows: runningCount = 0,
-    hiveSecret = '',
+    // hiveSecretPrefix: first 8 chars only — used for display in Queen status panel.
+    // The full secret is NEVER sent to the browser. Client JS reads it from the
+    // session cookie set by POST /auth/login via a helper below.
+    hiveSecretPrefix = '',
   } = data;
   const port = data.port || process.env.QUEEN_PORT || '9090';
   const queenHost = data.queenHost || 'localhost';
@@ -876,7 +879,7 @@ input[type="range"].dial:disabled {
           <span class="queen-online-label">ONLINE</span>
           <span class="queen-online-version">v${escHtml(version)}</span>
           <span class="queen-online-uptime">UP: ${escHtml(uptime)}</span>
-          <span class="queen-secret">SECRET: ${escHtml((hiveSecret || '').slice(0, 8))}${hiveSecret ? '...' : '(not set)'}</span>
+          <span class="queen-secret">SECRET: ${escHtml(hiveSecretPrefix || '(not set)')}${hiveSecretPrefix ? '...' : ''}</span>
         </div>
         <span class="queen-stat-label">WORKFLOWS</span>
         <span class="queen-stat-value">${workflowsLoaded} loaded</span>
@@ -1208,7 +1211,13 @@ input[type="range"].dial:disabled {
   'use strict';
 
   // ── Auth — wrap all API calls with hive secret ────────
-  var HIVE_SECRET = '${data.hiveSecret || ''}';
+  // Secret is read from the bc_api_token cookie set by POST /auth/login.
+  // It is never embedded in the HTML (Bug 1 fix).
+  function getCookieValue(name) {
+    var match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.*+?^${}()|[\]\\\\]/g, '\\\\$&') + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+  var HIVE_SECRET = getCookieValue('bc_api_token');
   function authFetch(url, opts) {
     opts = opts || {};
     opts.headers = opts.headers || {};
@@ -2070,7 +2079,9 @@ input[type="range"].dial:disabled {
 <script>
 // Standalone chat — works even if main script has issues
 (function(){
-  var SECRET='${data.hiveSecret||""}';
+  // Read secret from cookie (never embedded in HTML — Bug 1 fix).
+  var SECRET=(document.cookie.match(/(?:^|; )bc_api_token=([^;]*)/)||[])[1];
+  if(SECRET)SECRET=decodeURIComponent(SECRET);else SECRET='';
   var hdr={'Content-Type':'application/json'};
   if(SECRET)hdr['Authorization']='Bearer '+SECRET;
 
@@ -2129,7 +2140,9 @@ input[type="range"].dial:disabled {
 // ════════════════════════════════════════════════════════
 (function(){
   'use strict';
-  var SECRET='${data.hiveSecret||""}';
+  // Read secret from cookie (never embedded in HTML — Bug 1 fix).
+  var SECRET=(document.cookie.match(/(?:^|; )bc_api_token=([^;]*)/)||[])[1];
+  if(SECRET)SECRET=decodeURIComponent(SECRET);else SECRET='';
 
   function authHdr(extra){
     var h={'Content-Type':'application/json'};

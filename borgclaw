@@ -35,7 +35,23 @@ warn() { echo -e "${YELLOW}  ⚠${NC} $*"; }
 err()  { echo -e "${RED}  ✗${NC} $*"; }
 
 queen_running() {
-  [[ -f "$QUEEN_PID_FILE" ]] && kill -0 "$(cat "$QUEEN_PID_FILE")" 2>/dev/null
+  # Primary: check PID file
+  if [[ -f "$QUEEN_PID_FILE" ]] && kill -0 "$(cat "$QUEEN_PID_FILE")" 2>/dev/null; then
+    return 0
+  fi
+  # Fallback: try HTTP health check (covers cases where PID file is stale/missing)
+  if curl -sf --max-time 2 "http://localhost:${QUEEN_PORT}/" >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+# Read the hive secret from hive-identity.json
+get_hive_secret() {
+  local IDENTITY="$BORGCLAW_HOME/data/hive-identity.json"
+  if [[ -f "$IDENTITY" ]]; then
+    python3 -c "import json; print(json.load(open('$IDENTITY'))['secret'])" 2>/dev/null || true
+  fi
 }
 
 # ============================================================
@@ -53,7 +69,9 @@ cmd_start() {
 
   # --- Queen ---
   if queen_running; then
-    ok "Queen already running (PID $(cat "$QUEEN_PID_FILE"))"
+    local _pid
+    _pid=$( [[ -f "$QUEEN_PID_FILE" ]] && cat "$QUEEN_PID_FILE" || echo "unknown" )
+    ok "Queen already running (PID ${_pid})"
   else
     log "Starting Queen service..."
     if [[ ! -d "$QUEEN_DIR/node_modules" ]]; then
@@ -159,7 +177,9 @@ cmd_status() {
 
   # Queen
   if queen_running; then
-    ok "Queen: running (PID $(cat "$QUEEN_PID_FILE"))"
+    local _pid
+    _pid=$( [[ -f "$QUEEN_PID_FILE" ]] && cat "$QUEEN_PID_FILE" || echo "unknown" )
+    ok "Queen: running (PID ${_pid})"
     local status
     status=$(curl -s "http://localhost:${QUEEN_PORT}/" 2>/dev/null)
     if [[ -n "$status" ]]; then
@@ -223,8 +243,10 @@ cmd_nodes() {
     err "Queen not running. Start first: borgclaw start"
     return 1
   fi
-  curl -s "http://localhost:${QUEEN_PORT}/api/nodes" | python3 -m json.tool 2>/dev/null || \
-    curl -s "http://localhost:${QUEEN_PORT}/api/nodes"
+  local SECRET
+  SECRET=$(get_hive_secret)
+  curl -s -H "Authorization: Bearer $SECRET" "http://localhost:${QUEEN_PORT}/api/nodes" | python3 -m json.tool 2>/dev/null || \
+    curl -s -H "Authorization: Bearer $SECRET" "http://localhost:${QUEEN_PORT}/api/nodes"
 }
 
 cmd_logs() {
@@ -295,8 +317,10 @@ cmd_connect() {
 
 cmd_halt() {
   warn "⚠️  HIVE HALT — stopping all nodes and cancelling all work"
+  local SECRET
+  SECRET=$(get_hive_secret)
   local response
-  response=$(curl -s -X POST "http://localhost:${QUEEN_PORT}/api/hive/halt" 2>/dev/null)
+  response=$(curl -s -X POST -H "Authorization: Bearer $SECRET" "http://localhost:${QUEEN_PORT}/api/hive/halt" 2>/dev/null)
   if [ $? -eq 0 ]; then
     ok "Hive halted."
     echo "$response" | python3 -m json.tool 2>/dev/null || echo "$response"
@@ -309,7 +333,9 @@ cmd_halt() {
 
 cmd_resume() {
   echo -e "${CYAN}→${NC} Resuming hive operations..."
-  curl -s -X POST "http://localhost:${QUEEN_PORT}/api/hive/resume" | python3 -m json.tool 2>/dev/null
+  local SECRET
+  SECRET=$(get_hive_secret)
+  curl -s -X POST -H "Authorization: Bearer $SECRET" "http://localhost:${QUEEN_PORT}/api/hive/resume" | python3 -m json.tool 2>/dev/null
   ok "Hive resumed. Nodes will re-register via heartbeat."
 }
 

@@ -20,6 +20,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import { spawn } from 'child_process';
+import crypto from 'crypto';
 
 // --- Lib modules ---
 import * as activity from './lib/activity.js';
@@ -207,8 +208,6 @@ try {
 // Dashboard serves a login page. Drones send it in heartbeat headers.
 // ============================================================
 
-import crypto from 'crypto';
-
 const HIVE_IDENTITY_FILE = path.join(DATA_DIR, 'hive-identity.json');
 let HIVE_SECRET = '';
 
@@ -264,14 +263,52 @@ loadNodes();
 // --- Express App ---
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+
+// ── Cookie helpers (no cookie-parser dep needed) ──────────
+const SESSION_COOKIE = 'bc_session';
+const SESSION_MAXAGE = 8 * 60 * 60; // 8 hours in seconds
+
+function parseCookies(cookieHeader) {
+  const out = {};
+  if (!cookieHeader) return out;
+  for (const part of cookieHeader.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx < 0) continue;
+    const k = part.slice(0, idx).trim();
+    const v = part.slice(idx + 1).trim();
+    out[k] = decodeURIComponent(v);
+  }
+  return out;
+}
+
+function hasValidSession(req) {
+  const cookies = parseCookies(req.headers.cookie);
+  const token = cookies[SESSION_COOKIE];
+  if (!token) return false;
+  const expected = crypto
+    .createHmac('sha256', HIVE_SECRET)
+    .update('borgclaw-session')
+    .digest('hex');
+  return token === expected;
+}
 
 // Auth middleware — check hive secret on API routes
-// Public routes: GET / (dashboard), GET /dashboard, GET /api/hive/info (for drone discovery)
-const PUBLIC_ROUTES = ['/', '/dashboard', '/api/hive/info'];
+// Public routes: GET / (status JSON), GET /api/hive/info (drone discovery),
+//                GET /auth/login, POST /auth/login
+// /dashboard requires a valid session cookie — NOT in PUBLIC_ROUTES.
+const PUBLIC_ROUTES = ['/', '/api/hive/info', '/auth/login'];
 
 app.use((req, res, next) => {
   // Public routes skip auth
   if (PUBLIC_ROUTES.includes(req.path)) return next();
+
+  // Dashboard — cookie-based session gate
+  if (req.path === '/dashboard' || req.path === '/setup') {
+    if (hasValidSession(req)) return next();
+    return res.redirect(`/auth/login?next=${encodeURIComponent(req.path)}`);
+  }
+
   // Static assets skip auth
   if (req.path.startsWith('/views/') || req.path.endsWith('.css') || req.path.endsWith('.js')) return next();
 
@@ -291,6 +328,86 @@ app.use((req, res, next) => {
 
   next();
 });
+
+// ── Login routes ──────────────────────────────────────────
+app.get('/auth/login', (req, res) => {
+  const next = req.query.next || '/dashboard';
+  const failed = req.query.failed === '1';
+  res.type('html').send(renderLoginPage(next, failed));
+});
+
+app.post('/auth/login', (req, res) => {
+  const { secret, next } = req.body;
+  const redirectTo = (next && next.startsWith('/')) ? next : '/dashboard';
+  if (secret === HIVE_SECRET) {
+    // Set both cookies in one header call (array form) so nothing overwrites.
+    // SESSION_COOKIE: HttpOnly HMAC token — gates the /dashboard route.
+    // bc_api_token: JS-readable cookie — dashboard client uses it for Bearer
+    //   headers on API calls. Not HttpOnly by design: the page is already gated
+    //   by the HttpOnly session cookie, so only authenticated users can read it.
+    //   SameSite=Strict prevents CSRF.
+    const sessionToken = crypto
+      .createHmac('sha256', HIVE_SECRET)
+      .update('borgclaw-session')
+      .digest('hex');
+    res.setHeader('Set-Cookie', [
+      `${SESSION_COOKIE}=${encodeURIComponent(sessionToken)}; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MAXAGE}; Path=/`,
+      `bc_api_token=${encodeURIComponent(HIVE_SECRET)}; SameSite=Strict; Max-Age=${SESSION_MAXAGE}; Path=/`,
+    ]);
+    return res.redirect(redirectTo);
+  }
+  return res.redirect(`/auth/login?next=${encodeURIComponent(redirectTo)}&failed=1`);
+});
+
+function renderLoginPage(next, failed) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BORGCLAW // AUTHENTICATE</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--green:#00FF88;--cyan:#00CCFF;--red:#FF4444;--void:#0A0A0A;--panel:#111;--border:#2A2A2A;--grey:#888;--white:#CCC;--font:'JetBrains Mono','IBM Plex Mono','Fira Code','Courier New',monospace}
+html,body{background:var(--void);color:var(--white);font-family:var(--font);font-size:13px;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.box{border:1px solid var(--border);background:var(--panel);padding:2rem 2.5rem;min-width:360px;max-width:480px;width:100%}
+.logo{color:var(--green);font-size:10px;line-height:1.3;white-space:pre;margin-bottom:1.5rem;opacity:.85}
+h1{color:var(--green);font-size:16px;letter-spacing:3px;text-transform:uppercase;margin-bottom:.25rem}
+.sub{color:var(--cyan);font-size:10px;letter-spacing:2px;margin-bottom:1.5rem}
+label{display:block;color:var(--grey);font-size:11px;letter-spacing:1px;margin-bottom:.4rem}
+input[type=password]{width:100%;background:#0a0a0a;border:1px solid var(--border);color:var(--white);font-family:var(--font);font-size:13px;padding:.6rem .8rem;outline:none;letter-spacing:.1em}
+input[type=password]:focus{border-color:var(--green)}
+.error{color:var(--red);font-size:11px;margin-top:.75rem;letter-spacing:1px;display:${failed ? 'block' : 'none'}}
+button{margin-top:1.2rem;width:100%;background:var(--void);border:1px solid var(--green);color:var(--green);font-family:var(--font);font-size:12px;letter-spacing:2px;padding:.65rem;cursor:pointer;text-transform:uppercase}
+button:hover{background:var(--green);color:var(--void)}
+.footer{margin-top:1.5rem;color:#444;font-size:10px;letter-spacing:1px;text-align:center}
+</style>
+</head>
+<body>
+<div class="box">
+  <pre class="logo">    ╭━━╮  ╭━━╮
+   ╭╯● ╰╮╭╯ ●╰╮   BORGCLAW
+   ┃  ╭━╯╰━╮  ┃
+   ╰━━╯    ╰━━╯
+     ╰══════╯    </pre>
+  <h1>AUTHENTICATE</h1>
+  <div class="sub">HIVE ACCESS REQUIRED</div>
+  <form method="POST" action="/auth/login">
+    <input type="hidden" name="next" value="${escHtmlAttr(next)}">
+    <label for="secret">HIVE SECRET</label>
+    <input type="password" id="secret" name="secret" autofocus autocomplete="current-password" placeholder="Enter hive secret...">
+    <div class="error">✗ INVALID SECRET — ACCESS DENIED</div>
+    <button type="submit">► ENTER HIVE</button>
+  </form>
+  <div class="footer">BorgClaw Queen · Local access only</div>
+</div>
+</body>
+</html>`;
+}
+
+function escHtmlAttr(str) {
+  return String(str ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 // Public endpoint — drones can discover hive info without auth
 app.get('/api/hive/info', (_req, res) => {
@@ -1028,6 +1145,8 @@ async function executeWorkflowAsync(runId, spec, context) {
       run.completed_at = new Date().toISOString();
       activity.log({ type: 'workflow_completed', workflow: spec.name, run_id: runId, steps_completed: outcome.results.size });
       natsPublish('hive.workflow.completed', { workflow: spec.name, run_id: runId, steps_completed: outcome.results.size, ts: run.completed_at });
+      // Bug 4 fix: evict completed run after 5 minutes so runningWorkflows doesn't grow unbounded.
+      setTimeout(() => runningWorkflows.delete(runId), 5 * 60 * 1000);
     } else if (outcome.status === 'paused') {
       // run.status and run.pausedApprovalId already set inside createApproval
       run.paused_at = outcome.paused_at;
@@ -1038,10 +1157,14 @@ async function executeWorkflowAsync(runId, spec, context) {
       run.status = 'failed';
       run.error = outcome.error;
       run.results = Object.fromEntries(outcome.results);
+      // Bug 4 fix: evict failed run after 5 minutes.
+      setTimeout(() => runningWorkflows.delete(runId), 5 * 60 * 1000);
     }
   } catch (err) {
     run.status = 'failed';
     run.error = err.message;
+    // Bug 4 fix: evict failed run (error path) after 5 minutes.
+    setTimeout(() => runningWorkflows.delete(runId), 5 * 60 * 1000);
     throw err;
   }
 }
@@ -1103,6 +1226,10 @@ async function callLLMWithTimeout(step, inputs, systemPrompt, timeoutMs) {
 // ============================================================
 
 const heartbeatInterval = setInterval(() => {
+  // Bug 5 fix: refresh Queen's own heartbeat so she never marks herself offline.
+  const queenNode = nodes.get(QUEEN_NODE_ID);
+  if (queenNode) queenNode.lastHeartbeat = new Date();
+
   const now = Date.now();
   for (const [id, node] of nodes) {
     if (node.lastHeartbeat && (now - node.lastHeartbeat.getTime()) > HEARTBEAT_TIMEOUT_MS) {
@@ -1159,7 +1286,10 @@ function buildDashboardData() {
     pendingApprovals: approvals.pending().length,
     workflowsLoaded: workflows.size,
     runningWorkflows: runningWorkflows.size,
-    hiveSecret: HIVE_SECRET,
+    // hiveSecret is intentionally omitted — dashboard JS reads it from the
+    // session cookie set by POST /auth/login. Only the truncated prefix is
+    // sent here for the Queen status panel display.
+    hiveSecretPrefix: HIVE_SECRET ? HIVE_SECRET.slice(0, 8) : '',
     port: PORT,
     queenHost: (() => { try { const nets = os.networkInterfaces(); return (nets.en0 || nets.eth0 || []).find(i => i.family === 'IPv4')?.address || 'localhost'; } catch { return 'localhost'; } })(),
     workflows: [...workflows.entries()].map(([name, spec]) => ({

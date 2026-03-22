@@ -16,6 +16,8 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
+    "@modelcontextprotocol/server-fetch": "latest",
+    "@modelcontextprotocol/server-filesystem": "latest",
     "bonjour-service": "^1.2.1",
     "express": "^4.21.0",
     "js-yaml": "^4.1.0",
