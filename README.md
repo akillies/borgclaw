@@ -18,27 +18,21 @@
 Queen boots. Drones join. Telemetry flows. The hive works.
 
 **Working:**
-- Queen + drone communicating (tested, live telemetry, 3ms RTT)
-- Talk to the Queen in plain English — she responds and acts
-- Talk to drones directly — they respond with live status
+- Queen + drone communication with live telemetry
+- Natural language control — talk to the Queen, she responds and acts
 - Drones auto-register as inference endpoints via LiteLLM
-- MCP tool integration — agents read files and fetch web content
-- Ghost worker framework — browser automation via Python + browser-use
+- Zero-config discovery — drones find Queen on the LAN automatically
+- MCP tools — agents read files and fetch web content
+- Drone personas — researcher, planner, worker modes
+- Drone learning — each drone tracks its own performance over time
+- Ghost worker framework — browser automation on old hardware
 - Hardware auto-detection, cross-platform (Linux, macOS, Windows)
 - Deploy to any machine: `./borgclaw deploy 10.0.0.21` or USB drive
 - Governance: approval queue, kill switch, budget caps, auth on every surface
-- Scheduled workflows (cron-based, 6 tasks configured)
-- Workflow execution end-to-end (morning briefing, 6 steps, real LLM output)
+- Scheduled workflows with cron and real LLM execution
+- NATS event bus for real-time hive coordination
+- Self-improvement scan — weekly check for better models and tools
 - BBS dashboard with Queen status, chat, connect panel, security panel
-
-**Roadmap:**
-- Ghost worker desktop control (full keyboard/mouse on Linux via Xvfb)
-- Community hives — pools of compute across households
-- Knowledge-specialized drones (Medic, Engineer, Scholar)
-- Distributed inference across multiple machines
-- Drone learning + memetic evolution
-- Agent sandboxing (NemoClaw-inspired filesystem + network isolation)
-- DeerFlow integration for sandboxed execution
 
 ## Quick Start
 
