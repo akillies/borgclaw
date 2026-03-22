@@ -1,8 +1,15 @@
 {
   "name": "borgclaw-queen",
-  "version": "0.1.0",
-  "description": "BorgClaw Queen Node — HTTP service for node registry, health monitoring, and dashboard.",
+  "version": "0.2.0",
+  "description": "BorgClaw Queen — coordinator for your personal AI drone hive",
   "type": "module",
+  "license": "MIT",
+  "author": "Alexander Kline <alexanderkline13@gmail.com> (https://alexanderkline.com)",
+  "homepage": "https://github.com/alexanderkline/borgclaw",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alexanderkline/borgclaw"
+  },
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
