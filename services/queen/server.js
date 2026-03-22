@@ -1228,11 +1228,14 @@ app.post('/api/chat', async (req, res) => {
   const { message, context } = req.body;
   if (!message) return res.status(400).json({ error: 'message required' });
 
-  // Build live hive context
+  // Build live hive context — separate Queen from drones
+  const droneList = nodeList().filter(n => n.node_id !== QUEEN_NODE_ID);
+  const dronesOnline = droneList.filter(n => n.status === 'online').length;
   const hiveState = {
-    nodes_online: countOnline(),
-    nodes_total: nodes.size,
-    nodes: nodeList().map(n => ({
+    queen_status: 'online',
+    drones_online: dronesOnline,
+    drones_total: droneList.length,
+    drones: droneList.map(n => ({
       id: n.node_id, status: n.status, models: n.models,
       cpu: n.metrics?.cpu_pct, ram_gb: n.metrics?.ram_used_gb,
       tok_s: n.metrics?.tokens_per_sec, contribution: n.contribution,
