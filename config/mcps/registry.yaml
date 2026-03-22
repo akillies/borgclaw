@@ -130,6 +130,13 @@ not_connected:
     status: not_connected
     notes: "API exists but rate limits and cost unclear."
 
+  - id: home-assistant
+    capability: [smart_home_control, device_status, automation_trigger, scene_activate]
+    tool: "ha-mcp (homeassistant-ai/ha-mcp, 1.7K stars)"
+    install: "pip install ha-mcp"
+    status: not_connected
+    notes: "Plug-in MCP for Home Assistant. Controls lights, locks, thermostats, scenes. Queen tells drones to control your house."
+
 # ============================================================
 # CAPABILITY INDEX (what agents query)
 # ============================================================
@@ -153,3 +160,5 @@ capability_index:
   social_post_linkedin: null             # GAP: not connected
   social_post_x: null                    # GAP: not connected
   publish_substack: null                 # GAP: not connected
+  smart_home_control: null               # GAP: ha-mcp not connected
+  device_status: null                    # GAP: ha-mcp not connected
