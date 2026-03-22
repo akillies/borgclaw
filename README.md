@@ -119,16 +119,21 @@ When a drone heartbeats with its model list, Queen automatically updates LiteLLM
 
 ## How BorgClaw Differs
 
-| | exo | LocalAI | OpenClaw | BorgClaw |
-|---|---|---|---|---|
-| Core idea | Split one big model across devices | Local LLM API with p2p | Personal AI assistant (800+ skills) | Compute infrastructure for YOUR personal AI |
-| Multi-node | Model sharding | Federated inference | No | Task routing via LiteLLM |
-| Identity | Its own | Its own | Its own | Yours (pluggable) |
-| Governance | No | No | No | Approval queue, budget caps, kill switch |
-| USB installer | No | No | No | Yes — 2.4GB, one script |
-| Contribution dial | No | No | No | 0-100% per drone |
+| | exo | LocalAI | OpenClaw | Perplexity PC | BorgClaw |
+|---|---|---|---|---|---|
+| Core idea | Split one big model across devices | Local LLM API with p2p | Personal AI assistant (800+ skills) | Cloud-dependent AI box | Compute infrastructure for YOUR personal AI |
+| Multi-node | Model sharding | Federated inference | No | No | Task routing via LiteLLM |
+| Cost | Free | Free | Free | $200/month | Free |
+| Identity | Its own | Its own | Its own | Perplexity's | Yours (pluggable) |
+| Governance | No | No | No | No | Approval queue, budget caps, kill switch |
+| USB installer | No | No | No | No | Yes — 2.4GB, one script |
+| Ghost workers | No | No | No | No | Old laptops control browsers + desktops |
+| Contribution dial | No | No | No | No | 0-100% per drone |
+| Cloud dependency | No | No | Partial | Yes ($200/mo) | No — sovereign |
 
 **exo** splits one large model across multiple machines (tensor parallelism). **BorgClaw** routes different tasks to different specialized drones. Different problems, complementary approaches.
+
+**Why does the Perplexity Computer exist?** Because nobody built the open-source version. $200/month for a cloud-dependent box when your garage full of old hardware does it for $0. BorgClaw is the answer that should have existed already. Free. Sovereign. Runs on the machines you already own. No subscription. No cloud. No one takes it away.
 
 ## The Hive
 
@@ -148,7 +153,21 @@ Drones get unique IDs based on hostname: `drone-efef`, `drone-a3b7`, `drone-c1d0
 |------|----------|-------------|
 | `queen` | Always-on machine | Runs Queen + middleware + local inference |
 | `worker` | GPU machine or 16GB+ RAM | Full inference, reports to Queen |
-| `satellite` | Low-RAM, old laptops, NAS | Search-only (QMD), no LLM inference |
+| `ghost` | Old laptop, 4GB+ RAM, no GPU | Browser + desktop automation via Lightpanda/pyautogui. The hive's hands. |
+| `satellite` | Low-RAM, old laptops, NAS | Search-only (QMD), lightweight tasks |
+
+### Ghost Workers
+
+Your old MacBook Air can't think fast. But it can ACT. Ghost workers control browsers and desktops — navigating websites, filling forms, extracting data, posting content, monitoring dashboards. The LLM reasoning happens on capable drones via LiteLLM. The old laptop just executes the clicks and keystrokes.
+
+```
+Queen: "Research competitor pricing on these 5 sites"
+  → Capable drone (thinks): "Navigate to site A, find pricing page, extract table"
+  → Ghost worker (acts): opens Lightpanda, navigates, extracts, returns data
+  → Queen: assembles results, pushes to approval queue
+```
+
+Ghost workers turn e-waste into employees. A $50 thrift store laptop becomes a 24/7 browser automation agent. No subscription. No cloud. No SaaS pricing page. You already own this hardware. Now it works for you.
 
 ### The Queen
 
@@ -290,6 +309,23 @@ borgclaw/
 | Local search | qmd | — | BM25 + vector + LLM reranking over markdown |
 | Remote access | Tailscale | 29.6K | Zero-config mesh VPN for remote drones |
 
+## The Vision
+
+### Today
+Turn every computer you own into one AI. Your machines. Your models. Your rules.
+
+### Tomorrow
+Your hive connects to your neighbor's hive. Communities pool compute. A school district where 200 old Chromebooks become a shared educational AI. A farming co-op where 50 members' machines process crop data together. A mutual aid network where spare compute flows to whoever needs it.
+
+We're all running scrap. None of us have $10B data warehouses. But when our scrap combines, we are powerful.
+
+### The Philosophy
+You already own this hardware. It's sitting in closets, drawers, basements — depreciating to zero while cloud companies charge you $20/month for AI that lives in THEIR datacenter. BorgClaw takes what you already paid for and makes it think, work, and evolve. No subscription. No cloud dependency. No one can shut it off, rate-limit it, or change the terms of service.
+
+Reclaim your sovereign tech.
+
 ---
+
+Created by [Alexander Kline](https://alexanderkline.com)
 
 *"Don't reinvent. Compose. Pull the best of everything, bring it together. 98% exists. BorgClaw's value is the composition and the experience."*
