@@ -114,12 +114,34 @@ services:
       timeout: 5s
       retries: 3
 
+  # ============================================================
+  # Tailscale — Zero-config VPN mesh for the hive
+  # Queen is reachable as "borgclaw-queen" across all Tailscale nodes.
+  # Set TS_AUTHKEY in .env — generate at tailscale.com/admin/settings/keys.
+  # Use an ephemeral key for disposable deployments, reusable key for permanents.
+  # network_mode: host so Tailscale can own its own interface (tun0).
+  # ============================================================
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: borgclaw-queen
+    environment:
+      - TS_AUTHKEY=${TAILSCALE_AUTH_KEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+    volumes:
+      - tailscale-data:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add: [NET_ADMIN, SYS_MODULE]
+    network_mode: host
+    restart: unless-stopped
+
 volumes:
   nats-data:
     driver: local
   ntfy-cache:
     driver: local
   ntfy-etc:
+    driver: local
+  tailscale-data:
     driver: local
 
 networks:

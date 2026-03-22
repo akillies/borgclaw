@@ -6,7 +6,7 @@
 // No bypass path exists.
 //
 // Storage: in-memory Map + file-backed JSON.
-// Notification: dashboard (primary) + hooks for ntfy/your AI OS.
+// Notification: ntfy push (primary) + hooks for your AI OS.
 // ============================================================
 
 import { readFileSync } from 'fs';
@@ -16,12 +16,56 @@ import * as activity from './activity.js';
 
 const queue = new Map(); // id -> approval object
 let dataFile = null;
+let queenBaseUrl = null; // set by initApprovals so ntfy can build action URLs
 
-// Notification hooks — register ntfy, your AI OS, email, etc.
+// Notification hooks — register your AI OS, email, etc.
 const notifyHooks = [];
 
-export function initApprovals(dataDir) {
+// ============================================================
+// ntfy Push Notifications
+// ============================================================
+// Sends approval requests to your phone/desktop with action buttons.
+// Topic: borgclaw-approvals
+// Buttons: [Approve] [Reject] — tap to POST to Queen API.
+// If ntfy is offline the system keeps working — log, don't crash.
+// ============================================================
+
+const NTFY_URL = process.env.NTFY_URL || 'http://localhost:2586';
+const NTFY_TOPIC = 'borgclaw-approvals';
+
+async function pushNtfy(item, queenBaseUrl) {
+  // Build action button URLs. queenBaseUrl is best-effort — falls back to localhost.
+  const base = queenBaseUrl || 'http://localhost:9090';
+  const approveUrl = `${base}/api/approvals/${item.id}/approve`;
+  const rejectUrl  = `${base}/api/approvals/${item.id}/reject`;
+
+  const title = `Approval required: ${item.type || 'unknown'}`;
+  const body  = item.summary || item.type || item.id;
+
+  try {
+    await fetch(`${NTFY_URL}/${NTFY_TOPIC}`, {
+      method: 'POST',
+      headers: {
+        'Title':   title,
+        'Tags':    'robot,borgclaw',
+        'Actions': [
+          `http, Approve, ${approveUrl}, method=POST, clear=true`,
+          `http, Reject,  ${rejectUrl},  method=POST, clear=true`,
+        ].join('; '),
+      },
+      body,
+      signal: AbortSignal.timeout(4000),
+    });
+    console.log(`[APPROVALS] ntfy sent for ${item.id}`);
+  } catch (err) {
+    // ntfy being offline must never crash the approval gate
+    console.warn(`[APPROVALS] ntfy unavailable (${err.message}) — approval still queued`);
+  }
+}
+
+export function initApprovals(dataDir, opts = {}) {
   dataFile = path.join(dataDir, 'approvals.json');
+  if (opts.queenBaseUrl) queenBaseUrl = opts.queenBaseUrl;
   try {
     const raw = readFileSync(dataFile, 'utf-8');
     const loaded = JSON.parse(raw);
@@ -57,6 +101,9 @@ export function create(approval) {
     source_agent: item.source_agent,
     source_workflow: item.source_workflow,
   });
+
+  // Push to ntfy — fire and forget, no await so create() stays synchronous
+  pushNtfy(item, queenBaseUrl);
 
   // Fire notification hooks
   for (const hook of notifyHooks) {

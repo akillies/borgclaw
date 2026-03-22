@@ -27,8 +27,9 @@
       "runtime": "ollama",
       "_vram_ceiling": "8GB VRAM hard cap. All models must fit at Q4_K_M. 7B models use 4.5-5.5GB, leaving 2.5-3.5GB for context. DO NOT load 14B+ models — they will OOM crash.",
       "models": {
-        "general": { "name": "phi4-mini",        "params": "3.8B", "quant": "Q4_K_M", "vram_gb": 3.5, "use_for": "Ops, structured output, triage. Best reasoning-per-parameter in sub-5B class. Safe 4.5GB headroom for context." },
-        "code":    { "name": "qwen2.5-coder:7b", "params": "7B",   "quant": "Q4_K_M", "vram_gb": 4.5, "use_for": "Code generation on worker node. Codestral Q4_K_M also viable." },
+        "general": { "name": "phi4-mini",             "params": "3.8B", "quant": "Q4_K_M", "vram_gb": 3.5, "use_for": "Ops, structured output, triage. Best reasoning-per-parameter in sub-5B class. Safe 4.5GB headroom for context." },
+        "code":    { "name": "qwen2.5-coder:7b",      "params": "7B",   "quant": "Q4_K_M", "vram_gb": 4.5, "use_for": "Code generation on worker node. Codestral Q4_K_M also viable." },
+        "chat":    { "name": "nemotron-mini:4b",       "params": "4B",   "quant": "Q4_K_M", "vram_gb": 3.0, "use_for": "NVIDIA Nemotron-Mini 4B — RLHF-tuned instruct model, strong chat/reasoning at sub-4GB VRAM. Fits alongside phi4-mini. Drop-in alternative for general tasks on RTX nodes.", "_added": "2026-03-22" },
         "embedding": { "name": "nomic-embed-text:v2", "indexed_by": "qmd" },
         "_reasoning_note": "14B+ models EXCEED 8GB VRAM. Route reasoning tasks to mac-apple-silicon-24gb node or cloud-overflow profile. Queen capability lookup handles this automatically."
       }

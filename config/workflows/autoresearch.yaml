@@ -30,6 +30,17 @@ steps:
     action: research_models
     description: "Find open-source LLM models released in the past week. Compare against current stack."
     inputs:
+      # Primary source: Queen's leaderboard scanner (structured, de-duped against models.json)
+      # Call GET /api/models/available before running web searches — it's fast and authoritative.
+      # The scanner fetches the Ollama library, filters by tier RAM limits, and returns only
+      # models not already deployed anywhere in the hive.
+      primary_source:
+        name: queen_leaderboard_api
+        endpoint: "http://localhost:9090/api/models/available"
+        method: api_get
+        description: "Queen's leaderboard scanner. Structured candidates filtered by tier RAM limits. De-duped against config/models.json."
+        auth: hive_secret_header   # Authorization: Bearer <hive-secret>
+      # Secondary sources: web research to find context the API doesn't have (benchmarks, reviews)
       sources:
         - name: ollama_library
           url: "https://ollama.com/library"

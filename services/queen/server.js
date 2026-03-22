@@ -29,6 +29,7 @@ import { deepHealthCheck } from './lib/health.js';
 import * as setup from './lib/setup.js';
 import { initNats, publish as natsPublish, close as natsClose } from './lib/nats.js';
 import { executeWorkflow, resumeWorkflow } from './lib/workflow.js';
+import { scanLeaderboard, checkOllamaLibrary } from './lib/leaderboard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,7 +48,7 @@ mkdirSync(DATA_DIR, { recursive: true });
 
 // --- Initialize modules ---
 activity.initActivity(DATA_DIR);
-approvals.initApprovals(DATA_DIR);
+approvals.initApprovals(DATA_DIR, { queenBaseUrl: `http://localhost:${PORT}` });
 
 // --- NATS JetStream (optional enhancement — Queen works without it) ---
 // initNats() is non-blocking. If NATS is not running, it logs a warning
@@ -977,6 +978,52 @@ app.post('/api/models/pull', async (req, res) => {
   }
 });
 
+// Scan for available upgrade candidates from the Ollama library
+// GET /api/models/available?tiers=nano,edge,worker
+//   Returns models that aren't deployed yet and fit within hive hardware tiers.
+//   Optional ?tiers= query param limits which tiers to evaluate.
+//   Reads current deployments from config/models.json for comparison.
+app.get('/api/models/available', async (req, res) => {
+  let currentModels = {};
+  try {
+    const raw = await fs.readFile(path.join(CONFIG_DIR, 'models.json'), 'utf-8');
+    currentModels = JSON.parse(raw);
+  } catch (err) {
+    console.warn(`[QUEEN] /api/models/available: could not read models.json: ${err.message}`);
+    // Proceed with empty config — leaderboard will still run, just can't de-dupe
+  }
+
+  const tiersParam = req.query.tiers;
+  const tiers = tiersParam
+    ? tiersParam.split(',').map(t => t.trim()).filter(Boolean)
+    : null;
+
+  activity.log({ type: 'leaderboard_scan_started', tiers: tiers || 'all' });
+
+  const candidates = await scanLeaderboard(currentModels, tiers);
+
+  activity.log({ type: 'leaderboard_scan_complete', candidates_found: candidates.length });
+
+  res.json({
+    scanned_at: new Date().toISOString(),
+    tiers_evaluated: tiers || Object.keys(currentModels.drone_tiers || {}),
+    candidates_found: candidates.length,
+    candidates,
+  });
+});
+
+// Search the Ollama library by keyword
+// GET /api/models/search?q=vision
+app.get('/api/models/search', async (req, res) => {
+  const q = req.query.q || '';
+  if (!q.trim()) {
+    return res.status(400).json({ error: 'q parameter required (e.g. ?q=vision)' });
+  }
+
+  const results = await checkOllamaLibrary(q);
+  res.json({ query: q, results });
+});
+
 // ============================================================
 // ROUTES: Node Metrics
 // ============================================================
@@ -1122,7 +1169,24 @@ async function executeWorkflowAsync(runId, spec, context) {
 
     // Build a minimal step-like object for callLLMWithTimeout
     const stepProxy = { agent, action, description: '' };
-    return callLLMWithTimeout(stepProxy, inputs, fullSystemPrompt, 5 * 60 * 1000);
+    const result = await callLLMWithTimeout(stepProxy, inputs, fullSystemPrompt, 5 * 60 * 1000);
+
+    // Governance filter — check output before it propagates to the next step
+    const gov = checkGovernance(result.output, { agent, action, runId });
+    if (!gov.allowed) {
+      activity.log({ type: 'governance_block', agent, action, run_id: runId, reason: gov.reason });
+      console.warn(`[GOVERNANCE] Blocked output from ${agent}/${action}: ${gov.reason}`);
+      createApproval({
+        type: 'governance_review',
+        summary: `Governance filter blocked ${agent}/${action}: ${gov.reason}`,
+        source_agent: agent,
+        payload: { original_output: result.output, filtered_output: gov.filtered_output, reason: gov.reason },
+      });
+      // Return filtered output so the workflow step gets a safe value, not a crash
+      return { ...result, output: gov.filtered_output, governance_blocked: true };
+    }
+
+    return result;
   }
 
   // Adapter: lib/workflow.js calls createApproval(approval) → item with .id
@@ -1188,7 +1252,21 @@ async function executeWorkflowAsync(runId, spec, context) {
 // Resume a paused workflow run after an approval gate is cleared.
 // Mirrors executeWorkflowAsync but calls resumeWorkflow() instead of executeWorkflow().
 async function resumeWorkflowAsync(runId, run, context) {
-  // Re-build the same LLM + approval adapters that executeWorkflowAsync uses
+  // Re-build the same LLM + approval adapters that executeWorkflowAsync uses.
+  // createApproval is declared before callLLM — callLLM references it when
+  // governance blocks an output and queues a governance_review approval.
+  function createApproval(approval) {
+    const item = approvals.create({
+      ...approval,
+      source_workflow: approval.source_workflow
+        ? `${approval.source_workflow}/${runId}`
+        : runId,
+    });
+    run.pausedApprovalId = item.id;
+    run.status = 'paused';
+    return item;
+  }
+
   async function callLLM(agent, action, inputs, systemPrompt) {
     let agentInstructions = '';
     try {
@@ -1201,19 +1279,23 @@ async function resumeWorkflowAsync(runId, run, context) {
       : systemPrompt;
 
     const stepProxy = { agent, action, description: '' };
-    return callLLMWithTimeout(stepProxy, inputs, fullSystemPrompt, 5 * 60 * 1000);
-  }
+    const result = await callLLMWithTimeout(stepProxy, inputs, fullSystemPrompt, 5 * 60 * 1000);
 
-  function createApproval(approval) {
-    const item = approvals.create({
-      ...approval,
-      source_workflow: approval.source_workflow
-        ? `${approval.source_workflow}/${runId}`
-        : runId,
-    });
-    run.pausedApprovalId = item.id;
-    run.status = 'paused';
-    return item;
+    // Governance filter — same enforcement as executeWorkflowAsync
+    const gov = checkGovernance(result.output, { agent, action, runId });
+    if (!gov.allowed) {
+      activity.log({ type: 'governance_block', agent, action, run_id: runId, reason: gov.reason });
+      console.warn(`[GOVERNANCE] Blocked output from ${agent}/${action}: ${gov.reason}`);
+      createApproval({
+        type: 'governance_review',
+        summary: `Governance filter blocked ${agent}/${action}: ${gov.reason}`,
+        source_agent: agent,
+        payload: { original_output: result.output, filtered_output: gov.filtered_output, reason: gov.reason },
+      });
+      return { ...result, output: gov.filtered_output, governance_blocked: true };
+    }
+
+    return result;
   }
 
   function getApprovalStatus(id) {
@@ -1245,6 +1327,63 @@ async function resumeWorkflowAsync(runId, run, context) {
     run.results = Object.fromEntries(outcome.results);
     setTimeout(() => runningWorkflows.delete(runId), 5 * 60 * 1000);
   }
+}
+
+// ============================================================
+// Governance Output Filter — NemoClaw-inspired runtime enforcement
+// ============================================================
+// Checks every agent output before it leaves the system.
+// This is not a prompt instruction. It is code that runs.
+// Blocked outputs become approval items, not errors.
+//
+// Rules:
+//   PII     — email addresses, phone numbers, SSN-like patterns
+//   Danger  — destructive shell commands embedded in output
+// ============================================================
+
+const PII_PATTERNS = [
+  { name: 'email',  re: /\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g },
+  { name: 'phone',  re: /(\+?1[\s\-.]?)?\(?\d{3}\)?[\s\-.]?\d{3}[\s\-.]?\d{4}\b/g },
+  { name: 'ssn',    re: /\b\d{3}-\d{2}-\d{4}\b/g },
+];
+
+const DANGER_PATTERNS = [
+  { name: 'rm-rf',   re: /rm\s+-rf?\b/i },
+  { name: 'drop-sql',re: /\bDROP\s+(TABLE|DATABASE|SCHEMA)\b/i },
+  { name: 'delete-cmd', re: /\bdelete\b.*--force/i },
+];
+
+function checkGovernance(output, context = {}) {
+  if (typeof output !== 'string') {
+    return { allowed: true, reason: null, filtered_output: output };
+  }
+
+  // Check PII
+  // Reset lastIndex before test() and again before replace() — /g regexes are stateful.
+  for (const { name, re } of PII_PATTERNS) {
+    re.lastIndex = 0;
+    if (re.test(output)) {
+      re.lastIndex = 0; // reset so replace() scans from the start
+      return {
+        allowed: false,
+        reason: `PII detected: ${name} pattern found in output`,
+        filtered_output: output.replace(re, '[REDACTED]'),
+      };
+    }
+  }
+
+  // Check dangerous commands
+  for (const { name, re } of DANGER_PATTERNS) {
+    if (re.test(output)) {
+      return {
+        allowed: false,
+        reason: `Dangerous command blocked: ${name} pattern detected`,
+        filtered_output: '[OUTPUT BLOCKED BY GOVERNANCE FILTER]',
+      };
+    }
+  }
+
+  return { allowed: true, reason: null, filtered_output: output };
 }
 
 // Call LLM — model-agnostic via LiteLLM or direct Ollama
