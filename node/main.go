@@ -18,6 +18,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"syscall"
 	"time"
@@ -93,11 +94,25 @@ func main() {
 		return
 	}
 
-	// Validate Queen URL is set
+	// Auto-discover Queen via mDNS if no URL was provided
 	if cfg.QueenURL == "" {
-		fmt.Fprintln(os.Stderr, "error: --queen URL is required")
-		fmt.Fprintln(os.Stderr, "usage: ./drone --queen http://your-queen:9090")
-		os.Exit(1)
+		log.Println("[init] no --queen flag — scanning LAN for Queen via mDNS (up to 5s)...")
+		discovered := discoverQueenViaMDNS()
+		if discovered != "" {
+			cfg.QueenURL = discovered
+		} else {
+			fmt.Fprintln(os.Stderr, "error: Queen not found via mDNS and no --queen flag provided")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "  Option 1 — specify Queen address directly:")
+			fmt.Fprintln(os.Stderr, "    ./drone --queen http://192.168.1.100:9090")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "  Option 2 — make sure the Queen is running on your LAN:")
+			fmt.Fprintln(os.Stderr, "    cd services/queen && npm start")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "  mDNS requires the Queen to have bonjour-service installed.")
+			fmt.Fprintln(os.Stderr, "  On the Queen machine: npm install")
+			os.Exit(1)
+		}
 	}
 
 	log.Printf("[init] node_id=%s queen=%s advertise=%s ollama=%s contribution=%d%%",
@@ -112,9 +127,15 @@ func main() {
 	ollama := NewOllamaClient(cfg.OllamaURL)
 	throttle := NewThrottle(cfg.Contribution, cfg.Hardware.CPUCores)
 	metrics := NewMetricsCollector(60)
-	worker := NewTaskWorker(cfg.NodeID, ollama, throttle, metrics, 32)
+
+	configDir := filepath.Join(os.Getenv("HOME"), ".config", "borgclaw")
+	learning := InitLearning(cfg.NodeID, configDir)
+	log.Printf("[init] learning store: %s", filepath.Join(configDir, "DRONE.md"))
+
+	worker := NewTaskWorker(cfg.NodeID, ollama, throttle, metrics, learning, 32)
 	heartbeat := NewHeartbeatReporter(cfg, metrics, ollama, throttle, worker)
-	server := NewServer(cfg, metrics, ollama, throttle, worker)
+	heartbeat.SetLearning(learning)
+	server := NewServer(cfg, metrics, ollama, throttle, worker, learning)
 
 	// Check Ollama connectivity
 	ctx := context.Background()

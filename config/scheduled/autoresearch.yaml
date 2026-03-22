@@ -1,0 +1,21 @@
+# Scheduled Task: Autoresearch Evolution Loop
+# Weekly scan for better models, tools, and components. Proposes upgrades via approval queue.
+# Karpathy autoresearch pattern applied to the hive's own infrastructure.
+
+task_id: autoresearch
+schedule: "0 11 * * 5"  # Every Friday at 11:00 AM
+timezone: America/Vancouver
+workflow: workflows/autoresearch.yaml
+node: tower
+enabled: true
+
+notification:
+  on_success: true
+  channel: approval_queue   # Proposals route to approval queue, not inbox
+  on_failure:
+    channel: gmail_draft
+    subject: "[BORGCLAW] Autoresearch scan failed"
+    include_error: true
+
+retry:
+  max_attempts: 1           # Don't retry — stale research is worse than no research

@@ -63,6 +63,7 @@ type HeartbeatReporter struct {
 	throttle *Throttle
 	hardware HardwareProfile
 	worker   *TaskWorker
+	learning *LearningStore
 
 	httpClient *http.Client
 }
@@ -74,14 +75,19 @@ func NewHeartbeatReporter(cfg Config, metrics *MetricsCollector, ollama *OllamaC
 		nodeID:        cfg.NodeID,
 		advertiseAddr: cfg.AdvertiseAddr,
 		hiveSecret:    cfg.HiveSecret,
-		interval:   time.Duration(cfg.HeartbeatSec) * time.Second,
-		metrics:    metrics,
-		ollama:     ollama,
-		throttle:   throttle,
-		hardware:   cfg.Hardware,
-		worker:     worker,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		interval:      time.Duration(cfg.HeartbeatSec) * time.Second,
+		metrics:       metrics,
+		ollama:        ollama,
+		throttle:      throttle,
+		hardware:      cfg.Hardware,
+		worker:        worker,
+		httpClient:    &http.Client{Timeout: 10 * time.Second},
 	}
+}
+
+// SetLearning attaches the learning store for periodic updates.
+func (hr *HeartbeatReporter) SetLearning(ls *LearningStore) {
+	hr.learning = ls
 }
 
 // Run starts the heartbeat loop. Blocks until context is cancelled.
@@ -128,6 +134,11 @@ func (hr *HeartbeatReporter) send(ctx context.Context) error {
 
 	// Collect fresh metrics
 	m := hr.metrics.Collect(ollamaUp)
+
+	// Update learning store with latest hardware and metrics snapshot
+	if hr.learning != nil {
+		hr.learning.UpdatePeriodic(hr.hardware, m)
+	}
 
 	// Gather available models
 	var modelNames []string

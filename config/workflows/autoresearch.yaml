@@ -1,0 +1,165 @@
+# Autoresearch Evolution Loop — Workflow DAG
+# Trigger: Cron (Friday 11:00 AM PT)
+# Duration: ~15-25 min (web research + LLM evaluation + approval draft)
+# Agents: Cerebro-Analyst (scan + evaluate) → Comms-Drafter (propose, requires approval)
+#
+# PATTERN: Karpathy autoresearch — the system watches for its own replacement parts.
+# Every Friday, the hive scans for better models and tools, scores them against what
+# it currently runs, and submits ranked upgrade proposals for operator approval.
+#
+# MODULARITY NOTE: scan_models and scan_tools run in parallel. The evaluate step
+# depends on both. If a new scan source is added (e.g., scan_papers for arXiv),
+# add it as a parallel step and include its output in evaluate's inputs.
+
+name: autoresearch
+version: "1.0"
+description: "Weekly self-evolution scan. Finds better models and tools, scores them, proposes top 3 upgrades for approval."
+trigger:
+  type: cron
+  schedule: "0 11 * * 5"    # Friday 11:00 AM
+  timezone: America/Vancouver
+  node: tower
+
+input_schema: {}  # Fully automated — no user input required
+
+steps:
+  # --- Source scans run in PARALLEL ---
+
+  - id: scan_models
+    agent: cerebro-analyst
+    action: research_models
+    description: "Find open-source LLM models released in the past week. Compare against current stack."
+    inputs:
+      sources:
+        - name: ollama_library
+          url: "https://ollama.com/library"
+          method: web_search
+          query: "ollama new models this week site:ollama.com"
+        - name: huggingface_trending
+          url: "https://huggingface.co/models?sort=trending"
+          method: web_search
+          query: "hugging face trending models LLM this week"
+        - name: r_localllama
+          method: web_search
+          query: "site:reddit.com/r/LocalLLaMA new model release this week benchmark"
+        - name: hn_models
+          method: web_search
+          query: "site:news.ycombinator.com new language model local inference"
+      date_range: last_7_days
+      cross_reference: "config/models.json"   # Compare against what we already run
+      flag_criteria:
+        - "benchmarks better than current model in same hardware tier"
+        - "same task capability at lower VRAM than current model"
+        - "new capability class not represented in current stack (e.g., vision, audio)"
+    outputs:
+      - model_candidates    # List of flagged models with benchmark data
+    timeout: 8m
+    requires_approval: false
+
+  - id: scan_tools
+    agent: cerebro-analyst
+    action: research_tools
+    description: "Find new tools relevant to BorgClaw's stack. Compare against current components."
+    inputs:
+      stack_categories:
+        - local_inference_engines      # Ollama, LM Studio, llama.cpp, vLLM, MLX
+        - browser_automation           # Playwright, Puppeteer, Stagehand
+        - vector_databases             # QMD, Chroma, Qdrant, LanceDB, pgvector
+        - mcp_servers                  # New MCP connectors for tools we use
+        - workflow_orchestration       # NATS, Temporal, Prefect, Airflow
+        - agent_frameworks             # LangGraph, AutoGen, CrewAI, new entrants
+      sources:
+        - name: github_trending
+          method: web_search
+          query: "github trending local LLM agent MCP server this week"
+        - name: hacker_news
+          method: web_search
+          query: "site:news.ycombinator.com local inference OR MCP OR agent framework new"
+        - name: arxiv
+          method: web_search
+          query: "arxiv local LLM inference optimization OR agent memory architecture 2026"
+      date_range: last_7_days
+      cross_reference: "{{KNOWLEDGE_BASE_PATH}}/tool-landscape.md"   # Don't resurface known tools
+      flag_criteria:
+        - "improves performance or capability over current component in same category"
+        - "eliminates a current capability gap in config/mcps/registry.yaml"
+        - "significantly reduces resource usage for same task"
+        - "adds a category we don't have (new frontier)"
+    outputs:
+      - tool_candidates     # List of flagged tools with comparison to current component
+    timeout: 8m
+    requires_approval: false
+
+  # --- Evaluation: depends on both scans ---
+
+  - id: evaluate
+    agent: cerebro-analyst
+    action: score_and_rank
+    description: "Score every flagged item. Rank by composite score. Select top 3 upgrade recommendations."
+    depends_on: [scan_models, scan_tools]
+    inputs:
+      candidates:
+        models: "{{scan_models.model_candidates}}"
+        tools: "{{scan_tools.tool_candidates}}"
+      scoring_rubric:
+        quality:
+          description: "How much better is this than what we have? (benchmark delta, capability gain)"
+          scale: 1-10
+          weight: 1
+        replaceability:
+          description: "How cleanly does this slot in? Config change vs code rewrite?"
+          scale: 1-10   # 10 = drop-in replacement, 1 = requires major refactor
+          weight: 1
+        swap_effort_inverse:
+          description: "Effort to adopt, inverted. 10 = trivial (ollama pull), 1 = weeks of work."
+          scale: 1-10
+          weight: 1
+        composite_formula: "quality × replaceability × swap_effort_inverse"
+      filter:
+        min_composite_score: 100   # Quality ≥ 5, Replaceability ≥ 5, Effort ≥ 4 minimum viable
+        top_n: 3                   # Surface only the 3 best candidates
+      current_models_ref: "config/models.json"
+      current_tools_ref: "{{KNOWLEDGE_BASE_PATH}}/tool-landscape.md"
+    outputs:
+      - ranked_candidates   # All scored items, sorted by composite
+      - top_3_upgrades      # Final shortlist for the proposal
+    timeout: 5m
+    requires_approval: false
+
+  # --- Proposal: routes to approval queue ---
+
+  - id: propose
+    agent: comms-drafter
+    action: draft_upgrade_proposal
+    description: "Draft a clear upgrade proposal for the operator. Sent to approval queue — nothing is changed until approved."
+    depends_on: [evaluate]
+    inputs:
+      top_3: "{{evaluate.top_3_upgrades}}"
+      all_scored: "{{evaluate.ranked_candidates}}"
+      format: upgrade-proposal
+      template_sections:
+        - header: "BorgClaw Autoresearch — Upgrade Proposals ({{today_formatted}})"
+        - per_candidate:
+            - rank_and_name
+            - what_it_replaces          # Current component being superseded
+            - why_upgrade               # Key improvement in plain language
+            - estimated_effort          # t-shirt size: XS / S / M / L / XL
+            - risk_assessment           # What could break, rollback path
+            - composite_score           # Transparency: show the math
+        - footer: "Full scored list attached. Approve individually or defer."
+      voice: direct-internal           # No hedging. Lead with the recommendation.
+      delivery:
+        channel: approval_queue
+        to: "{{YOUR_EMAIL}}"           # Configure: set your delivery email address
+        subject: "Autoresearch: {{evaluate.top_3_upgrades | count}} upgrade proposals — {{today_formatted}}"
+        tag: "autoresearch"
+    outputs:
+      - proposal_draft
+      - draft_id
+    timeout: 3m
+    requires_approval: true            # Law Two: operator approves before any change is made
+
+# Total approximate time: 15-25 minutes
+# Outputs: Approval-queue proposal listing top 3 ranked upgrades
+# Nothing is installed or changed until the operator approves each item
+# Scoring: Quality(1-10) × Replaceability(1-10) × SwapEffort_inverse(1-10) ≥ 100 to surface

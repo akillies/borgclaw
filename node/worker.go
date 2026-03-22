@@ -18,11 +18,12 @@ import (
 // Task represents a unit of work received from Queen.
 type Task struct {
 	ID       string          `json:"id"`
-	Type     string          `json:"type"` // "chat", "generate", "embed", "browser"
+	Type     string          `json:"type"`    // "chat", "generate", "embed", "browser"
 	Model    string          `json:"model"`
 	Payload  json.RawMessage `json:"payload"`
 	Priority int             `json:"priority"` // 0=P0 (revenue), 3=P3 (research)
 	Callback string          `json:"callback"` // URL to POST results back to
+	Persona  string          `json:"persona"`  // optional: "RESEARCHER", "PLANNER", "WORKER"
 }
 
 // BrowserPayload is the task payload for browser-type tasks.
@@ -55,6 +56,7 @@ type TaskWorker struct {
 	ollama   *OllamaClient
 	throttle *Throttle
 	metrics  *MetricsCollector
+	learning *LearningStore
 
 	queue     chan Task
 	completed atomic.Int64
@@ -66,7 +68,7 @@ type TaskWorker struct {
 }
 
 // NewTaskWorker creates a worker with the given queue depth.
-func NewTaskWorker(nodeID string, ollama *OllamaClient, throttle *Throttle, metrics *MetricsCollector, queueSize int) *TaskWorker {
+func NewTaskWorker(nodeID string, ollama *OllamaClient, throttle *Throttle, metrics *MetricsCollector, learning *LearningStore, queueSize int) *TaskWorker {
 	if queueSize <= 0 {
 		queueSize = 32
 	}
@@ -75,6 +77,7 @@ func NewTaskWorker(nodeID string, ollama *OllamaClient, throttle *Throttle, metr
 		ollama:     ollama,
 		throttle:   throttle,
 		metrics:    metrics,
+		learning:   learning,
 		queue:      make(chan Task, queueSize),
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
@@ -171,6 +174,11 @@ func (tw *TaskWorker) execute(ctx context.Context, task Task) {
 		tw.completed.Add(1)
 	}
 
+	// Record into learning store
+	if tw.learning != nil {
+		tw.learning.RecordTaskResult(task.Type, result.Model, result.Status == "completed", result.TokPerSec)
+	}
+
 	// Update metrics
 	_, _, avgTokUpdated := tw.ollama.Stats()
 	tw.mu.Lock()
@@ -202,6 +210,11 @@ func (tw *TaskWorker) executeChat(ctx context.Context, task Task, result TaskRes
 	}
 	chatReq.Options["num_ctx"] = tw.throttle.OllamaNumCtx(4096)
 
+	// Prepend persona system prompt if one is set on the task.
+	if prompt := ResolvePersonaPrompt(task.Persona); prompt != "" {
+		chatReq.Messages = append([]OllamaChatMessage{{Role: "system", Content: prompt}}, chatReq.Messages...)
+	}
+
 	resp, err := tw.ollama.Chat(ctx, chatReq)
 	if err != nil {
 		result.Status = "failed"
@@ -232,6 +245,11 @@ func (tw *TaskWorker) executeGenerate(ctx context.Context, task Task, result Tas
 		genReq.Options = make(map[string]any)
 	}
 	genReq.Options["num_ctx"] = tw.throttle.OllamaNumCtx(4096)
+
+	// Prepend persona system prompt to the generate prompt if one is set.
+	if prompt := ResolvePersonaPrompt(task.Persona); prompt != "" {
+		genReq.Prompt = prompt + "\n\n" + genReq.Prompt
+	}
 
 	resp, err := tw.ollama.Generate(ctx, genReq)
 	if err != nil {

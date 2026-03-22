@@ -16,18 +16,20 @@ type Server struct {
 	ollama   *OllamaClient
 	throttle *Throttle
 	worker   *TaskWorker
+	learning *LearningStore
 
 	httpServer *http.Server
 }
 
 // NewServer creates the HTTP server with all routes.
-func NewServer(cfg Config, metrics *MetricsCollector, ollama *OllamaClient, throttle *Throttle, worker *TaskWorker) *Server {
+func NewServer(cfg Config, metrics *MetricsCollector, ollama *OllamaClient, throttle *Throttle, worker *TaskWorker, learning *LearningStore) *Server {
 	s := &Server{
 		cfg:      cfg,
 		metrics:  metrics,
 		ollama:   ollama,
 		throttle: throttle,
 		worker:   worker,
+		learning: learning,
 	}
 
 	mux := http.NewServeMux()
@@ -221,6 +223,13 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		s.throttle.Level(),
 		m.TasksCompleted, m.TasksActive,
 	)
+
+	// Append accumulated drone experience so responses reflect actual history.
+	if s.learning != nil {
+		if ctx := s.learning.GetContext(); ctx != "" {
+			systemPrompt += "\n\n---\nYour accumulated operational record (DRONE.md):\n" + ctx
+		}
+	}
 
 	model := "phi4-mini"
 	if len(s.cfg.PreferredModels) > 0 {

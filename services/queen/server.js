@@ -26,6 +26,7 @@ import * as activity from './lib/activity.js';
 import * as approvals from './lib/approvals.js';
 import { deepHealthCheck } from './lib/health.js';
 import * as setup from './lib/setup.js';
+import { initNats, publish as natsPublish, close as natsClose } from './lib/nats.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,6 +46,45 @@ mkdirSync(DATA_DIR, { recursive: true });
 // --- Initialize modules ---
 activity.initActivity(DATA_DIR);
 approvals.initApprovals(DATA_DIR);
+
+// --- NATS JetStream (optional enhancement — Queen works without it) ---
+// initNats() is non-blocking. If NATS is not running, it logs a warning
+// and all subsequent publish calls become silent no-ops.
+initNats().then(() => {
+  // Forward every activity event to NATS hive.activity subject.
+  // The onEvent hook runs on every activity.log() call regardless of
+  // whether that event also gets a targeted publish below.
+  activity.onEvent((entry) => {
+    natsPublish('hive.activity', {
+      ...entry,
+      _source: 'queen',
+    });
+  });
+
+  // Forward approval lifecycle events to targeted subjects.
+  // hive.approval.created   — new item in the queue
+  // hive.approval.resolved  — approved or rejected
+  approvals.onNotify((action, item) => {
+    if (action === 'created') {
+      natsPublish('hive.approval.created', {
+        approval_id: item.id,
+        summary: item.summary || item.type,
+        source_agent: item.source_agent,
+        source_workflow: item.source_workflow,
+        ts: item.created_at,
+      });
+    } else if (action === 'approved' || action === 'rejected') {
+      natsPublish('hive.approval.resolved', {
+        approval_id: item.id,
+        action,
+        summary: item.summary || item.type,
+        ts: new Date().toISOString(),
+      });
+    }
+  });
+}).catch(() => {
+  // initNats resolves even on failure — this catch is a last-resort guard
+});
 
 // --- State ---
 const nodes = new Map();
@@ -339,6 +379,7 @@ app.get('/api/health/deep', async (_req, res) => {
 app.post('/api/hive/halt', async (_req, res) => {
   console.log('[QUEEN] ⚠️  HIVE HALT TRIGGERED — stopping all nodes');
   activity.log({ type: 'hive_halt', reason: 'operator triggered' });
+  natsPublish('hive.hive.halted', { reason: 'operator triggered', ts: new Date().toISOString() });
 
   // Cancel all running workflows
   for (const [id, run] of runningWorkflows) {
@@ -383,6 +424,7 @@ app.post('/api/hive/halt', async (_req, res) => {
 app.post('/api/hive/resume', (_req, res) => {
   console.log('[QUEEN] Hive resuming — nodes will re-register via heartbeat');
   activity.log({ type: 'hive_resume' });
+  natsPublish('hive.hive.resumed', { ts: new Date().toISOString() });
 
   for (const [_nodeId, node] of nodes) {
     if (node.status === 'halted') node.status = 'online';
@@ -409,6 +451,7 @@ app.post('/api/nodes/register', (req, res) => {
   });
 
   activity.log({ type: 'node_registered', node_id, role: config?.role });
+  natsPublish('hive.node.registered', { node_id, role: config?.role, ts: new Date().toISOString() });
   console.log(`[QUEEN] Node registered: ${node_id} (${config?.role || 'unknown'})`);
   if (config?.models?.length) scheduleLitellmSync();
   persistNodes();
@@ -612,6 +655,7 @@ app.post('/api/workflows/:name/execute', async (req, res) => {
   };
 
   activity.log({ type: 'workflow_started', workflow: name, run_id: runId });
+  natsPublish('hive.workflow.started', { workflow: name, run_id: runId, ts: new Date().toISOString() });
 
   // Track the run
   runningWorkflows.set(runId, { name, status: 'running', started_at: new Date().toISOString(), results: {} });
@@ -619,6 +663,7 @@ app.post('/api/workflows/:name/execute', async (req, res) => {
   // Execute asynchronously — don't block the response
   executeWorkflowAsync(runId, spec, context).catch(err => {
     activity.log({ type: 'workflow_error', workflow: name, run_id: runId, error: err.message });
+    natsPublish('hive.workflow.failed', { workflow: name, run_id: runId, error: err.message, ts: new Date().toISOString() });
     const run = runningWorkflows.get(runId);
     if (run) run.status = 'failed';
   });
@@ -937,6 +982,7 @@ async function executeWorkflowAsync(runId, spec, context) {
   run.results = results;
   run.completed_at = new Date().toISOString();
   activity.log({ type: 'workflow_completed', workflow: spec.name, run_id: runId, steps_completed: completed.size });
+  natsPublish('hive.workflow.completed', { workflow: spec.name, run_id: runId, steps_completed: completed.size, ts: run.completed_at });
 }
 
 // Call LLM — model-agnostic via LiteLLM or direct Ollama
@@ -1033,6 +1079,7 @@ const heartbeatInterval = setInterval(() => {
       if (node.status !== 'offline') {
         node.status = 'offline';
         activity.log({ type: 'node_offline', node_id: id });
+        natsPublish('hive.node.offline', { node_id: id, ts: new Date().toISOString() });
         console.log(`[QUEEN] Node ${id} marked OFFLINE`);
       }
     }
@@ -1380,13 +1427,47 @@ app.post('/api/mcp/invoke', async (req, res) => {
 });
 
 // ============================================================
+// mDNS Advertisement — drones auto-discover Queen on the LAN
+// ============================================================
+// Uses bonjour-service (ESM). Wrapped in try/catch so a missing
+// package never brings down the Queen.
+// ============================================================
+
+let bonjourInstance = null;
+let bonjourService = null;
+
+try {
+  const { Bonjour } = await import('bonjour-service');
+  bonjourInstance = new Bonjour();
+} catch (err) {
+  console.warn(`[QUEEN] mDNS unavailable — bonjour-service not installed (${err.message})`);
+  console.warn('[QUEEN] Run: npm install   to enable zero-config drone discovery');
+}
+
+// ============================================================
 // Graceful Shutdown
 // ============================================================
 
-function shutdown() {
+async function shutdown() {
   console.log('\n[QUEEN] Shutting down...');
   clearInterval(heartbeatInterval);
+
+  // Unpublish mDNS advertisement so drones stop finding a dead Queen
+  if (bonjourService) {
+    try {
+      bonjourService.stop(() => {
+        if (bonjourInstance) bonjourInstance.destroy();
+      });
+    } catch (err) {
+      console.warn(`[QUEEN] mDNS unpublish error: ${err.message}`);
+    }
+  } else if (bonjourInstance) {
+    try { bonjourInstance.destroy(); } catch { /* best effort */ }
+  }
+
   activity.log({ type: 'queen_shutdown' });
+  // Drain NATS before exit so in-flight publishes flush cleanly
+  await natsClose().catch(() => {});
   process.exit(0);
 }
 
@@ -1618,4 +1699,21 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[QUEEN] Scheduled:  ${scheduledTasks.size} tasks`);
   console.log(`[QUEEN] Data dir:   ${DATA_DIR}`);
   console.log(`[QUEEN] MCP roots:  ${MCP_FS_ROOTS.join(', ')}`);
+
+  // Advertise on mDNS so drones can find Queen without --queen flag
+  if (bonjourInstance) {
+    try {
+      bonjourService = bonjourInstance.publish({
+        name: 'borgclaw-queen',
+        type: 'borgclaw',
+        port: PORT,
+      });
+      bonjourService.on('error', (err) => {
+        console.warn(`[QUEEN] mDNS advertisement error: ${err.message}`);
+      });
+      console.log(`[QUEEN] mDNS:       advertising _borgclaw._tcp on port ${PORT}`);
+    } catch (err) {
+      console.warn(`[QUEEN] mDNS advertisement failed: ${err.message}`);
+    }
+  }
 });
