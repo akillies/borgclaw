@@ -45,20 +45,33 @@ def validate_task(task: dict) -> None:
 
 def build_llm(queen_url: str, hive_secret: str | None, model: str = "gpt-4o"):
     """
-    Build a ChatOpenAI instance pointed at the Queen's LiteLLM proxy.
+    Build an LLM instance pointed at the Queen's LiteLLM proxy (or direct Ollama).
     No local inference — all reasoning is remote.
     """
+    import os
+    os.environ["OPENAI_API_KEY"] = hive_secret if hive_secret else "borgclaw-ghost"
+    os.environ["OPENAI_BASE_URL"] = queen_url
+
     from langchain_openai import ChatOpenAI
 
-    # LiteLLM accepts the OpenAI key format — secret is passed as api_key
-    api_key = hive_secret if hive_secret else "borgclaw-ghost"
+    # browser-use monkeypatches .provider and .ainvoke onto the LLM.
+    # Pydantic v2 blocks setattr/getattr on undefined fields.
+    # Subclass with extra="allow" so browser-use can do its thing.
+    class BorgClawLLM(ChatOpenAI):
+        model_config = {**ChatOpenAI.model_config, "extra": "allow"}
+        provider: str = "openai"
 
-    return ChatOpenAI(
+        @property
+        def model(self):
+            return self.model_name
+
+    llm = BorgClawLLM(
         model=model,
         base_url=queen_url,
-        api_key=api_key,
+        api_key=os.environ["OPENAI_API_KEY"],
         temperature=0.0,
     )
+    return llm
 
 
 async def run_browser_task(task: dict) -> dict:
@@ -80,6 +93,7 @@ async def run_browser_task(task: dict) -> dict:
         task=goal,
         llm=llm,
         max_failures=3,
+        calculate_cost=False,
     )
 
     history = await agent.run(max_steps=max_steps)
