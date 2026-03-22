@@ -134,6 +134,35 @@ services:
     network_mode: host
     restart: unless-stopped
 
+  # ============================================================
+  # Prometheus — Scrapes /metrics/prom on Queen (9090) and drones (9091+)
+  # UI at http://localhost:9099 (mapped away from Queen's own 9090)
+  # ============================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: borgclaw-prometheus
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9099:9090"
+    restart: unless-stopped
+
+  # ============================================================
+  # Grafana — Dashboards for hive observability
+  # UI at http://localhost:3000  login: admin / borgclaw
+  # Add Prometheus datasource: http://prometheus:9090
+  # ============================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: borgclaw-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=borgclaw
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
 volumes:
   nats-data:
     driver: local

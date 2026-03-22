@@ -1,0 +1,14 @@
+global:
+  scrape_interval: 30s
+
+scrape_configs:
+  # Queen node — Go server on the host (port 9090)
+  - job_name: 'borgclaw-queen'
+    static_configs:
+      - targets: ['host.docker.internal:9090']
+
+  # Drone nodes — default drone port (9091)
+  # Dynamic discovery is a future enhancement; add drone IPs/ports here as needed.
+  - job_name: 'borgclaw-drones'
+    static_configs:
+      - targets: ['host.docker.internal:9091']

@@ -65,6 +65,9 @@ func NewServer(cfg Config, metrics *MetricsCollector, ollama *OllamaClient, thro
 	// Metrics history — for sparkline rendering
 	mux.HandleFunc("GET /metrics/history", s.handleMetricsHistory)
 
+	// Prometheus text-format metrics — scraped by Prometheus every 30s
+	mux.HandleFunc("GET /metrics/prom", s.handleMetricsProm)
+
 	// Task submission — Queen sends work here
 	mux.HandleFunc("POST /task", s.handleTask)
 
@@ -78,6 +81,9 @@ func NewServer(cfg Config, metrics *MetricsCollector, ollama *OllamaClient, thro
 	// Chat — talk to the drone directly; it responds from its own context
 	mux.HandleFunc("POST /chat", s.handleChat)
 
+	// Knowledge — offline ZIM pack search
+	mux.HandleFunc("GET /knowledge/search", s.handleKnowledgeSearch)
+
 	// Auth middleware — check hive secret if configured
 	var handler http.Handler = mux
 	if cfg.HiveSecret != "" {
@@ -85,7 +91,7 @@ func NewServer(cfg Config, metrics *MetricsCollector, ollama *OllamaClient, thro
 			// Public endpoints — no auth required.
 			// /chat is exempt so the drone's own BBS page can talk to it
 			// without the secret appearing in the HTML.
-			if r.URL.Path == "/" || r.URL.Path == "/health" || r.URL.Path == "/chat" {
+			if r.URL.Path == "/" || r.URL.Path == "/health" || r.URL.Path == "/chat" || r.URL.Path == "/metrics/prom" {
 				mux.ServeHTTP(w, r)
 				return
 			}
@@ -335,9 +341,100 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"contribution": s.throttle.Level(),
 		"models":       modelNames,
 		"stats": map[string]any{
-			"requests":       requests,
-			"total_tokens":   tokens,
+			"requests":        requests,
+			"total_tokens":    tokens,
 			"avg_tok_per_sec": avgTok,
 		},
 	})
+}
+
+// handleKnowledgeSearch handles GET /knowledge/search?q=...&domain=...
+//
+// Response shape:
+//
+//	{
+//	  "domain": "wikipedia-mini",   // echoed from ?domain= param (may be empty)
+//	  "results": [
+//	    { "title": "...", "snippet": "...", "source": "wikipedia-mini" }
+//	  ],
+//	  "pack_count": 2,              // total ZIM packs installed on this drone
+//	  "message": "..."             // only present when no packs are installed
+//	}
+func (s *Server) handleKnowledgeSearch(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	domain := r.URL.Query().Get("domain")
+
+	if query == "" {
+		http.Error(w, `{"error":"q parameter required"}`, 400)
+		return
+	}
+
+	domains := ScanKnowledgeDomains(s.cfg.KnowledgeDir)
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if len(domains) == 0 {
+		json.NewEncoder(w).Encode(map[string]any{
+			"domain":     domain,
+			"results":    []any{},
+			"pack_count": 0,
+			"message":    "No knowledge packs installed. Add .zim files to " + s.cfg.KnowledgeDir,
+		})
+		return
+	}
+
+	results, err := SearchKnowledge(s.cfg.KnowledgeDir, query, domain)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"knowledge search failed: %v"}`, err), 500)
+		return
+	}
+
+	if results == nil {
+		results = []KnowledgeResult{}
+	}
+
+	json.NewEncoder(w).Encode(map[string]any{
+		"domain":     domain,
+		"results":    results,
+		"pack_count": len(domains),
+	})
+}
+
+// handleMetricsProm returns a Prometheus text-format exposition of the node's
+// current telemetry. No external library needed — the format is trivial to
+// produce by hand for a handful of gauges and counters.
+func (s *Server) handleMetricsProm(w http.ResponseWriter, r *http.Request) {
+	m := s.metrics.Current()
+	id := s.cfg.NodeID
+
+	// RAM used in bytes (collector stores MB for JSON; convert back)
+	ramUsedBytes := m.RAMUsedMB * 1024 * 1024
+
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	fmt.Fprintf(w,
+		"# HELP borgclaw_drone_cpu_percent CPU utilization\n"+
+			"# TYPE borgclaw_drone_cpu_percent gauge\n"+
+			"borgclaw_drone_cpu_percent{node_id=%q} %g\n"+
+			"\n"+
+			"# HELP borgclaw_drone_ram_used_bytes RAM used\n"+
+			"# TYPE borgclaw_drone_ram_used_bytes gauge\n"+
+			"borgclaw_drone_ram_used_bytes{node_id=%q} %d\n"+
+			"\n"+
+			"# HELP borgclaw_drone_tasks_completed Total tasks completed\n"+
+			"# TYPE borgclaw_drone_tasks_completed counter\n"+
+			"borgclaw_drone_tasks_completed{node_id=%q} %d\n"+
+			"\n"+
+			"# HELP borgclaw_drone_tokens_per_sec Current inference speed\n"+
+			"# TYPE borgclaw_drone_tokens_per_sec gauge\n"+
+			"borgclaw_drone_tokens_per_sec{node_id=%q} %g\n"+
+			"\n"+
+			"# HELP borgclaw_drone_contribution Contribution dial level\n"+
+			"# TYPE borgclaw_drone_contribution gauge\n"+
+			"borgclaw_drone_contribution{node_id=%q} %d\n",
+		id, m.CPUPercent,
+		id, ramUsedBytes,
+		id, m.TasksCompleted,
+		id, m.AvgTokPerSec,
+		id, s.throttle.Level(),
+	)
 }

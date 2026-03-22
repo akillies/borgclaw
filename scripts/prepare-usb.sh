@@ -245,7 +245,8 @@ mkdir -p \
   "$CLAW_DIR/models" \
   "$CLAW_DIR/config" \
   "$CLAW_DIR/lightpanda" \
-  "$CLAW_DIR/browser-worker"
+  "$CLAW_DIR/browser-worker" \
+  "$CLAW_DIR/knowledge"
 
 # ============================================================
 # Copy binary
@@ -294,6 +295,77 @@ BorgClaw browser-worker tasks require Lightpanda or Chromium.
 Set BORGCLAW_BROWSER_WORKER env var to your worker.py path.
 LP
 ok "Lightpanda placeholder created"
+
+# ============================================================
+# Knowledge pack directory (scholar + arsenal profiles)
+# ============================================================
+# A knowledge/ directory is always created. For scholar and
+# arsenal profiles the README explains recommended ZIM packs.
+# The operator drops .zim files into ~/.config/borgclaw/knowledge/
+# on the target machine; the drone auto-detects them on boot.
+# ============================================================
+
+KNOWLEDGE_README="$CLAW_DIR/knowledge/README.txt"
+
+if [ "$PROFILE" = "scholar" ] || [ "$PROFILE" = "arsenal" ]; then
+  cat > "$KNOWLEDGE_README" << 'KREADME'
+BorgClaw Knowledge Packs
+========================
+This directory holds offline knowledge packs for the Scholar/Arsenal drone.
+
+SETUP:
+  Copy .zim files here before deployment, then the setup.sh script will
+  install them to ~/.config/borgclaw/knowledge/ on the target machine.
+
+  Alternatively, after running setup.sh, add .zim files directly to:
+    ~/.config/borgclaw/knowledge/
+
+  The drone scans this directory on boot and every heartbeat, then
+  reports available domains to the Queen. No restart required.
+
+RECOMMENDED PACKS (download from library.kiwix.org):
+  WikiMed-mini        — Medical reference, offline (~100MB)
+                        https://library.kiwix.org  →  search "wikimed mini"
+  wikipedia_en_simple — Wikipedia Simple English (~1GB)
+                        Good for general queries without the full 20GB dump
+  devdocs             — Developer documentation for common languages/frameworks
+                        https://library.kiwix.org  →  search "devdocs"
+  stackoverflow       — Stack Overflow top answers (~10GB or mini ~800MB)
+  gutenberg           — Project Gutenberg full-text library
+
+NAMING:
+  The domain name Queen sees is the filename without .zim extension.
+  "wikimed-mini.zim"        → domain "wikimed-mini"
+  "wikipedia_en_simple.zim" → domain "wikipedia_en_simple"
+
+QUEEN ROUTING:
+  Send tasks with "required_domain" to route to drones with that pack:
+    POST /api/tasks/dispatch
+    { "required_domain": "wikimed-mini", ... }
+
+  See which drones have which packs:
+    GET /api/tasks/knowledge-nodes
+
+MORE INFO: docs/KNOWLEDGE-PACKS.md in the BorgClaw source repo.
+KREADME
+  ok "Knowledge README written (${PROFILE} profile — ZIM packs recommended)"
+else
+  cat > "$KNOWLEDGE_README" << 'KREADME'
+BorgClaw Knowledge Packs
+========================
+This directory is a placeholder for offline knowledge packs (.zim files).
+
+The scout and worker profiles do not require knowledge packs, but you can
+add them anytime. Drop .zim files into ~/.config/borgclaw/knowledge/ on
+the target machine — the drone auto-detects them.
+
+Upgrade to the scholar profile for recommended pack suggestions:
+  ./scripts/prepare-usb.sh <drive> --profile scholar
+
+More info: docs/KNOWLEDGE-PACKS.md in the BorgClaw source repo.
+KREADME
+  ok "Knowledge directory created (${PROFILE} profile — no packs required)"
+fi
 
 # ============================================================
 # Cache models (profile-specific)
@@ -481,7 +553,24 @@ if [ -d "$SCRIPT_DIR/browser-worker" ]; then
   ok "browser-worker scripts installed"
 fi
 
-# Step 7: Start The Claw
+# Step 7: Copy knowledge packs if present on the drive
+KNOWLEDGE_DIR="$HOME/.config/borgclaw/knowledge"
+mkdir -p "$KNOWLEDGE_DIR"
+ZIM_COUNT=0
+if [ -d "$SCRIPT_DIR/knowledge" ]; then
+  for zim in "$SCRIPT_DIR/knowledge"/*.zim; do
+    [ -f "$zim" ] || continue
+    cp "$zim" "$KNOWLEDGE_DIR/"
+    ZIM_COUNT=$((ZIM_COUNT + 1))
+  done
+fi
+if [ "$ZIM_COUNT" -gt 0 ]; then
+  ok "Knowledge packs installed: $ZIM_COUNT .zim file(s) → $KNOWLEDGE_DIR"
+else
+  info "No .zim files on drive — add packs to $KNOWLEDGE_DIR to enable offline knowledge"
+fi
+
+# Step 9: Start The Claw
 info "Starting The Claw..."
 "$INSTALL_DIR/the-claw" --config "$CLAW_CONFIG_DIR/drone.json" &
 
@@ -577,6 +666,7 @@ echo "    THE-CLAW/the-claw         — Node binary (Linux amd64)"
 echo "    THE-CLAW/models/          — Pre-cached LLM models (${PROFILE})"
 echo "    THE-CLAW/browser-worker/  — Python browser task worker"
 echo "    THE-CLAW/lightpanda/      — Lightpanda placeholder (install on target)"
+echo "    THE-CLAW/knowledge/       — Offline ZIM knowledge packs (drop .zim files here)"
 echo "    THE-CLAW/config/          — Queen URL: http://${QUEEN_IP}:9090"
 echo "    THE-CLAW/README.txt       — Instructions"
 echo ""

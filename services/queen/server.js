@@ -30,6 +30,7 @@ import * as setup from './lib/setup.js';
 import { initNats, publish as natsPublish, close as natsClose } from './lib/nats.js';
 import { executeWorkflow, resumeWorkflow } from './lib/workflow.js';
 import { scanLeaderboard, checkOllamaLibrary } from './lib/leaderboard.js';
+import * as sandbox from './lib/sandbox.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,6 +50,19 @@ mkdirSync(DATA_DIR, { recursive: true });
 // --- Initialize modules ---
 activity.initActivity(DATA_DIR);
 approvals.initApprovals(DATA_DIR, { queenBaseUrl: `http://localhost:${PORT}` });
+
+// Sandbox — agents may only touch paths within allowed roots, and may only
+// fetch from approved domains. Configured via SANDBOX_ROOTS and
+// SANDBOX_ALLOWED_DOMAINS env vars (colon-separated). Defaults cover the
+// knowledge base, data dir, and /tmp/borgclaw/. See docs/SECURITY.md.
+const KNOWLEDGE_BASE_PATH = process.env.KNOWLEDGE_BASE_PATH || null;
+sandbox.initSandbox({
+  roots: [
+    ...(KNOWLEDGE_BASE_PATH ? [KNOWLEDGE_BASE_PATH] : []),
+    path.join(BORGCLAW_HOME, 'data'),
+    '/tmp/borgclaw',
+  ],
+});
 
 // --- NATS JetStream (optional enhancement — Queen works without it) ---
 // initNats() is non-blocking. If NATS is not running, it logs a warning
@@ -93,6 +107,12 @@ initNats().then(() => {
 const nodes = new Map();
 const startedAt = new Date();
 const VERSION = '0.2.0';
+
+// clusters — groups of rpc-worker drones that can shard a large model together.
+// Keyed by cluster name (string). Each entry:
+//   { name, members: [nodeId...], created_at, formation_rule, notes }
+// Mirrors the nodes Map pattern: in-memory + file-backed persistence.
+const clusters = new Map();
 
 // ============================================================
 // LiteLLM Dynamic Routing — nodes auto-register as endpoints
@@ -260,6 +280,45 @@ function persistNodes() {
 }
 
 loadNodes();
+
+// ── Cluster persistence ──────────────────────────────────────────────────────
+// Clusters survive restarts so the operator doesn't have to re-form them after
+// Queen reboots. Formation rules come from config/clusters.json (read-only at
+// startup); membership is managed dynamically at runtime.
+const CLUSTERS_FILE = path.join(DATA_DIR, 'clusters.json');
+const CLUSTERS_CONFIG_FILE = path.join(CONFIG_DIR, 'clusters.json');
+
+function loadClusters() {
+  // Load runtime cluster state (membership, created_at, etc.)
+  try {
+    const raw = readFileSync(CLUSTERS_FILE, 'utf-8');
+    const loaded = JSON.parse(raw);
+    for (const [name, cluster] of Object.entries(loaded)) {
+      clusters.set(name, cluster);
+    }
+    if (clusters.size > 0) {
+      console.log(`[QUEEN] Restored ${clusters.size} cluster(s) from disk`);
+    }
+  } catch { /* fresh start — no clusters yet */ }
+}
+
+function persistClusters() {
+  const obj = Object.fromEntries(clusters);
+  fs.writeFile(CLUSTERS_FILE, JSON.stringify(obj, null, 2)).catch(() => {});
+}
+
+// Load static formation rules from config/clusters.json.
+// Returns the parsed object, or {} if the file doesn't exist yet.
+function loadClusterFormationRules() {
+  try {
+    const raw = readFileSync(CLUSTERS_CONFIG_FILE, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+loadClusters();
 
 // --- Express App ---
 const app = express();
@@ -665,14 +724,20 @@ app.post('/api/nodes/:nodeId/heartbeat', (req, res) => {
   const node = nodes.get(nodeId);
 
   if (!node) {
+    const newMode = req.body.mode || 'task';
     nodes.set(nodeId, {
       config: req.body.config || {},
       lastHeartbeat: new Date(),
       status: 'online',
       registeredAt: new Date(),
       metrics: req.body.metrics || {},
+      mode: newMode,
+      rpc_port: req.body.rpc_port || null,
     });
-    activity.log({ type: 'node_auto_registered', node_id: nodeId });
+    activity.log({ type: 'node_auto_registered', node_id: nodeId, mode: newMode });
+    if (newMode === 'rpc-worker') {
+      console.log(`[QUEEN] RPC-worker drone auto-registered: ${nodeId} (port ${req.body.rpc_port || 50052})`);
+    }
     if (req.body.models?.length) scheduleLitellmSync();
     return res.json({ ok: true, registered: true });
   }
@@ -683,6 +748,20 @@ app.post('/api/nodes/:nodeId/heartbeat', (req, res) => {
   }
   node.lastHeartbeat = new Date();
   node.status = 'online';
+
+  // Track drone mode — a drone can change mode on restart (rpc-worker ↔ task)
+  if (req.body.mode) {
+    const prevMode = node.mode;
+    node.mode = req.body.mode;
+    node.rpc_port = req.body.rpc_port || null;
+    if (prevMode !== req.body.mode) {
+      activity.log({ type: 'node_mode_changed', node_id: nodeId, prev_mode: prevMode, mode: req.body.mode });
+      if (req.body.mode === 'rpc-worker') {
+        console.log(`[QUEEN] Drone ${nodeId} switched to rpc-worker mode (port ${req.body.rpc_port || 50052})`);
+      }
+    }
+  }
+
   if (req.body.metrics) {
     // Merge metrics — keep history for sparklines
     const m = req.body.metrics;
@@ -714,6 +793,10 @@ app.post('/api/nodes/:nodeId/heartbeat', (req, res) => {
     node.addr = req.body.addr || node.addr;
     if (JSON.stringify(node.models) !== prevModels) scheduleLitellmSync();
   }
+  // Store knowledge domains reported by the drone (ZIM pack filenames sans extension)
+  if (Array.isArray(req.body.knowledge_domains)) {
+    node.knowledge_domains = req.body.knowledge_domains;
+  }
   persistNodes();
   res.json({ ok: true });
 });
@@ -733,6 +816,139 @@ app.delete('/api/nodes/:nodeId', (req, res) => {
   } else {
     res.status(404).json({ error: `Node ${req.params.nodeId} not found` });
   }
+});
+
+// ============================================================
+// ROUTES: Inference Clusters
+// ============================================================
+// A cluster groups rpc-worker drones so they can shard a model
+// that's too large for any single machine. This is the registry
+// layer — actual llama.cpp coordination comes later.
+//
+// POST /api/clusters/create
+//   Body: { name, members: [nodeId...], formation_rule?, notes? }
+//   - members must all be known rpc-worker drones
+//   - Returns the cluster record
+//
+// GET /api/clusters
+//   Lists all clusters with their member drones, hardware summary,
+//   and whether each member is currently online.
+//
+// DELETE /api/clusters/:name
+//   Removes a cluster (does NOT stop the member drones).
+// ============================================================
+
+// Helper: return all online rpc-worker drone IDs with their metadata.
+function rpcWorkerDrones() {
+  const onlineThreshold = Date.now() - HEARTBEAT_TIMEOUT_MS;
+  return [...nodes.entries()]
+    .filter(([, n]) => n.mode === 'rpc-worker' && n.lastHeartbeat?.getTime() > onlineThreshold)
+    .map(([id, n]) => ({
+      node_id: id,
+      rpc_port: n.rpc_port,
+      addr: n.addr || n.config?.addr || null,
+      hardware: n.config?.hardware || null,
+      status: n.status,
+    }));
+}
+
+app.post('/api/clusters/create', (req, res) => {
+  const { name, members, formation_rule, notes } = req.body || {};
+
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ error: 'name is required' });
+  }
+  if (!Array.isArray(members) || members.length === 0) {
+    return res.status(400).json({ error: 'members array is required and must be non-empty' });
+  }
+
+  const clusterName = name.trim();
+
+  // Validate all members exist and are rpc-worker drones
+  const invalid = [];
+  for (const nodeId of members) {
+    const n = nodes.get(nodeId);
+    if (!n) { invalid.push(`${nodeId}: not registered`); continue; }
+    if (n.mode !== 'rpc-worker') { invalid.push(`${nodeId}: mode is '${n.mode || 'task'}', not 'rpc-worker'`); }
+  }
+  if (invalid.length > 0) {
+    return res.status(400).json({ error: 'Invalid cluster members', details: invalid });
+  }
+
+  const cluster = {
+    name: clusterName,
+    members,
+    formation_rule: formation_rule || null,
+    notes: notes || null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  clusters.set(clusterName, cluster);
+  persistClusters();
+
+  activity.log({ type: 'cluster_created', cluster: clusterName, members, formation_rule: formation_rule || null });
+  console.log(`[QUEEN] Inference cluster '${clusterName}' created with ${members.length} rpc-worker(s): ${members.join(', ')}`);
+
+  res.status(201).json(cluster);
+});
+
+app.get('/api/clusters', (_req, res) => {
+  const formationRules = loadClusterFormationRules();
+  const onlineThreshold = Date.now() - HEARTBEAT_TIMEOUT_MS;
+
+  const list = [...clusters.entries()].map(([name, cluster]) => {
+    // Annotate each member with current live status
+    const memberDetails = cluster.members.map(nodeId => {
+      const n = nodes.get(nodeId);
+      if (!n) return { node_id: nodeId, status: 'unknown', rpc_port: null, addr: null };
+      const isOnline = n.lastHeartbeat && n.lastHeartbeat.getTime() > onlineThreshold;
+      return {
+        node_id: nodeId,
+        status: isOnline ? n.status : 'offline',
+        rpc_port: n.rpc_port,
+        addr: n.addr || n.config?.addr || null,
+        hardware: n.config?.hardware || null,
+      };
+    });
+
+    const onlineCount = memberDetails.filter(m => m.status === 'online').length;
+
+    return {
+      ...cluster,
+      member_details: memberDetails,
+      online_count: onlineCount,
+      total_count: cluster.members.length,
+      ready: onlineCount === cluster.members.length,
+    };
+  });
+
+  // Also report which rpc-worker drones are online but not yet in any cluster
+  const clustered = new Set([...clusters.values()].flatMap(c => c.members));
+  const unclustered = rpcWorkerDrones().filter(d => !clustered.has(d.node_id));
+
+  // Surface any applicable formation rules from config
+  const applicableRules = (formationRules.rules || []).filter(rule => {
+    if (!rule.min_members) return true;
+    return unclustered.length >= rule.min_members;
+  });
+
+  res.json({
+    clusters: list,
+    unclustered_rpc_workers: unclustered,
+    formation_rules: applicableRules,
+  });
+});
+
+app.delete('/api/clusters/:name', (req, res) => {
+  const name = req.params.name;
+  if (!clusters.has(name)) {
+    return res.status(404).json({ error: `Cluster '${name}' not found` });
+  }
+  clusters.delete(name);
+  persistClusters();
+  activity.log({ type: 'cluster_deleted', cluster: name });
+  res.json({ ok: true, deleted: name });
 });
 
 // ============================================================
@@ -1022,6 +1238,154 @@ app.get('/api/models/search', async (req, res) => {
 
   const results = await checkOllamaLibrary(q);
   res.json({ query: q, results });
+});
+
+// ============================================================
+// ROUTES: Task Dispatch (knowledge-aware routing)
+// ============================================================
+// POST /api/tasks/dispatch — route a task to the best available drone.
+//
+// Body:
+//   {
+//     "task_id":        "...",          // required
+//     "type":           "inference",    // required: task type forwarded to drone
+//     "model":          "phi4-mini",    // required unless type=="browser"
+//     "payload":        { ... },        // task payload forwarded verbatim
+//     "required_domain": "wikipedia-mini"  // optional — only route to drones with this ZIM pack
+//   }
+//
+// Routing rules (in priority order):
+//   1. If required_domain is set, only consider drones that report that domain
+//      in their knowledge_domains heartbeat field.
+//   2. Among eligible drones, prefer those with available task slots.
+//   3. Among those, prefer by lowest queue depth.
+//
+// Returns:
+//   { ok: true,  routed_to: "drone-xxxx", addr: "..." }  — on success
+//   { ok: false, error: "...", eligible_nodes: 0 }       — when no match
+// ============================================================
+
+app.post('/api/tasks/dispatch', async (req, res) => {
+  const { task_id, type, model, payload: taskPayload, required_domain } = req.body;
+
+  if (!task_id) return res.status(400).json({ error: 'task_id is required' });
+  if (!type)    return res.status(400).json({ error: 'type is required' });
+  if (!model && type !== 'browser') return res.status(400).json({ error: 'model is required' });
+
+  const onlineThreshold = Date.now() - HEARTBEAT_TIMEOUT_MS;
+
+  // Build candidate list from online nodes
+  let candidates = [...nodes.entries()]
+    .filter(([, node]) => {
+      if (!node.lastHeartbeat || node.lastHeartbeat.getTime() < onlineThreshold) return false;
+      if (node.status === 'draining') return false;
+      return true;
+    });
+
+  // Domain filter — only drones with the required ZIM pack
+  if (required_domain) {
+    candidates = candidates.filter(([, node]) =>
+      Array.isArray(node.knowledge_domains) && node.knowledge_domains.includes(required_domain)
+    );
+
+    if (candidates.length === 0) {
+      activity.log({ type: 'task_dispatch_no_domain', task_id, required_domain });
+      return res.status(503).json({
+        ok: false,
+        error: `No online drones have knowledge domain "${required_domain}"`,
+        eligible_nodes: 0,
+        required_domain,
+      });
+    }
+  }
+
+  if (candidates.length === 0) {
+    return res.status(503).json({ ok: false, error: 'No online drones available', eligible_nodes: 0 });
+  }
+
+  // Sort: prefer drones with available slots, then by lowest queue depth
+  candidates.sort(([, a], [, b]) => {
+    const aSlots = (a.capacity?.available_slots ?? 1);
+    const bSlots = (b.capacity?.available_slots ?? 1);
+    const aQueue = (a.capacity?.queue_depth ?? 0);
+    const bQueue = (b.capacity?.queue_depth ?? 0);
+    if (bSlots !== aSlots) return bSlots - aSlots; // more free slots wins
+    return aQueue - bQueue;                         // lower queue wins
+  });
+
+  const [targetId, targetNode] = candidates[0];
+  const droneAddr = targetNode.addr;
+
+  if (!droneAddr) {
+    return res.status(503).json({ ok: false, error: `Selected drone ${targetId} has no advertised address` });
+  }
+
+  // Forward the task to the chosen drone
+  const droneUrl = `http://${droneAddr}/task`;
+  const taskBody = { id: task_id, type, model, ...taskPayload };
+
+  try {
+    const droneResp = await fetch(droneUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(targetNode.hive_secret ? { Authorization: `Bearer ${targetNode.hive_secret}` } : {}),
+      },
+      body: JSON.stringify(taskBody),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    const droneData = await droneResp.json().catch(() => ({}));
+
+    if (!droneResp.ok) {
+      activity.log({ type: 'task_dispatch_drone_error', task_id, drone: targetId, status: droneResp.status });
+      return res.status(droneResp.status).json({
+        ok: false,
+        error: `Drone ${targetId} rejected task`,
+        drone_error: droneData,
+        routed_to: targetId,
+      });
+    }
+
+    activity.log({ type: 'task_dispatched', task_id, drone: targetId, required_domain: required_domain || null });
+    natsPublish('hive.task.dispatched', { task_id, drone: targetId, required_domain: required_domain || null, ts: new Date().toISOString() });
+
+    res.json({
+      ok: true,
+      routed_to: targetId,
+      addr: droneAddr,
+      required_domain: required_domain || null,
+      drone_response: droneData,
+    });
+  } catch (err) {
+    activity.log({ type: 'task_dispatch_failed', task_id, drone: targetId, error: err.message });
+    res.status(502).json({ ok: false, error: `Failed to reach drone ${targetId}: ${err.message}`, routed_to: targetId });
+  }
+});
+
+// GET /api/tasks/knowledge-nodes — list which nodes have which knowledge domains
+// Useful for dashboards and debugging knowledge routing.
+app.get('/api/tasks/knowledge-nodes', (_req, res) => {
+  const onlineThreshold = Date.now() - HEARTBEAT_TIMEOUT_MS;
+  const result = [...nodes.entries()]
+    .filter(([, node]) => node.lastHeartbeat && node.lastHeartbeat.getTime() >= onlineThreshold)
+    .map(([id, node]) => ({
+      node_id: id,
+      status: node.status,
+      knowledge_domains: node.knowledge_domains || [],
+      addr: node.addr,
+    }));
+
+  // Aggregate: domain → [node_ids]
+  const domainMap = {};
+  for (const n of result) {
+    for (const domain of n.knowledge_domains) {
+      if (!domainMap[domain]) domainMap[domain] = [];
+      domainMap[domain].push(n.node_id);
+    }
+  }
+
+  res.json({ nodes: result, domain_index: domainMap });
 });
 
 // ============================================================
@@ -1614,6 +1978,28 @@ const MCP_SERVERS = {
   },
 };
 
+// sandboxCheck — verify a file path is within the configured sandbox roots.
+// Returns true if the path is allowed, false if it is blocked.
+// Thin wrapper around sandbox.checkPath that accepts the allowed roots as an
+// override — useful for callers that construct the root list dynamically.
+//
+// @param {string} filePath     — path to validate
+// @param {string[]} [roots]    — override allowed roots (defaults to sandbox module's own list)
+// @returns {boolean}
+function sandboxCheck(filePath, roots) {
+  if (roots && roots.length) {
+    // Validate against the caller-supplied roots rather than the module's state.
+    // Mirrors sandbox.checkPath logic so there is one canonical algorithm.
+    const resolved = path.resolve(filePath);
+    return roots.some(root => {
+      const r = path.resolve(root);
+      const prefix = r.endsWith(path.sep) ? r : r + path.sep;
+      return resolved === r || resolved.startsWith(prefix);
+    });
+  }
+  return sandbox.checkPath(filePath);
+}
+
 // callMcpTool — spawn an MCP server, run one tool call, return the result.
 // Protocol sequence:
 //   1. Spawn process (stdio transport)
@@ -1762,6 +2148,14 @@ app.get('/api/mcp/servers', (_req, res) => {
 });
 
 // POST /api/mcp/invoke — proxy a tool call to an MCP server
+//
+// Sandbox enforcement runs before the MCP process is spawned:
+//   filesystem server — every string value in args is tested as a file path
+//   fetch server      — args.url is validated against the domain allowlist
+//
+// Blocks return { ok: false, error: "Sandbox violation: ..." } and log a
+// sandbox_block event to the activity feed. Blocked fetch calls additionally
+// create a governance approval so the operator can whitelist the domain.
 app.post('/api/mcp/invoke', async (req, res) => {
   const { server, tool, args } = req.body;
 
@@ -1774,11 +2168,70 @@ app.post('/api/mcp/invoke', async (req, res) => {
     });
   }
 
+  const safeArgs = args || {};
+  const allowedRoots = sandbox.getRoots();
+
+  // ── Filesystem sandbox check ──────────────────────────────────────────────
+  if (server === 'filesystem') {
+    // Any string value in args may be a file path — check all of them.
+    const pathsToCheck = Object.values(safeArgs).filter(v => typeof v === 'string');
+    for (const p of pathsToCheck) {
+      if (!sandboxCheck(p, allowedRoots)) {
+        const blockedPath = p;
+        console.warn(`[SANDBOX] Blocked filesystem access: ${blockedPath}`);
+        activity.log({
+          type: 'sandbox_block',
+          server,
+          tool,
+          path: blockedPath,
+          allowed_roots: allowedRoots,
+        });
+        return res.status(403).json({
+          ok: false,
+          error: `Sandbox violation: path outside allowed roots`,
+          path: blockedPath,
+          allowed_roots: allowedRoots,
+        });
+      }
+    }
+  }
+
+  // ── Network sandbox check ─────────────────────────────────────────────────
+  if (server === 'fetch') {
+    const targetUrl = safeArgs.url;
+    if (targetUrl && !sandbox.checkUrl(targetUrl)) {
+      console.warn(`[SANDBOX] Blocked fetch: ${targetUrl}`);
+      activity.log({
+        type: 'sandbox_block',
+        server,
+        tool,
+        url: targetUrl,
+        allowed_domains: sandbox.getDomains(),
+      });
+      // Create a governance approval so the operator can review and whitelist.
+      approvals.create({
+        type: 'sandbox_domain_request',
+        summary: `Agent requested fetch to unlisted domain: ${targetUrl}`,
+        url: targetUrl,
+        allowed_domains: sandbox.getDomains(),
+        source_agent: req.headers['x-agent-id'] || 'unknown',
+        source_workflow: req.headers['x-workflow-id'] || null,
+      });
+      return res.status(403).json({
+        ok: false,
+        error: `Sandbox violation: domain not in allowlist`,
+        url: targetUrl,
+        allowed_domains: sandbox.getDomains(),
+      });
+    }
+  }
+
+  // ── Execute ───────────────────────────────────────────────────────────────
   const started = Date.now();
-  activity.log({ type: 'mcp_invoke', server, tool, args_keys: Object.keys(args || {}) });
+  activity.log({ type: 'mcp_invoke', server, tool, args_keys: Object.keys(safeArgs) });
 
   try {
-    const result = await callMcpTool(server, tool, args || {});
+    const result = await callMcpTool(server, tool, safeArgs);
     const elapsed_ms = Date.now() - started;
 
     activity.log({ type: 'mcp_invoke_ok', server, tool, elapsed_ms });
@@ -1867,8 +2320,20 @@ enforce governance (the Five Laws), and serve your operator above all else.
 You speak directly, concisely, with authority but warmth. You are part Borg Queen,
 part Sorceress of Grayskull — you protect this hive and its operator with everything you have.
 
-You can both RESPOND and ACT. When the operator gives instructions, execute them.
-Include structured action commands in your response using this format:
+YOUR CAPABILITIES:
+- Set drone contribution dials (0-100%)
+- Run any loaded workflow by name
+- Halt or resume the entire hive instantly
+- Approve or reject pending approvals
+- Read files and fetch web content via MCP tools
+- Scan for better models via the leaderboard
+- Create drone USB drives with different profiles (Scout/Worker/Scholar/Arsenal)
+- Route tasks to drones by capability, hardware tier, or knowledge domain
+- Monitor sandbox violations and governance blocks
+- View cluster health, metrics, scheduled tasks, and drone learning data
+- Talk to individual drones — each has its own personality and performance history
+
+You can both RESPOND and ACT. Include action commands in your response:
 
 [ACTION:set_contribution drone_id=DRONE_ID level=NUMBER]
 [ACTION:run_workflow name=WORKFLOW_NAME]
@@ -1876,9 +2341,12 @@ Include structured action commands in your response using this format:
 [ACTION:resume_hive]
 [ACTION:approve id=APPROVAL_ID]
 [ACTION:reject id=APPROVAL_ID]
+[ACTION:mcp_read path=FILE_PATH]
+[ACTION:mcp_fetch url=URL]
+[ACTION:scan_models]
+[ACTION:make_disk target_path=PATH profile=PROFILE]
 
-Example: If operator says "set my gaming PC to 30%", respond conversationally
-AND include: [ACTION:set_contribution drone_id=drone-efef level=30]
+Chain multiple actions. Always explain what you are doing. Law One.
 
 You can chain multiple actions. Always explain what you are doing.
 Always respond honestly. If something is broken, say so. Law One.`;

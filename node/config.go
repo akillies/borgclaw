@@ -38,6 +38,10 @@ type Config struct {
 
 	// Max concurrent tasks
 	MaxConcurrent int `json:"max_concurrent"`
+
+	// KnowledgeDir is where the drone looks for .zim knowledge pack files.
+	// Defaults to ~/.config/borgclaw/knowledge/
+	KnowledgeDir string `json:"knowledge_dir,omitempty"`
 }
 
 // HardwareProfile describes the node's compute capabilities.
@@ -90,6 +94,7 @@ func DefaultConfig() Config {
 			"phi4-mini",
 			"qwen3:8b",
 		},
+		KnowledgeDir: filepath.Join(os.Getenv("HOME"), ".config", "borgclaw", "knowledge"),
 	}
 }
 
@@ -146,6 +151,11 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if cfg.Contribution > 100 {
 		cfg.Contribution = 100
+	}
+
+	// Apply knowledge directory default if not set in config file
+	if cfg.KnowledgeDir == "" {
+		cfg.KnowledgeDir = filepath.Join(os.Getenv("HOME"), ".config", "borgclaw", "knowledge")
 	}
 
 	return cfg, nil

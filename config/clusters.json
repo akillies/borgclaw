@@ -1,0 +1,32 @@
+{
+  "_comment": "Inference cluster formation rules for BorgClaw Queen.",
+  "_comment2": "Queen reads this at startup and on each GET /api/clusters to surface applicable rules.",
+  "_comment3": "Actual cluster creation is done via POST /api/clusters/create — these are guidelines, not automation.",
+
+  "rules": [
+    {
+      "name": "dual-node-70b",
+      "description": "Two rpc-worker drones (min 16 GB VRAM each) can shard a 70B parameter model",
+      "min_members": 2,
+      "min_vram_per_node_mb": 16384,
+      "suggested_models": ["llama3:70b", "qwen2.5:72b", "mixtral:8x22b"],
+      "notes": "Each node handles roughly half the model layers via llama.cpp --rpc flag"
+    },
+    {
+      "name": "quad-node-405b",
+      "description": "Four rpc-worker drones for frontier-scale models (405B+)",
+      "min_members": 4,
+      "min_vram_per_node_mb": 24576,
+      "suggested_models": ["llama3.1:405b"],
+      "notes": "Requires llama.cpp built with RPC support on all nodes and the coordinator"
+    },
+    {
+      "name": "cpu-cluster",
+      "description": "CPU-only cluster for mid-size models when no GPU is available",
+      "min_members": 2,
+      "min_vram_per_node_mb": 0,
+      "suggested_models": ["llama3:8b", "mistral:7b"],
+      "notes": "CPU inference only — slower but functional for experimentation"
+    }
+  ]
+}

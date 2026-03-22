@@ -14,16 +14,21 @@ import (
 // HeartbeatPayload is what the node sends to Queen every interval.
 // Field names must match what Queen's /api/nodes/:nodeId/heartbeat expects.
 type HeartbeatPayload struct {
-	NodeID       string          `json:"node_id"`
-	Addr         string          `json:"addr"`
-	SentAt       time.Time       `json:"sent_at"` // For Queen RTT calculation
-	Status       string          `json:"status"`  // "online", "busy", "draining"
-	Hardware     HardwareProfile `json:"hardware"`
-	Config       map[string]any  `json:"config,omitempty"`
-	Metrics      QueenMetrics    `json:"metrics"` // Field names match Queen's expected format
-	Contribution int             `json:"contribution"`
-	Models       []string        `json:"models"`
-	Capacity     TaskCapacity    `json:"capacity"`
+	NodeID           string          `json:"node_id"`
+	Addr             string          `json:"addr"`
+	SentAt           time.Time       `json:"sent_at"` // For Queen RTT calculation
+	Status           string          `json:"status"`  // "online", "busy", "draining"
+	Hardware         HardwareProfile `json:"hardware"`
+	Config           map[string]any  `json:"config,omitempty"`
+	Metrics          QueenMetrics    `json:"metrics"` // Field names match Queen's expected format
+	Contribution     int             `json:"contribution"`
+	Models           []string        `json:"models"`
+	Capacity         TaskCapacity    `json:"capacity"`
+	KnowledgeDomains []string        `json:"knowledge_domains"` // ZIM pack domain names available on this drone
+
+	// RPC worker fields — only populated when Mode == "rpc-worker"
+	Mode    string `json:"mode,omitempty"`     // "task" (default) or "rpc-worker"
+	RPCPort int    `json:"rpc_port,omitempty"` // port rpc-server is listening on
 }
 
 // QueenMetrics uses field names that match Queen's server.js heartbeat handler.
@@ -58,12 +63,17 @@ type HeartbeatReporter struct {
 	hiveSecret    string
 	interval      time.Duration
 
-	metrics  *MetricsCollector
-	ollama   *OllamaClient
-	throttle *Throttle
-	hardware HardwareProfile
-	worker   *TaskWorker
-	learning *LearningStore
+	metrics      *MetricsCollector
+	ollama       *OllamaClient
+	throttle     *Throttle
+	hardware     HardwareProfile
+	worker       *TaskWorker
+	learning     *LearningStore
+	knowledgeDir string // path to scan for .zim files
+
+	// RPC worker fields — zero values mean "task" mode (normal operation)
+	mode    string // "task" or "rpc-worker"
+	rpcPort int    // non-zero only in rpc-worker mode
 
 	httpClient *http.Client
 }
@@ -81,8 +91,17 @@ func NewHeartbeatReporter(cfg Config, metrics *MetricsCollector, ollama *OllamaC
 		throttle:      throttle,
 		hardware:      cfg.Hardware,
 		worker:        worker,
+		knowledgeDir:  cfg.KnowledgeDir,
 		httpClient:    &http.Client{Timeout: 10 * time.Second},
 	}
+}
+
+// SetRPCWorkerMode marks this reporter as representing an rpc-worker drone.
+// The mode and port are included in every subsequent heartbeat so Queen can
+// track which drones are available for distributed inference clustering.
+func (hr *HeartbeatReporter) SetRPCWorkerMode(port int) {
+	hr.mode = "rpc-worker"
+	hr.rpcPort = port
 }
 
 // SetLearning attaches the learning store for periodic updates.
@@ -160,6 +179,9 @@ func (hr *HeartbeatReporter) send(ctx context.Context) error {
 		}
 	}
 
+	// Scan knowledge packs — lightweight directory read, safe to do every heartbeat
+	knowledgeDomains := ScanKnowledgeDomains(hr.knowledgeDir)
+
 	// Determine status
 	status := "online"
 	if hr.throttle.Level() == 0 {
@@ -187,19 +209,22 @@ func (hr *HeartbeatReporter) send(ctx context.Context) error {
 	}
 
 	payload := HeartbeatPayload{
-		NodeID:       hr.nodeID,
-		Addr:         hr.advertiseAddr,
-		SentAt:       time.Now(),
-		Status:       status,
-		Hardware:     hr.hardware,
-		Metrics:      queenMetrics,
-		Contribution: hr.throttle.Level(),
-		Models:       modelNames,
+		NodeID:           hr.nodeID,
+		Addr:             hr.advertiseAddr,
+		SentAt:           time.Now(),
+		Status:           status,
+		Hardware:         hr.hardware,
+		Metrics:          queenMetrics,
+		Contribution:     hr.throttle.Level(),
+		Models:           modelNames,
+		KnowledgeDomains: knowledgeDomains,
 		Capacity: TaskCapacity{
 			MaxSlots:       cap(hr.throttle.semaphore),
 			AvailableSlots: hr.throttle.Available(),
 			QueueDepth:     hr.worker.QueueDepth(),
 		},
+		Mode:    hr.mode,
+		RPCPort: hr.rpcPort,
 	}
 
 	body, err := json.Marshal(payload)

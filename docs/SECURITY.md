@@ -41,15 +41,105 @@ All LLM requests route through LiteLLM — agents never call Ollama or cloud API
 
 ---
 
+## SANDBOX
+
+Agent sandboxing is the application-level enforcement layer that constrains what files agents can read/write and which network destinations they can reach. It runs before any MCP server process is spawned, so violations are blocked without touching the OS.
+
+This is not OS-level isolation (Landlock, sandbox-exec). OS-level controls are a future addition on top of this layer, not a replacement. For the current threat model — a personal hive on your own hardware — application-level enforcement is the right first step.
+
+### Filesystem sandboxing
+
+Agents may only access files within a configured set of allowed roots. Any `POST /api/mcp/invoke` call to the `filesystem` server has every path argument checked before the MCP process starts.
+
+**Default allowed roots:**
+
+| Root | Purpose |
+|------|---------|
+| `$KNOWLEDGE_BASE_PATH` | Your personal AI OS knowledge base |
+| `$BORGCLAW_HOME/data/` | Queen's working data (activity, approvals, nodes) |
+| `/tmp/borgclaw/` | Ephemeral agent scratch space |
+
+**Configuration:**
+
+Set `SANDBOX_ROOTS` in your `.env` as a colon-separated list of absolute paths to fully override the defaults:
+
+```
+SANDBOX_ROOTS=/home/you/knowledge:/home/you/borgclaw/data:/tmp/borgclaw
+```
+
+If `SANDBOX_ROOTS` is set it replaces all defaults — list every root you need.
+
+**What happens when a path is blocked:**
+
+- The invoke request returns `{ ok: false, error: "Sandbox violation: path outside allowed roots" }`
+- An activity event of type `sandbox_block` is logged with the blocked path and the current allowed roots
+- The MCP filesystem process is never spawned
+
+### Network egress control
+
+Agents may only fetch URLs whose hostname is in the domain allowlist. Any `POST /api/mcp/invoke` call to the `fetch` server has the URL checked before the MCP process starts.
+
+**Default allowed domains:**
+
+| Pattern | Matches |
+|---------|--------|
+| `localhost` | Local Queen |
+| `127.0.0.1` | Local loopback (IPv4) |
+| `::1` | Local loopback (IPv6) |
+| `*.local` | LAN mDNS hostnames (e.g. `mac-mini.local`) |
+
+**Configuration:**
+
+Set `SANDBOX_ALLOWED_DOMAINS` in your `.env` as a colon-separated list:
+
+```
+SANDBOX_ALLOWED_DOMAINS=localhost:*.local:api.openai.com:your-domain.com
+```
+
+Wildcard patterns match anything ending in the suffix. `*.local` matches `queen.local` and `node-1.local` and `deep.node.local` — all LAN mDNS peers are considered equally trusted.
+
+**What happens when a domain is blocked:**
+
+- The invoke request returns `{ ok: false, error: "Sandbox violation: domain not in allowlist" }`
+- An activity event of type `sandbox_block` is logged with the blocked URL and the current allowlist
+- A governance approval is created in the queue (type: `sandbox_domain_request`) so you can review the request, then add the domain to `SANDBOX_ALLOWED_DOMAINS` if you trust it
+- The MCP fetch process is never spawned
+
+### Governance approvals for blocked network requests
+
+When a fetch is blocked, an approval appears in the queue with:
+
+```json
+{
+  "type": "sandbox_domain_request",
+  "summary": "Agent requested fetch to unlisted domain: https://example.com/api",
+  "url": "https://example.com/api",
+  "allowed_domains": ["localhost", "*.local", "127.0.0.1", "::1"],
+  "source_agent": "agent-id-from-header",
+  "source_workflow": "workflow-id-from-header"
+}
+```
+
+Approving it does not automatically whitelist the domain — it is a human-readable record. To permanently allow the domain: add it to `SANDBOX_ALLOWED_DOMAINS` and restart Queen.
+
+### Summary table
+
+| Layer | Mechanism | Configured by |
+|-------|-----------|---------------|
+| Filesystem | Path prefix matching in `lib/sandbox.js` | `SANDBOX_ROOTS` env var |
+| Network egress | Domain allowlist in `lib/sandbox.js` | `SANDBOX_ALLOWED_DOMAINS` env var |
+| OS isolation | Not yet implemented | — |
+
+---
+
 ## What's Planned
 
-### Agent Sandboxing (NemoClaw-inspired)
-Agents should only access files within `{{KNOWLEDGE_BASE_PATH}}` and designated working directories. No agent should be able to read `/etc/passwd`, your SSH keys, or files outside its sandbox.
+### Agent Sandboxing — OS-level isolation (in progress)
+Application-level sandboxing is implemented (see SANDBOX section above). The next layer is OS-level process isolation so that even a compromised agent process cannot escape the sandbox:
 
-Planned approach (inspired by NVIDIA NemoClaw):
-- **Filesystem:** Restrict agent file access to `KNOWLEDGE_BASE_PATH` + `BORGCLAW_HOME/data/` + `/tmp`. Use OS-level controls (Landlock on Linux, sandbox-exec on macOS) where available. Fall back to path validation in the agent runtime.
-- **Network egress:** Agents cannot make arbitrary HTTP requests. Outbound calls go through the MCP layer or LiteLLM proxy. New external endpoints require operator approval (Law Two).
-- **Process isolation:** Long-term, agents run in containers or sandboxed subprocesses, not in the Queen's Node.js process.
+- **Linux:** Landlock LSM — restrict filesystem access at the kernel level per process
+- **macOS:** `sandbox-exec` profiles — restrict file and network access per process
+- **Containers:** Long-term, agents run in rootless containers (Podman) with explicit volume mounts, not in the Queen's Node.js process
 
 ### Hive Halt (Panic Button)
 `POST /api/hive/halt` — Queen broadcasts HALT to all nodes. All tasks drop, all contributions go to 0%, all pending approvals are rejected. Dashboard red button. Also available via CLI: `./borgclaw halt`.

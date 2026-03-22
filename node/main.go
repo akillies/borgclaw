@@ -47,6 +47,11 @@ func main() {
 	printInfo := flag.Bool("info", false, "Print hardware info and exit")
 	noPull := flag.Bool("no-pull", false, "Disable automatic model pulling (for bandwidth-constrained environments)")
 
+	// RPC worker mode flags
+	mode := flag.String("mode", "task", `Drone mode: "task" (default, Ollama-based) or "rpc-worker" (llama.cpp rpc-server for distributed inference)`)
+	rpcPort := flag.Int("rpc-port", 50052, "Port for rpc-server to listen on (rpc-worker mode only)")
+	rpcServerBin := flag.String("rpc-server", "", "Path to llama.cpp rpc-server binary (rpc-worker mode only; defaults to PATH lookup)")
+
 	flag.Parse()
 
 	fmt.Print(banner)
@@ -116,15 +121,15 @@ func main() {
 		}
 	}
 
-	log.Printf("[init] node_id=%s queen=%s advertise=%s ollama=%s contribution=%d%%",
-		cfg.NodeID, cfg.QueenURL, cfg.AdvertiseAddr, cfg.OllamaURL, cfg.Contribution)
+	log.Printf("[init] node_id=%s queen=%s advertise=%s mode=%s contribution=%d%%",
+		cfg.NodeID, cfg.QueenURL, cfg.AdvertiseAddr, *mode, cfg.Contribution)
 	log.Printf("[init] hardware: %s/%s, %d cores, %d MB RAM, tier=%s",
 		cfg.Hardware.OS, cfg.Hardware.Arch, cfg.Hardware.CPUCores, cfg.Hardware.RAMTotal, cfg.Hardware.Tier)
 	if cfg.Hardware.GPUName != "" {
 		log.Printf("[init] gpu: %s (%d MB)", cfg.Hardware.GPUName, cfg.Hardware.GPUVRAM)
 	}
 
-	// Initialize components
+	// Initialize shared components (used by both modes)
 	ollama := NewOllamaClient(cfg.OllamaURL)
 	throttle := NewThrottle(cfg.Contribution, cfg.Hardware.CPUCores)
 	metrics := NewMetricsCollector(60)
@@ -138,10 +143,65 @@ func main() {
 	heartbeat.SetLearning(learning)
 	server := NewServer(cfg, metrics, ollama, throttle, worker, learning)
 
+	// Setup graceful shutdown context before branching on mode
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	// ── Mode: rpc-worker ─────────────────────────────────────────────────────
+	// Skip Ollama entirely. Locate and launch llama.cpp rpc-server, then
+	// heartbeat Queen so it knows this drone offers raw compute for sharding.
+	if *mode == "rpc-worker" {
+		rpcW, err := NewRPCWorker(*rpcServerBin, *rpcPort)
+		if err != nil {
+			log.Fatalf("[rpc-worker] %v", err)
+		}
+
+		log.Printf("[rpc-worker] binary=%s port=%d", rpcW.BinaryPath(), rpcW.Port())
+
+		// Inform heartbeats about our mode so Queen can track us as a cluster candidate.
+		heartbeat.SetRPCWorkerMode(rpcW.Port())
+
+		// BBS terminal and /health still serve — useful for operator diagnostics.
+		go func() {
+			if err := server.Start(); err != nil {
+				log.Printf("[server] stopped: %v", err)
+			}
+		}()
+
+		// Heartbeat loop informs Queen we're alive with mode="rpc-worker".
+		go heartbeat.Run(ctx)
+
+		// Block on the rpc-server subprocess. This goroutine exits when ctx is cancelled.
+		go func() {
+			if err := rpcW.Start(ctx); err != nil {
+				log.Printf("[rpc-worker] rpc-server exited with error: %v", err)
+				cancel() // propagate failure → graceful shutdown
+			}
+		}()
+
+		log.Printf("[init] rpc-worker online on port %d. Ctrl+C to detach from hive.", rpcW.Port())
+
+		sig := <-sigCh
+		log.Printf("[shutdown] received %v, gracefully detaching...", sig)
+		cancel()
+
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutdownCancel()
+		server.Shutdown(shutdownCtx)
+
+		log.Println("[shutdown] drone detached from hive.")
+		return
+	}
+
+	// ── Mode: task (default) ─────────────────────────────────────────────────
+	// Original Ollama-based task worker path — unchanged.
+
 	// Check Ollama connectivity
-	ctx := context.Background()
-	if ollama.Healthy(ctx) {
-		models, _ := ollama.ListModels(ctx)
+	if ollama.Healthy(context.Background()) {
+		models, _ := ollama.ListModels(context.Background())
 		log.Printf("[init] ollama: connected, %d models available", len(models))
 		for _, m := range models {
 			log.Printf("[init]   - %s (%.0f MB)", m.Name, float64(m.Size)/(1024*1024))
@@ -149,13 +209,6 @@ func main() {
 	} else {
 		log.Println("[init] ollama: NOT REACHABLE — node will report degraded until Ollama starts")
 	}
-
-	// Setup graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	// Start all components
 	go worker.Run(ctx)

@@ -176,7 +176,7 @@ func (tw *TaskWorker) execute(ctx context.Context, task Task) {
 
 	// Record into learning store
 	if tw.learning != nil {
-		tw.learning.RecordTaskResult(task.Type, result.Model, result.Status == "completed", result.TokPerSec)
+		tw.learning.RecordTaskResult(task.Type, result.Model, task.Persona, result.Status == "completed", result.TokPerSec)
 	}
 
 	// Update metrics
