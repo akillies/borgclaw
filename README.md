@@ -328,4 +328,4 @@ Reclaim your sovereign tech.
 
 Created by [Alexander Kline](https://alexanderkline.com)
 
-*"Don't reinvent. Compose. Pull the best of everything, bring it together. 98% exists. BorgClaw's value is the composition and the experience."*
+*Resistance is optional. Adaptation is inevitable.*
