@@ -6,5 +6,38 @@
     "version": "0.2.0",
     "node_id": "queen",
     "profile": "unknown"
+  },
+  {
+    "id": "evt-1774164228435-sz77",
+    "ts": "2026-03-22T07:23:48.435Z",
+    "type": "node_auto_registered",
+    "node_id": "drone-efef"
+  },
+  {
+    "id": "evt-1774164233461-qz3p",
+    "ts": "2026-03-22T07:23:53.461Z",
+    "type": "litellm_sync",
+    "local_endpoints": 0,
+    "cloud_endpoints": 6
+  },
+  {
+    "id": "evt-1774164263979-z4fy",
+    "ts": "2026-03-22T07:24:23.979Z",
+    "type": "litellm_sync",
+    "local_endpoints": 1,
+    "cloud_endpoints": 6
+  },
+  {
+    "id": "evt-1774164272040-hfgr",
+    "ts": "2026-03-22T07:24:32.040Z",
+    "type": "node_offline",
+    "node_id": "queen"
+  },
+  {
+    "id": "evt-1774164422356-3jca",
+    "ts": "2026-03-22T07:27:02.356Z",
+    "type": "queen_chat",
+    "message": "drone-efef just joined. whats his status?",
+    "actions": 2
   }
 ]
