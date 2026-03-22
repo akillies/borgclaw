@@ -28,7 +28,7 @@ import * as approvals from './lib/approvals.js';
 import { deepHealthCheck } from './lib/health.js';
 import * as setup from './lib/setup.js';
 import { initNats, publish as natsPublish, close as natsClose } from './lib/nats.js';
-import { executeWorkflow } from './lib/workflow.js';
+import { executeWorkflow, resumeWorkflow } from './lib/workflow.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -804,13 +804,29 @@ app.post('/api/approvals/:id/approve', (req, res) => {
   const item = approvals.approve(req.params.id);
   if (!item) return res.status(404).json({ error: 'Approval not found' });
 
-  // If this approval is blocking a workflow, resume it
-  const workflowId = item.source_workflow;
-  if (workflowId && runningWorkflows.has(workflowId)) {
-    const run = runningWorkflows.get(workflowId);
-    if (run.pausedApprovalId === req.params.id) {
-      activity.log({ type: 'workflow_resumed', workflow: workflowId, approval_id: req.params.id });
-      // Resume will be handled by the workflow executor polling for approval status
+  // Find the paused run that is waiting on this approval and resume it.
+  // runningWorkflows is keyed by runId; source_workflow on the approval item
+  // is stored as "workflowName/runId" by the createApproval adapter, so we
+  // scan by pausedApprovalId rather than relying on the key match.
+  for (const [runId, run] of runningWorkflows) {
+    if (run.pausedApprovalId === req.params.id && run.status === 'paused' && run._state) {
+      activity.log({ type: 'workflow_resumed', workflow: run.name, run_id: runId, approval_id: req.params.id });
+      run.status = 'running';
+
+      // Build the same deps as executeWorkflowAsync
+      const context = {
+        today: new Date().toISOString().split('T')[0],
+        today_formatted: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+      };
+
+      resumeWorkflowAsync(runId, run, context).catch(err => {
+        activity.log({ type: 'workflow_resume_error', workflow: run.name, run_id: runId, error: err.message });
+        run.status = 'failed';
+        run.error = err.message;
+        setTimeout(() => runningWorkflows.delete(runId), 5 * 60 * 1000);
+      });
+
+      break;
     }
   }
 
@@ -1166,6 +1182,68 @@ async function executeWorkflowAsync(runId, spec, context) {
     // Bug 4 fix: evict failed run (error path) after 5 minutes.
     setTimeout(() => runningWorkflows.delete(runId), 5 * 60 * 1000);
     throw err;
+  }
+}
+
+// Resume a paused workflow run after an approval gate is cleared.
+// Mirrors executeWorkflowAsync but calls resumeWorkflow() instead of executeWorkflow().
+async function resumeWorkflowAsync(runId, run, context) {
+  // Re-build the same LLM + approval adapters that executeWorkflowAsync uses
+  async function callLLM(agent, action, inputs, systemPrompt) {
+    let agentInstructions = '';
+    try {
+      const agentDir = path.join(BORGCLAW_HOME, 'agents', agent);
+      agentInstructions = await fs.readFile(path.join(agentDir, 'instructions.md'), 'utf-8');
+    } catch { /* instructions not found — proceed without */ }
+
+    const fullSystemPrompt = agentInstructions
+      ? `${agentInstructions}\n\n${systemPrompt}`
+      : systemPrompt;
+
+    const stepProxy = { agent, action, description: '' };
+    return callLLMWithTimeout(stepProxy, inputs, fullSystemPrompt, 5 * 60 * 1000);
+  }
+
+  function createApproval(approval) {
+    const item = approvals.create({
+      ...approval,
+      source_workflow: approval.source_workflow
+        ? `${approval.source_workflow}/${runId}`
+        : runId,
+    });
+    run.pausedApprovalId = item.id;
+    run.status = 'paused';
+    return item;
+  }
+
+  function getApprovalStatus(id) {
+    return approvals.get(id)?.status || 'pending';
+  }
+
+  const outcome = await resumeWorkflow(run._state, {
+    callLLM,
+    createApproval,
+    logActivity: activity.log,
+    getApprovalStatus,
+    context,
+  });
+
+  if (outcome.status === 'completed') {
+    run.status = 'completed';
+    run.results = Object.fromEntries(outcome.results);
+    run.completed_at = new Date().toISOString();
+    activity.log({ type: 'workflow_completed', workflow: run.name, run_id: runId, steps_completed: outcome.results.size });
+    natsPublish('hive.workflow.completed', { workflow: run.name, run_id: runId, steps_completed: outcome.results.size, ts: run.completed_at });
+    setTimeout(() => runningWorkflows.delete(runId), 5 * 60 * 1000);
+  } else if (outcome.status === 'paused') {
+    run.paused_at = outcome.paused_at;
+    run._state = outcome._state;
+    run.results = Object.fromEntries(outcome.results);
+  } else {
+    run.status = 'failed';
+    run.error = outcome.error;
+    run.results = Object.fromEntries(outcome.results);
+    setTimeout(() => runningWorkflows.delete(runId), 5 * 60 * 1000);
   }
 }
 

@@ -197,15 +197,15 @@ ok "The Claw installed to $INSTALL_DIR/the-claw"
 # Step 5: Copy config
 CLAW_CONFIG_DIR="$HOME/.config/borgclaw"
 mkdir -p "$CLAW_CONFIG_DIR"
-if [ -f "$SCRIPT_DIR/config/claw.json" ]; then
-  cp "$SCRIPT_DIR/config/claw.json" "$CLAW_CONFIG_DIR/claw.json"
-  QUEEN_URL=$(grep -o '"queen_url"[[:space:]]*:[[:space:]]*"[^"]*"' "$CLAW_CONFIG_DIR/claw.json" | cut -d'"' -f4)
+if [ -f "$SCRIPT_DIR/config/drone.json" ]; then
+  cp "$SCRIPT_DIR/config/drone.json" "$CLAW_CONFIG_DIR/drone.json"
+  QUEEN_URL=$(grep -o '"queen_url"[[:space:]]*:[[:space:]]*"[^"]*"' "$CLAW_CONFIG_DIR/drone.json" | cut -d'"' -f4)
   ok "Config installed (Queen: $QUEEN_URL)"
 fi
 
 # Step 6: Start The Claw
 info "Starting The Claw..."
-"$INSTALL_DIR/the-claw" --config "$CLAW_CONFIG_DIR/claw.json" &
+"$INSTALL_DIR/the-claw" --config "$CLAW_CONFIG_DIR/drone.json" &
 
 echo ""
 ok "═══════════════════════════════════════"
@@ -216,7 +216,7 @@ echo "  The Claw is running in the background."
 echo "  Check Queen dashboard to see this node."
 echo ""
 echo "  To stop:   pkill the-claw"
-echo "  To restart: the-claw --config ~/.config/borgclaw/claw.json"
+echo "  To restart: the-claw --config ~/.config/borgclaw/drone.json"
 echo ""
 SETUP
 chmod +x "$CLAW_DIR/setup.sh"

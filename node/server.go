@@ -11,9 +11,10 @@ import (
 
 // droneBBSHTML is the inline BBS terminal page served at GET /.
 // Verbs (in order): NodeID×2, Tier, Contribution, CPUPercent, RAMPercent,
-// GPUName, ActiveModel, AvgTokPerSec, uptime, TasksCompleted, TasksActive,
-// HiveSecret.
-const droneBBSHTML = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>%s</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#00ff88;font-family:monospace;font-size:13px;padding:16px;min-height:100vh}pre{white-space:pre}.dim{color:#005533}.hi{color:#00ffaa}input{background:#0a0a0a;border:1px solid #00ff88;color:#00ff88;font-family:monospace;font-size:13px;padding:4px 8px;width:calc(100%% - 80px);outline:none}button{background:#003322;border:1px solid #00ff88;color:#00ff88;font-family:monospace;font-size:13px;padding:4px 12px;cursor:pointer;margin-left:4px}button:hover{background:#00ff88;color:#0a0a0a}#resp{margin-top:8px;color:#00cc66;min-height:1em;white-space:pre-wrap;word-break:break-word}.blink{animation:blink 1s step-end infinite}@keyframes blink{0%%,100%%{opacity:1}50%%{opacity:0}}</style></head><body data-secret="%s"><pre>
+// GPUName, ActiveModel, AvgTokPerSec, uptime, TasksCompleted, TasksActive.
+// Note: no HiveSecret in the template — /chat is exempt from auth so the
+// BBS page can talk to the drone without exposing the secret in public HTML.
+const droneBBSHTML = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>%s</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#00ff88;font-family:monospace;font-size:13px;padding:16px;min-height:100vh}pre{white-space:pre}.dim{color:#005533}.hi{color:#00ffaa}input{background:#0a0a0a;border:1px solid #00ff88;color:#00ff88;font-family:monospace;font-size:13px;padding:4px 8px;width:calc(100%% - 80px);outline:none}button{background:#003322;border:1px solid #00ff88;color:#00ff88;font-family:monospace;font-size:13px;padding:4px 12px;cursor:pointer;margin-left:4px}button:hover{background:#00ff88;color:#0a0a0a}#resp{margin-top:8px;color:#00cc66;min-height:1em;white-space:pre-wrap;word-break:break-word}.blink{animation:blink 1s step-end infinite}@keyframes blink{0%%,100%%{opacity:1}50%%{opacity:0}}</style></head><body><pre>
 &#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
 &#x2502;  B O R G C L A W   D R O N E   T E R M  &#x2502;
 &#x2502;  NODE: <span class="hi">%-26s</span>&#x2502;
@@ -25,7 +26,7 @@ const droneBBSHTML = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"
 &#x251C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2524;
 &#x2502;  UP   %-14s  DONE %5d  ACT %3d &#x2502;
 &#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
-</pre><div style="margin-top:12px"><input id="msg" type="text" placeholder="transmit to drone..." autocomplete="off"><button onclick="send()">TX</button></div><div id="resp"><span class="dim">awaiting transmission<span class="blink">_</span></span></div><script>function send(){var m=document.getElementById('msg').value.trim();if(!m)return;var s=document.body.dataset.secret;document.getElementById('resp').textContent='...';fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+s},body:JSON.stringify({message:m})}).then(function(r){return r.json()}).then(function(d){document.getElementById('resp').textContent=d.response||d.error||'no response'}).catch(function(e){document.getElementById('resp').textContent='ERR: '+e})}</script></body></html>`
+</pre><div style="margin-top:12px"><input id="msg" type="text" placeholder="transmit to drone..." autocomplete="off"><button onclick="send()">TX</button></div><div id="resp"><span class="dim">awaiting transmission<span class="blink">_</span></span></div><script>function send(){var m=document.getElementById('msg').value.trim();if(!m)return;document.getElementById('resp').textContent='...';fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})}).then(function(r){return r.json()}).then(function(d){document.getElementById('resp').textContent=d.response||d.error||'no response'}).catch(function(e){document.getElementById('resp').textContent='ERR: '+e})}</script></body></html>`
 
 // Server is the node's HTTP API surface.
 type Server struct {
@@ -81,8 +82,10 @@ func NewServer(cfg Config, metrics *MetricsCollector, ollama *OllamaClient, thro
 	var handler http.Handler = mux
 	if cfg.HiveSecret != "" {
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Public endpoints — no auth required
-			if r.URL.Path == "/" || r.URL.Path == "/health" {
+			// Public endpoints — no auth required.
+			// /chat is exempt so the drone's own BBS page can talk to it
+			// without the secret appearing in the HTML.
+			if r.URL.Path == "/" || r.URL.Path == "/health" || r.URL.Path == "/chat" {
 				mux.ServeHTTP(w, r)
 				return
 			}
@@ -161,19 +164,18 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	)
 
 	page := fmt.Sprintf(droneBBSHTML,
-		s.cfg.NodeID,    // <title>
-		s.cfg.HiveSecret, // data-secret on body (used by chat fetch)
-		s.cfg.NodeID,    // NODE: display
-		hw.Tier,         // TIER:
+		s.cfg.NodeID,       // <title>
+		s.cfg.NodeID,       // NODE: display
+		hw.Tier,            // TIER:
 		s.throttle.Level(), // CONTRIBUTION:
-		m.CPUPercent,    // CPU
-		m.RAMPercent,    // RAM
-		gpuName,         // GPU
-		activeModel,     // MDL name
-		m.AvgTokPerSec,  // tok/s
-		uptimeStr,       // UP
-		m.TasksCompleted, // DONE
-		m.TasksActive,   // ACT
+		m.CPUPercent,       // CPU
+		m.RAMPercent,       // RAM
+		gpuName,            // GPU
+		activeModel,        // MDL name
+		m.AvgTokPerSec,     // tok/s
+		uptimeStr,          // UP
+		m.TasksCompleted,   // DONE
+		m.TasksActive,      // ACT
 	)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

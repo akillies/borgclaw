@@ -268,14 +268,19 @@ cmd_help() {
   echo "Usage: borgclaw <command>"
   echo ""
   echo "Commands:"
-  echo "  start       Start Queen service + middleware"
-  echo "  stop        Stop all services"
-  echo "  status      Show cluster health"
-  echo "  dashboard   Open dashboard in browser"
-  echo "  nodes       List registered nodes"
-  echo "  logs        Tail Queen service logs"
-  echo "  bootstrap   Run hardware detection + full setup"
-  echo "  help        Show this message"
+  echo "  start             Start Queen service + middleware"
+  echo "  stop              Stop all services"
+  echo "  status            Show cluster health"
+  echo "  dashboard         Open dashboard in browser"
+  echo "  nodes             List registered nodes"
+  echo "  logs              Tail Queen service logs"
+  echo "  bootstrap         Run hardware detection + full setup"
+  echo "  connect           Show connection info for external tools (LiteLLM, Ollama URLs)"
+  echo "  halt              Emergency stop — halt all nodes and cancel all work"
+  echo "  resume            Resume hive operations after a halt"
+  echo "  deploy <ip...>    Deploy drone binary to remote machines via SSH"
+  echo "                    Options: --user <ssh_user>"
+  echo "  help              Show this message"
 }
 
 # ============================================================
@@ -352,9 +357,11 @@ cmd_deploy() {
   local TARGETS=()
 
   # Parse args
-  for arg in "$@"; do
-    if [ "$arg" = "--user" ]; then shift; SSH_USER="$1"; shift; continue; fi
-    TARGETS+=("$arg")
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --user) SSH_USER="$2"; shift 2 ;;
+      *) TARGETS+=("$1"); shift ;;
+    esac
   done
 
   # Get hive secret

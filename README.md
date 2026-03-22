@@ -39,7 +39,7 @@ Queen boots. Drones join. Telemetry flows. The hive works.
 ### The Queen (your primary machine)
 
 ```bash
-git clone https://github.com/yourusername/borgclaw.git
+git clone https://github.com/akillies/borgclaw.git
 cd borgclaw
 ./borgclaw start
 ```

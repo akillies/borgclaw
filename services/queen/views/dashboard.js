@@ -1416,6 +1416,10 @@ input[type="range"].dial:disabled {
     }, 300);
   }
 
+  // Stub for topology panel — not yet implemented.
+  // Called after every node refresh; replace with a real D3/canvas render when needed.
+  function rebuildTopology() {}
+
   function dotHtml(status) {
     if (status === 'online')  return '<span class="dot-green">●</span>';
     if (status === 'offline') return '<span class="dot-red">○</span>';
