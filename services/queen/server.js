@@ -1244,8 +1244,8 @@ app.post('/api/chat', async (req, res) => {
     const llmResult = await callLLMWithTimeout({
       agent: 'queen',
       action: 'chat',
-      inputs: { message },
-    }, `${QUEEN_SYSTEM_PROMPT}\n\nCurrent hive state:\n${JSON.stringify(hiveState, null, 2)}`, 30000);
+      description: 'Respond to operator message',
+    }, { message }, `${QUEEN_SYSTEM_PROMPT}\n\nCurrent hive state:\n${JSON.stringify(hiveState, null, 2)}`, 30000);
 
     // Parse and execute actions from Queen's response
     const actions = [];
