@@ -1948,6 +1948,22 @@ input[type="range"].dial:disabled {
   var hdr={'Content-Type':'application/json'};
   if(SECRET)hdr['Authorization']='Bearer '+SECRET;
 
+  // Event delegation for data-action buttons
+  document.addEventListener('click',function(e){
+    var btn=e.target.closest('[data-action]');
+    if(!btn)return;
+    var a=btn.getAttribute('data-action');
+    var id=btn.getAttribute('data-id');
+    var nd=btn.getAttribute('data-node');
+    var md=btn.getAttribute('data-model');
+    var pr=btn.getAttribute('data-profile');
+    if(a==='approve')fetch('/api/approvals/'+id+'/approve',{method:'POST',headers:hdr}).then(function(){btn.closest('tr').style.opacity='0.3';btn.closest('tr').querySelector('.appr-type').textContent='APPROVED'});
+    if(a==='reject')fetch('/api/approvals/'+id+'/reject',{method:'POST',headers:hdr}).then(function(){btn.closest('tr').style.opacity='0.3';btn.closest('tr').querySelector('.appr-type').textContent='REJECTED'});
+    if(a==='view')fetch('/api/approvals/'+id,{headers:hdr}).then(function(r){return r.json()}).then(function(d){alert(JSON.stringify(d,null,2))});
+    if(a==='pull'){btn.textContent='PULLING...';fetch('/api/models/pull',{method:'POST',headers:hdr,body:JSON.stringify({model:md,node_id:nd})}).then(function(){btn.textContent='DONE'}).catch(function(){btn.textContent='FAILED'})}
+    if(a==='modelswap')fetch('/api/config/models'+(pr?'?profile='+pr:''),{headers:hdr}).then(function(r){return r.json()}).then(function(d){alert('Available models:\\n'+JSON.stringify(d.models||d,null,2))});
+  });
+
   window.sendChat=function(){
     var inp=document.getElementById('chat-input');
     var log=document.getElementById('chat-log');
