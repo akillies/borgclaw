@@ -13,43 +13,27 @@
 
 > Turn any computer into a drone in your personal AI cluster. Plug in a USB drive, run one script, it joins the hive. A Queen orchestrator routes tasks across all drones via LiteLLM. Your files, your models, your infrastructure.
 
-## Status: Alpha
+## Status: Alpha — First Drone Online
 
-**What works today:**
-- Queen service boots, retro BBS dashboard at `localhost:9090`
-- Drone agent compiles and runs on Linux, macOS (Intel + ARM), and Windows
-- Hardware auto-detection (CPU, RAM, GPU — NVIDIA + Apple Silicon)
-- Each drone gets a unique ID (`drone-efef`, `drone-a3b7`, etc.)
-- LiteLLM dynamic routing — drones auto-register as inference endpoints
-- Response caching — identical prompts skip the LLM
-- Hive halt/resume kill switch (`./borgclaw halt` / `./borgclaw resume`)
-- Approval queue (Law Two — nothing external ships without human approval)
-- Queen chat — talk to the Queen in plain English, she responds AND acts
-- Cron scheduler — temporal awareness, scheduled workflows fire on time
-- Natural language governance — "set drone-efef to 30%" and she does it
-- Hive secret auth on every surface (dashboard, API, SSE, drone endpoints)
-- Node persistence — survives Queen restarts
-- LiteLLM response caching — identical prompts skip the LLM
-- USB drive prep script — 2.4GB, fits on a 4GB drive, clean uninstall included
-- `./borgclaw connect` — shows connection URLs for any app (OpenClaw, Cursor, Aider, etc.)
-- Workflow engine with DAG execution, approval gates, template variables
-- 5 agent archetypes defined (router, analyst, ops, comms, sentinel)
-- Full open-source scrub — no personal data, template variables for your setup
+Queen boots. Drones join. Telemetry flows. The hive works.
 
-**What's in progress:**
-- Multi-drone end-to-end test (architecture wired, first live test pending)
-- NATS event bus integration (in docker-compose, client wiring pending)
+**Working:**
+- Queen + drone communicating (tested, live telemetry, 3ms RTT)
+- Talk to the Queen in plain English — she responds and acts
+- Drones auto-register as inference endpoints via LiteLLM
+- Hardware auto-detection, cross-platform (Linux, macOS, Windows)
+- Deploy to any machine: `./borgclaw deploy 10.0.0.21` or USB drive
+- Governance: approval queue, kill switch, budget caps, auth on every surface
+- Scheduled workflows (cron-based, 6 tasks configured)
+- BBS dashboard with chat, connect panel, security panel
 
-**What's planned:**
-- Ghost worker desktop control (Xvfb + pyautogui for full desktop automation on Linux)
-- mDNS auto-discovery (drones find Queen without knowing the IP)
-- Knowledge-specialized drones (Medic, Engineer, Scholar — ZIM-based knowledge packs)
-- Hive chat — drones talk to each other and to external AI systems
-- Community hives — pools of compute across households, co-ops, communities
-- DeerFlow 2.0 integration as a task type for sandboxed execution
-- Autoresearch evolution loop — Queen watches for better tools and proposes upgrades
-- Agent sandboxing (NemoClaw-inspired filesystem + network isolation)
-- Prometheus + Grafana observability
+**Roadmap:**
+- Ghost workers — old laptops as browser automation agents
+- Community hives — pools of compute across households
+- Knowledge-specialized drones (Medic, Engineer, Scholar)
+- Distributed inference across multiple machines
+- Drone learning + memetic evolution
+- DeerFlow / MCP integration
 
 ## Quick Start
 
