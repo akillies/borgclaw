@@ -1093,6 +1093,7 @@ function buildDashboardData() {
     pendingApprovals: approvals.pending().length,
     workflowsLoaded: workflows.size,
     runningWorkflows: runningWorkflows.size,
+    hiveSecret: HIVE_SECRET,
     workflows: [...workflows.entries()].map(([name, spec]) => ({
       name,
       description: spec.description || '',

@@ -1012,11 +1012,22 @@ input[type="range"].dial:disabled {
 <script>
 // ════════════════════════════════════════════════════════
 // BorgClaw Queen Dashboard — Client JS
-// Vanilla only. No frameworks.
+// Vanilla only. No frameworks. Every byte earned.
 // ════════════════════════════════════════════════════════
 
 (function () {
   'use strict';
+
+  // ── Auth — wrap all API calls with hive secret ────────
+  var HIVE_SECRET = '${data.hiveSecret || ''}';
+  function authFetch(url, opts) {
+    opts = opts || {};
+    opts.headers = opts.headers || {};
+    if (HIVE_SECRET) opts.headers['Authorization'] = 'Bearer ' + HIVE_SECRET;
+    if (!opts.headers['Content-Type'] && opts.method && opts.method !== 'GET')
+      opts.headers['Content-Type'] = 'application/json';
+    return fetch(url, opts);
+  }
 
   // ── SSE Connection ─────────────────────────────────────
   var sseDot    = document.getElementById('sse-dot');
@@ -1063,7 +1074,7 @@ input[type="range"].dial:disabled {
     setSseStatus('connecting');
 
     try {
-      sseSource = new EventSource('/api/events');
+      sseSource = new EventSource('/api/events?token=' + encodeURIComponent(HIVE_SECRET));
 
       sseSource.onopen = function () {
         setSseStatus('live');
@@ -1189,7 +1200,7 @@ input[type="range"].dial:disabled {
   function refreshNodes() {
     clearTimeout(refreshNodesTimer);
     refreshNodesTimer = setTimeout(function () {
-      fetch('/api/status')
+      authFetch('/api/status')
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (!data || !data.nodes) return;
@@ -1339,7 +1350,7 @@ input[type="range"].dial:disabled {
   }
 
   function refreshApprovals() {
-    fetch('/api/approvals')
+    authFetch('/api/approvals')
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!Array.isArray(data)) return;
@@ -1377,7 +1388,7 @@ input[type="range"].dial:disabled {
       var btns = row.querySelectorAll('.btn');
       btns.forEach(function (b) { b.disabled = true; });
     }
-    fetch('/api/approvals/' + encodeURIComponent(id) + '/approve', {
+    authFetch('/api/approvals/' + encodeURIComponent(id) + '/approve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     })
@@ -1405,7 +1416,7 @@ input[type="range"].dial:disabled {
       var btns = row.querySelectorAll('.btn');
       btns.forEach(function (b) { b.disabled = true; });
     }
-    fetch('/api/approvals/' + encodeURIComponent(id) + '/reject', {
+    authFetch('/api/approvals/' + encodeURIComponent(id) + '/reject', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     })
@@ -1428,7 +1439,7 @@ input[type="range"].dial:disabled {
   };
 
   window.doView = function (id) {
-    fetch('/api/approvals/' + encodeURIComponent(id))
+    authFetch('/api/approvals/' + encodeURIComponent(id))
       .then(function (r) { return r.json(); })
       .then(function (data) {
         var body = document.getElementById('modal-body');
@@ -1455,7 +1466,7 @@ input[type="range"].dial:disabled {
 
   window.runWorkflow = function (name) {
     showToast('▶ EXECUTING: ' + name + '...', 2000);
-    fetch('/api/workflows/' + encodeURIComponent(name) + '/execute', {
+    authFetch('/api/workflows/' + encodeURIComponent(name) + '/execute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ context: {} }),
@@ -1473,7 +1484,7 @@ input[type="range"].dial:disabled {
 
   window.refreshHealth = function () {
     showToast('⟳ PROBING SERVICES...', 1500);
-    fetch('/api/actions/refresh-health', { method: 'POST' })
+    authFetch('/api/actions/refresh-health', { method: 'POST' })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         updateServices(data);
@@ -1483,7 +1494,7 @@ input[type="range"].dial:disabled {
   };
 
   window.fetchModels = function () {
-    fetch('/api/models')
+    authFetch('/api/models')
       .then(function (r) { return r.json(); })
       .then(function (data) {
         var body = document.getElementById('modal-body');
@@ -1506,7 +1517,7 @@ input[type="range"].dial:disabled {
     var query = prompt('QMD Search Query:');
     if (!query) return;
     showToast('◇ SEARCHING: ' + query, 1500);
-    fetch('/api/search', {
+    authFetch('/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: query, limit: 5 }),
@@ -1628,7 +1639,7 @@ input[type="range"].dial:disabled {
     var val = parseInt(input.value, 10);
     var nodeId = input.getAttribute('data-node');
     input.disabled = true;
-    fetch('/api/nodes/' + encodeURIComponent(nodeId) + '/patch', {
+    authFetch('/api/nodes/' + encodeURIComponent(nodeId) + '/patch', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contribution: val }),
@@ -1660,7 +1671,7 @@ input[type="range"].dial:disabled {
     body.innerHTML = '<div style="color:var(--muted);padding:0.5rem">Loading available models…</div>';
     overlay.classList.add('show');
 
-    fetch('/api/config/models' + (profile ? '?profile=' + encodeURIComponent(profile) : ''))
+    authFetch('/api/config/models' + (profile ? '?profile=' + encodeURIComponent(profile) : ''))
       .then(function (r) { return r.json(); })
       .then(function (data) {
         var models = data.models || data || [];
@@ -1689,7 +1700,7 @@ input[type="range"].dial:disabled {
 
   window.pullModel = function (modelName, nodeId) {
     showToast('◈ PULLING: ' + modelName + '…', 3000);
-    fetch('/api/models/pull', {
+    authFetch('/api/models/pull', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: modelName, node_id: nodeId }),

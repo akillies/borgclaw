@@ -51,9 +51,27 @@ func NewServer(cfg Config, metrics *MetricsCollector, ollama *OllamaClient, thro
 	// Info — static node info + hardware profile
 	mux.HandleFunc("GET /info", s.handleInfo)
 
+	// Auth middleware — check hive secret if configured
+	var handler http.Handler = mux
+	if cfg.HiveSecret != "" {
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Health is public (for load balancer probes)
+			if r.URL.Path == "/health" {
+				mux.ServeHTTP(w, r)
+				return
+			}
+			auth := r.Header.Get("Authorization")
+			if auth != "Bearer "+cfg.HiveSecret {
+				http.Error(w, `{"error":"unauthorized"}`, 401)
+				return
+			}
+			mux.ServeHTTP(w, r)
+		})
+	}
+
 	s.httpServer = &http.Server{
 		Addr:         cfg.ListenAddr,
-		Handler:      mux,
+		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 5 * time.Minute, // long for task responses
 		IdleTimeout:  60 * time.Second,
