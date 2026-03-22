@@ -22,9 +22,16 @@
 - Each drone gets a unique ID (`drone-efef`, `drone-a3b7`, etc.)
 - LiteLLM dynamic routing — drones auto-register as inference endpoints
 - Response caching — identical prompts skip the LLM
-- Hive halt/resume kill switch
+- Hive halt/resume kill switch (`./borgclaw halt` / `./borgclaw resume`)
 - Approval queue (Law Two — nothing external ships without human approval)
-- USB drive prep script — 2.4GB, fits on a 4GB drive
+- Queen chat — talk to the Queen in plain English, she responds AND acts
+- Cron scheduler — temporal awareness, scheduled workflows fire on time
+- Natural language governance — "set drone-efef to 30%" and she does it
+- Hive secret auth on every surface (dashboard, API, SSE, drone endpoints)
+- Node persistence — survives Queen restarts
+- LiteLLM response caching — identical prompts skip the LLM
+- USB drive prep script — 2.4GB, fits on a 4GB drive, clean uninstall included
+- `./borgclaw connect` — shows connection URLs for any app (OpenClaw, Cursor, Aider, etc.)
 - Workflow engine with DAG execution, approval gates, template variables
 - 5 agent archetypes defined (router, analyst, ops, comms, sentinel)
 - Full open-source scrub — no personal data, template variables for your setup
@@ -34,9 +41,13 @@
 - NATS event bus integration (in docker-compose, client wiring pending)
 
 **What's planned:**
+- Ghost worker desktop control (Xvfb + pyautogui for full desktop automation on Linux)
 - mDNS auto-discovery (drones find Queen without knowing the IP)
 - Knowledge-specialized drones (Medic, Engineer, Scholar — ZIM-based knowledge packs)
-- Voice interface (Pipecat + Whisper.cpp + Kokoro TTS)
+- Hive chat — drones talk to each other and to external AI systems
+- Community hives — pools of compute across households, co-ops, communities
+- DeerFlow 2.0 integration as a task type for sandboxed execution
+- Autoresearch evolution loop — Queen watches for better tools and proposes upgrades
 - Agent sandboxing (NemoClaw-inspired filesystem + network isolation)
 - Prometheus + Grafana observability
 
@@ -171,13 +182,15 @@ Ghost workers turn e-waste into employees. A $50 thrift store laptop becomes a 2
 
 ### The Queen
 
-The Queen doesn't think — she routes, monitors, enforces governance, and dispatches. She:
-- Tracks all drones via heartbeat
-- Dynamically updates LiteLLM routing when drones join/leave
-- Serves the retro BBS dashboard
-- Runs the workflow engine (DAG execution with approval gates)
-- Manages the approval queue (Law Two)
-- Enforces budget caps per agent
+The Queen thinks, acts, and protects. She:
+- **Talks** — `POST /api/chat` or the dashboard chat panel. Ask her anything about the hive in plain English. She responds AND acts.
+- **Governs** — "Set drone-efef to 30% and run the morning briefing" → she adjusts the dial AND triggers the workflow
+- **Senses** — every drone reports telemetry every 30 seconds (CPU, RAM, GPU, tok/s, temperature, active model)
+- **Schedules** — cron-based temporal awareness. Morning briefing at 8:30 AM weekdays. Job scanner on Mondays. She knows what time it is.
+- **Routes** — dynamically updates LiteLLM when drones join/leave. New drone = more compute instantly.
+- **Persists** — node state survives restarts. Queen crash doesn't lose the hive.
+- **Caches** — identical prompts skip the LLM. Saves time and API cost.
+- **Authenticates** — hive secret on every surface. Dashboard, API, SSE, drone endpoints. No open doors.
 
 ### Agents
 
