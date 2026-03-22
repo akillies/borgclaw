@@ -889,7 +889,7 @@ input[type="range"].dial:disabled {
                 + '<td class="dim">' + (m.ping_ms != null ? m.ping_ms + 'ms' : m.queen_rtt_ms != null ? m.queen_rtt_ms + 'ms' : '—') + '</td>'
                 + '<td><span style="color:' + tempColor(m.cpu_temp_c) + '">' + (m.cpu_temp_c != null ? m.cpu_temp_c + '°' : '—') + '</span>'
                 + (m.gpu_temp_c != null ? '/<span style="color:' + tempColor(m.gpu_temp_c) + '">' + m.gpu_temp_c + '°</span>' : '') + '</td>'
-                + '<td class="model-cell" onclick="openModelSwap(\'' + nodeIdSafe + '\',\'' + escHtml(n.profile || '') + '\')" title="Click to swap model" style="font-size:10px">' + escHtml(m.active_model || '—') + ' <span style="color:var(--muted)">▾</span></td>'
+                + '<td class="model-cell" data-action="modelswap" data-node="' + nodeIdSafe + '" data-profile="' + escHtml(n.profile || '') + '" title="Click to swap model" style="font-size:10px;cursor:pointer">' + escHtml(m.active_model || '—') + ' <span style="color:var(--muted)">▾</span></td>'
                 + '<td class="dial-cell"><div class="dial-wrap">'
                 + '<input type="range" class="dial" min="0" max="100" value="' + contrib + '" style="--dial-pct:' + dialPct + '" data-node="' + nodeIdSafe + '" oninput="updateDialPct(this)"  onchange="patchContribution(this)">'
                 + '<span class="dial-pct" id="dial-pct-' + nodeIdSafe + '">' + contrib + '%</span>'
@@ -1433,9 +1433,9 @@ input[type="range"].dial:disabled {
               + ' · SRC:' + escHtml(a.source_agent || '?') + '</span></td>'
             + '<td class="appr-type">' + escHtml(a.type || '—') + '</td>'
             + '<td class="appr-actions">'
-              + '<button class="btn btn-approve" onclick="doApprove(\\'' + id + '\\')">✓ APPROVE</button>'
-              + '<button class="btn btn-reject"  onclick="doReject(\\'' + id + '\\')">✗ REJECT</button>'
-              + '<button class="btn btn-view"    onclick="doView(\\'' + id + '\\')">⊞ VIEW</button>'
+              + '<button class="btn btn-approve" data-action="approve" data-id="' + id + '">✓ APPROVE</button>'
+              + '<button class="btn btn-reject"  data-action="reject"  data-id="' + id + '">✗ REJECT</button>'
+              + '<button class="btn btn-view"    data-action="view"    data-id="' + id + '">⊞ VIEW</button>'
             + '</td>'
             + '</tr>';
         }).join('');
@@ -1750,7 +1750,7 @@ input[type="range"].dial:disabled {
           html += '<div class="model-swap-item">'
             + '<span class="model-swap-name">' + nameEsc + '</span>'
             + '<span class="model-swap-size">' + escHtml(size) + '</span>'
-            + '<button class="btn btn-view" onclick="pullModel(&quot;' + nameEsc + '&quot;,&quot;' + escHtml(nodeId) + '&quot;)">PULL</button>'
+            + '<button class="btn btn-view" data-action="pull" data-model="' + nameEsc + '" data-node="' + escHtml(nodeId) + '">PULL</button>'
             + '</div>';
         });
         html += '</div>';
@@ -1812,7 +1812,7 @@ input[type="range"].dial:disabled {
       lines.push(workers.map(function (n) { return '  ' + nodeLabel(n); }).join('  '));
     }
 
-    panel.innerHTML = '<div class="topology-pre">' + lines.join('\n') + '</div>';
+    panel.innerHTML = '<div class="topology-pre">' + lines.join('<br>') + '</div>';
   }
 
   function nodeLabel(n) {
@@ -1915,6 +1915,25 @@ input[type="range"].dial:disabled {
       });
   };
 
+  // ── Event Delegation — handles all data-action clicks ──
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    var action = btn.getAttribute('data-action');
+    var id = btn.getAttribute('data-id');
+    var node = btn.getAttribute('data-node');
+    var model = btn.getAttribute('data-model');
+    var profile = btn.getAttribute('data-profile');
+
+    switch (action) {
+      case 'approve': doApprove(id); break;
+      case 'reject':  doReject(id); break;
+      case 'view':    doView(id); break;
+      case 'pull':    pullModel(model, node); break;
+      case 'modelswap': openModelSwap(node, profile); break;
+    }
+  });
+
   // ── Init ───────────────────────────────────────────────
   initSndBtn();
   connectSSE();
@@ -1922,6 +1941,41 @@ input[type="range"].dial:disabled {
 })();
 </script>
 
+<script>
+// Standalone chat — works even if main script has issues
+(function(){
+  var SECRET='${data.hiveSecret||""}';
+  var hdr={'Content-Type':'application/json'};
+  if(SECRET)hdr['Authorization']='Bearer '+SECRET;
+
+  window.sendChat=function(){
+    var inp=document.getElementById('chat-input');
+    var log=document.getElementById('chat-log');
+    var msg=inp.value.trim();
+    if(!msg)return;
+    inp.value='';inp.disabled=true;
+    log.innerHTML+='<div style="color:#0cf;margin-top:4px">'+msg.replace(/</g,'&lt;')+'</div>';
+    log.innerHTML+='<div style="color:#888">Queen is thinking...</div>';
+    log.scrollTop=log.scrollHeight;
+    fetch('/api/chat',{method:'POST',headers:hdr,body:JSON.stringify({message:msg})})
+    .then(function(r){return r.json()})
+    .then(function(d){
+      var els=log.querySelectorAll('div');
+      var last=els[els.length-1];
+      if(last&&last.textContent.includes('thinking'))last.remove();
+      log.innerHTML+='<div style="color:#0f8;margin-top:2px">'+((d.response||d.error||'').replace(/</g,'&lt;'))+'</div>';
+      if(d.actions_taken&&d.actions_taken.length>0)d.actions_taken.forEach(function(a){
+        log.innerHTML+='<div style="color:#fa0;font-size:10px">  > '+a.cmd+' '+JSON.stringify(a.params)+'</div>';
+      });
+      log.scrollTop=log.scrollHeight;inp.disabled=false;inp.focus();
+    })
+    .catch(function(e){
+      log.innerHTML+='<div style="color:#f44">Error: '+e.message+'</div>';
+      inp.disabled=false;inp.focus();
+    });
+  };
+})();
+</script>
 </body>
 </html>`;
 }
