@@ -1702,7 +1702,7 @@ input[type="range"].dial:disabled {
     var val = parseInt(input.value, 10);
     var nodeId = input.getAttribute('data-node');
     input.disabled = true;
-    authFetch('/api/nodes/' + encodeURIComponent(nodeId) + '/patch', {
+    authFetch('/api/nodes/' + encodeURIComponent(nodeId), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contribution: val }),
