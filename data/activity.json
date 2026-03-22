@@ -39,5 +39,116 @@
     "type": "queen_chat",
     "message": "drone-efef just joined. whats his status?",
     "actions": 2
+  },
+  {
+    "id": "evt-1774164594920-0ien",
+    "ts": "2026-03-22T07:29:54.920Z",
+    "type": "workflow_started",
+    "workflow": "morning-briefing",
+    "run_id": "run-1774164594907-91gj"
+  },
+  {
+    "id": "evt-1774164594920-7b70",
+    "ts": "2026-03-22T07:29:54.920Z",
+    "type": "workflow_step_start",
+    "workflow": "morning-briefing",
+    "step": "scan_calendar",
+    "agent": "cerebro-analyst"
+  },
+  {
+    "id": "evt-1774164594920-k9tp",
+    "ts": "2026-03-22T07:29:54.920Z",
+    "type": "workflow_step_start",
+    "workflow": "morning-briefing",
+    "step": "scan_inbox",
+    "agent": "cerebro-analyst"
+  },
+  {
+    "id": "evt-1774164594920-zonw",
+    "ts": "2026-03-22T07:29:54.920Z",
+    "type": "workflow_step_start",
+    "workflow": "morning-briefing",
+    "step": "scan_signals",
+    "agent": "cerebro-analyst"
+  },
+  {
+    "id": "evt-1774164594920-5x52",
+    "ts": "2026-03-22T07:29:54.920Z",
+    "type": "workflow_step_start",
+    "workflow": "morning-briefing",
+    "step": "pattern_scan",
+    "agent": "sentinel"
+  },
+  {
+    "id": "evt-1774164601968-e7mf",
+    "ts": "2026-03-22T07:30:01.968Z",
+    "type": "workflow_step_complete",
+    "workflow": "morning-briefing",
+    "step": "scan_calendar",
+    "agent": "cerebro-analyst"
+  },
+  {
+    "id": "evt-1774164611675-lg20",
+    "ts": "2026-03-22T07:30:11.675Z",
+    "type": "workflow_step_complete",
+    "workflow": "morning-briefing",
+    "step": "pattern_scan",
+    "agent": "sentinel"
+  },
+  {
+    "id": "evt-1774164620570-lpfc",
+    "ts": "2026-03-22T07:30:20.570Z",
+    "type": "workflow_step_complete",
+    "workflow": "morning-briefing",
+    "step": "scan_signals",
+    "agent": "cerebro-analyst"
+  },
+  {
+    "id": "evt-1774164628196-murs",
+    "ts": "2026-03-22T07:30:28.196Z",
+    "type": "workflow_step_complete",
+    "workflow": "morning-briefing",
+    "step": "scan_inbox",
+    "agent": "cerebro-analyst"
+  },
+  {
+    "id": "evt-1774164628196-ydyk",
+    "ts": "2026-03-22T07:30:28.196Z",
+    "type": "workflow_step_start",
+    "workflow": "morning-briefing",
+    "step": "format_briefing",
+    "agent": "comms-drafter"
+  },
+  {
+    "id": "evt-1774164637853-wz23",
+    "ts": "2026-03-22T07:30:37.853Z",
+    "type": "workflow_step_complete",
+    "workflow": "morning-briefing",
+    "step": "format_briefing",
+    "agent": "comms-drafter"
+  },
+  {
+    "id": "evt-1774164637853-edzn",
+    "ts": "2026-03-22T07:30:37.853Z",
+    "type": "workflow_step_start",
+    "workflow": "morning-briefing",
+    "step": "deliver",
+    "agent": "ops-handler"
+  },
+  {
+    "id": "evt-1774164647409-xa1g",
+    "ts": "2026-03-22T07:30:47.409Z",
+    "type": "workflow_step_complete",
+    "workflow": "morning-briefing",
+    "step": "deliver",
+    "agent": "ops-handler"
+  },
+  {
+    "id": "evt-1774164647409-0ist",
+    "ts": "2026-03-22T07:30:47.409Z",
+    "type": "workflow_completed",
+    "workflow": "morning-briefing",
+    "run_id": "run-1774164594907-91gj",
+    "steps_completed": 6
   }
 ]
