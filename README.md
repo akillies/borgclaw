@@ -132,6 +132,8 @@ When a drone heartbeats with its model list, Queen automatically updates LiteLLM
 
 **exo** splits one large model across multiple machines (tensor parallelism). **BorgClaw** routes different tasks to different specialized drones. Different problems, complementary approaches.
 
+**Already running OpenClaw?** One variable change gives it a full drone fleet as its compute backend. See [docs/OPENCLAW.md](docs/OPENCLAW.md).
+
 **Why does the Perplexity Computer exist?** Because nobody built the open-source version. $200/month for a cloud-dependent box when your garage full of old hardware does it for $0. BorgClaw is the answer that should have existed already. Free. Sovereign. Runs on the machines you already own. No subscription. No cloud. No one takes it away.
 
 ## The Hive
@@ -294,6 +296,7 @@ borgclaw/
 ├── docs/
 │   ├── SECURITY.md              ← Governance model + security plans
 │   ├── INTEGRATION.md           ← Wire BorgClaw to your personal AI OS
+│   ├── OPENCLAW.md              ← Use BorgClaw as the compute backend for OpenClaw/NanoClaw
 │   └── QUICKSTART.md
 ├── specs/                       ← Architecture decisions + competitive analysis
 └── research/                    ← Technology audits + tool evaluations

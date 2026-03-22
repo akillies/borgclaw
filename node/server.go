@@ -9,6 +9,24 @@ import (
 	"time"
 )
 
+// droneBBSHTML is the inline BBS terminal page served at GET /.
+// Verbs (in order): NodeID×2, Tier, Contribution, CPUPercent, RAMPercent,
+// GPUName, ActiveModel, AvgTokPerSec, uptime, TasksCompleted, TasksActive,
+// HiveSecret.
+const droneBBSHTML = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>%s</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#00ff88;font-family:monospace;font-size:13px;padding:16px;min-height:100vh}pre{white-space:pre}.dim{color:#005533}.hi{color:#00ffaa}input{background:#0a0a0a;border:1px solid #00ff88;color:#00ff88;font-family:monospace;font-size:13px;padding:4px 8px;width:calc(100%% - 80px);outline:none}button{background:#003322;border:1px solid #00ff88;color:#00ff88;font-family:monospace;font-size:13px;padding:4px 12px;cursor:pointer;margin-left:4px}button:hover{background:#00ff88;color:#0a0a0a}#resp{margin-top:8px;color:#00cc66;min-height:1em;white-space:pre-wrap;word-break:break-word}.blink{animation:blink 1s step-end infinite}@keyframes blink{0%%,100%%{opacity:1}50%%{opacity:0}}</style></head><body data-secret="%s"><pre>
+&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
+&#x2502;  B O R G C L A W   D R O N E   T E R M  &#x2502;
+&#x2502;  NODE: <span class="hi">%-26s</span>&#x2502;
+&#x2502;  TIER: %-8s  CONTRIBUTION: %3d%%        &#x2502;
+&#x251C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2524;
+&#x2502;  CPU  %5.1f%%   RAM  %5.1f%%                 &#x2502;
+&#x2502;  GPU  %-30s&#x2502;
+&#x2502;  MDL  %-22s %6.1f t/s &#x2502;
+&#x251C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2524;
+&#x2502;  UP   %-14s  DONE %5d  ACT %3d &#x2502;
+&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
+</pre><div style="margin-top:12px"><input id="msg" type="text" placeholder="transmit to drone..." autocomplete="off"><button onclick="send()">TX</button></div><div id="resp"><span class="dim">awaiting transmission<span class="blink">_</span></span></div><script>function send(){var m=document.getElementById('msg').value.trim();if(!m)return;var s=document.body.dataset.secret;document.getElementById('resp').textContent='...';fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+s},body:JSON.stringify({message:m})}).then(function(r){return r.json()}).then(function(d){document.getElementById('resp').textContent=d.response||d.error||'no response'}).catch(function(e){document.getElementById('resp').textContent='ERR: '+e})}</script></body></html>`
+
 // Server is the node's HTTP API surface.
 type Server struct {
 	cfg      Config
@@ -33,6 +51,9 @@ func NewServer(cfg Config, metrics *MetricsCollector, ollama *OllamaClient, thro
 	}
 
 	mux := http.NewServeMux()
+
+	// BBS terminal — public status page for the drone
+	mux.HandleFunc("GET /", s.handleRoot)
 
 	// Health check — lightweight, for load balancers and Queen probes
 	mux.HandleFunc("GET /health", s.handleHealth)
@@ -60,8 +81,8 @@ func NewServer(cfg Config, metrics *MetricsCollector, ollama *OllamaClient, thro
 	var handler http.Handler = mux
 	if cfg.HiveSecret != "" {
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Health is public (for load balancer probes)
-			if r.URL.Path == "/health" {
+			// Public endpoints — no auth required
+			if r.URL.Path == "/" || r.URL.Path == "/health" {
 				mux.ServeHTTP(w, r)
 				return
 			}
@@ -117,6 +138,47 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"contribution": s.throttle.Level(),
 		"uptime_sec":   time.Since(startTime).Seconds(),
 	})
+}
+
+func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
+	m := s.metrics.Current()
+	hw := s.cfg.Hardware
+
+	gpuName := hw.GPUName
+	if gpuName == "" {
+		gpuName = "none"
+	}
+	activeModel := m.ActiveModel
+	if activeModel == "" {
+		activeModel = "-"
+	}
+
+	uptime := time.Since(startTime)
+	uptimeStr := fmt.Sprintf("%dd%02dh%02dm",
+		int(uptime.Hours())/24,
+		int(uptime.Hours())%24,
+		int(uptime.Minutes())%60,
+	)
+
+	page := fmt.Sprintf(droneBBSHTML,
+		s.cfg.NodeID,    // <title>
+		s.cfg.HiveSecret, // data-secret on body (used by chat fetch)
+		s.cfg.NodeID,    // NODE: display
+		hw.Tier,         // TIER:
+		s.throttle.Level(), // CONTRIBUTION:
+		m.CPUPercent,    // CPU
+		m.RAMPercent,    // RAM
+		gpuName,         // GPU
+		activeModel,     // MDL name
+		m.AvgTokPerSec,  // tok/s
+		uptimeStr,       // UP
+		m.TasksCompleted, // DONE
+		m.TasksActive,   // ACT
+	)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write([]byte(page))
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {

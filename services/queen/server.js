@@ -27,6 +27,7 @@ import * as approvals from './lib/approvals.js';
 import { deepHealthCheck } from './lib/health.js';
 import * as setup from './lib/setup.js';
 import { initNats, publish as natsPublish, close as natsClose } from './lib/nats.js';
+import { executeWorkflow } from './lib/workflow.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -432,6 +433,89 @@ app.post('/api/hive/resume', (_req, res) => {
 
   scheduleLitellmSync();
   res.json({ resumed: true });
+});
+
+// ============================================================
+// ROUTES: Make Disk — write a USB drone installer
+// ============================================================
+// POST /api/hive/make-disk
+//   Body: { target_path: "/Volumes/MYUSB" }
+//   Returns: { ok: true, path, size_mb } | { ok: false, error }
+//
+// Wraps scripts/prepare-usb.sh which does the heavy lifting:
+//   - Cross-compiles the-claw for Linux amd64
+//   - Caches Ollama installer + local models
+//   - Writes hive secret + Queen IP into drone config
+// ============================================================
+
+app.post('/api/hive/make-disk', async (req, res) => {
+  const { target_path } = req.body || {};
+
+  if (!target_path || typeof target_path !== 'string' || !target_path.trim()) {
+    return res.status(400).json({ ok: false, error: 'target_path is required' });
+  }
+
+  // Basic safety: must be an absolute path
+  if (!path.isAbsolute(target_path)) {
+    return res.status(400).json({ ok: false, error: 'target_path must be absolute (e.g. /Volumes/MYUSB)' });
+  }
+
+  const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'prepare-usb.sh');
+
+  // Verify the script exists before spawning
+  if (!existsSync(scriptPath)) {
+    return res.status(500).json({ ok: false, error: `prepare-usb.sh not found at ${scriptPath}` });
+  }
+
+  activity.log({ type: 'make_disk_started', target_path });
+  console.log(`[QUEEN] MAKE DISK: writing hive to ${target_path}`);
+
+  try {
+    const output = await new Promise((resolve, reject) => {
+      const proc = spawn('bash', [scriptPath, target_path.trim()], {
+        env: { ...process.env },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      proc.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+      proc.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+
+      proc.on('error', (err) => {
+        reject(new Error(`Script spawn failed: ${err.message}`));
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve(stdout);
+        } else {
+          // Include both streams — the script may print errors to either
+          const detail = (stderr + stdout).trim() || `Exit code ${code}`;
+          reject(new Error(detail));
+        }
+      });
+    });
+
+    // Measure what landed on the drive
+    let size_mb = null;
+    try {
+      const clawDir = path.join(target_path.trim(), 'THE-CLAW');
+      const { execSync } = await import('child_process');
+      const duOut = execSync(`du -sm "${clawDir}" 2>/dev/null || echo "0"`, { encoding: 'utf-8', timeout: 5000 });
+      size_mb = parseInt(duOut.trim().split(/\s+/)[0]) || null;
+    } catch { /* best effort — size stays null if du fails */ }
+
+    activity.log({ type: 'make_disk_complete', target_path, size_mb });
+    console.log(`[QUEEN] MAKE DISK complete: ${target_path} (${size_mb != null ? size_mb + ' MB' : 'size unknown'})`);
+
+    res.json({ ok: true, path: target_path, size_mb, output: output.slice(-2000) });
+  } catch (err) {
+    activity.log({ type: 'make_disk_failed', target_path, error: err.message });
+    console.error(`[QUEEN] MAKE DISK failed: ${err.message}`);
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // ============================================================
@@ -878,111 +962,88 @@ app.post('/api/setup/complete', (_req, res) => {
 });
 
 // ============================================================
-// Workflow Execution Engine
+// Workflow Execution Engine — delegates to lib/workflow.js
+// ============================================================
+// lib/workflow.js is the real DAG engine (Kahn's algorithm,
+// approval gates, template resolution, timeout enforcement).
+// This function wires the server's resources into it.
 // ============================================================
 
 async function executeWorkflowAsync(runId, spec, context) {
   const run = runningWorkflows.get(runId);
-  const results = {};
-  const completed = new Set();
 
-  // Build dependency graph
-  const steps = spec.steps || [];
-  const stepMap = new Map(steps.map(s => [s.id, s]));
+  // Adapter: lib/workflow.js calls callLLM(agent, action, inputs, systemPrompt).
+  // We wrap callLLMWithTimeout and also prepend the agent's instructions.md
+  // to the systemPrompt that the lib built from step fields.
+  async function callLLM(agent, action, inputs, systemPrompt) {
+    // Load agent instructions from disk (best-effort)
+    let agentInstructions = '';
+    try {
+      const agentDir = path.join(BORGCLAW_HOME, 'agents', agent);
+      agentInstructions = await fs.readFile(path.join(agentDir, 'instructions.md'), 'utf-8');
+    } catch { /* instructions not found — proceed without */ }
 
-  // Topological execution
-  let iterations = 0;
-  const MAX_ITERATIONS = steps.length * 2; // safety valve
+    const fullSystemPrompt = agentInstructions
+      ? `${agentInstructions}\n\n${systemPrompt}`
+      : systemPrompt;
 
-  while (completed.size < steps.length && iterations < MAX_ITERATIONS) {
-    iterations++;
-
-    // Find steps whose dependencies are all met
-    const ready = steps.filter(s =>
-      !completed.has(s.id) &&
-      (s.depends_on || []).every(dep => completed.has(dep))
-    );
-
-    if (ready.length === 0 && completed.size < steps.length) {
-      // Check if we're paused on approval
-      const paused = steps.find(s => !completed.has(s.id) && results[s.id]?.approval_id);
-      if (paused) {
-        const approvalId = results[paused.id].approval_id;
-        const approval = approvals.get(approvalId);
-        if (approval?.status === 'approved') {
-          completed.add(paused.id);
-          activity.log({ type: 'workflow_step_approved', workflow: spec.name, step: paused.id });
-          continue;
-        } else if (approval?.status === 'rejected') {
-          run.status = 'rejected';
-          activity.log({ type: 'workflow_rejected', workflow: spec.name, step: paused.id });
-          return;
-        }
-        // Still pending — wait and check again
-        await sleep(2000);
-        continue;
-      }
-      // Deadlock — circular dependency or unresolvable
-      run.status = 'failed';
-      activity.log({ type: 'workflow_deadlock', workflow: spec.name, completed: [...completed] });
-      return;
-    }
-
-    // Execute ready steps (in parallel)
-    const executions = ready.map(async (step) => {
-      activity.log({ type: 'workflow_step_start', workflow: spec.name, step: step.id, agent: step.agent });
-
-      try {
-        // Resolve template variables in inputs
-        const inputs = resolveTemplates(step.inputs || {}, results, context);
-
-        // Load agent instructions
-        let systemPrompt = '';
-        try {
-          const agentDir = path.join(BORGCLAW_HOME, 'agents', step.agent);
-          systemPrompt = await fs.readFile(path.join(agentDir, 'instructions.md'), 'utf-8');
-        } catch { /* agent instructions not found — proceed without */ }
-
-        // Execute via LLM
-        const timeout = parseTimeout(step.timeout);
-        const result = await callLLMWithTimeout(step, inputs, systemPrompt, timeout);
-
-        results[step.id] = result;
-
-        // Check if approval is required
-        if (step.requires_approval) {
-          const approval = approvals.create({
-            type: 'workflow_step',
-            source_agent: step.agent,
-            source_workflow: `${spec.name}/${runId}`,
-            summary: `${spec.name} → ${step.id}: ${step.description || step.action}`,
-            content: result,
-          });
-          results[step.id] = { ...result, approval_id: approval.id };
-          run.pausedApprovalId = approval.id;
-          run.status = 'paused';
-          activity.log({ type: 'workflow_step_paused', workflow: spec.name, step: step.id, approval_id: approval.id });
-          return; // Don't mark as completed yet
-        }
-
-        completed.add(step.id);
-        activity.log({ type: 'workflow_step_complete', workflow: spec.name, step: step.id, agent: step.agent });
-      } catch (err) {
-        results[step.id] = { error: err.message };
-        activity.log({ type: 'workflow_step_error', workflow: spec.name, step: step.id, error: err.message });
-        // Don't fail the whole workflow — mark step as completed with error
-        completed.add(step.id);
-      }
-    });
-
-    await Promise.all(executions);
+    // Build a minimal step-like object for callLLMWithTimeout
+    const stepProxy = { agent, action, description: '' };
+    return callLLMWithTimeout(stepProxy, inputs, fullSystemPrompt, 5 * 60 * 1000);
   }
 
-  run.status = 'completed';
-  run.results = results;
-  run.completed_at = new Date().toISOString();
-  activity.log({ type: 'workflow_completed', workflow: spec.name, run_id: runId, steps_completed: completed.size });
-  natsPublish('hive.workflow.completed', { workflow: spec.name, run_id: runId, steps_completed: completed.size, ts: run.completed_at });
+  // Adapter: lib/workflow.js calls createApproval(approval) → item with .id
+  function createApproval(approval) {
+    const item = approvals.create({
+      ...approval,
+      source_workflow: approval.source_workflow
+        ? `${approval.source_workflow}/${runId}`
+        : runId,
+    });
+    run.pausedApprovalId = item.id;
+    run.status = 'paused';
+    return item;
+  }
+
+  // Adapter: lib/workflow.js calls getApprovalStatus(id) → 'pending'|'approved'|'rejected'
+  function getApprovalStatus(id) {
+    return approvals.get(id)?.status || 'pending';
+  }
+
+  try {
+    const outcome = await executeWorkflow(spec.name, {
+      workflows,
+      callLLM,
+      createApproval,
+      logActivity: activity.log,
+      getApprovalStatus,
+      context,
+    });
+
+    // Map lib result back onto the run object
+    if (outcome.status === 'completed') {
+      run.status = 'completed';
+      // Convert Map → plain object for JSON serialisation
+      run.results = Object.fromEntries(outcome.results);
+      run.completed_at = new Date().toISOString();
+      activity.log({ type: 'workflow_completed', workflow: spec.name, run_id: runId, steps_completed: outcome.results.size });
+      natsPublish('hive.workflow.completed', { workflow: spec.name, run_id: runId, steps_completed: outcome.results.size, ts: run.completed_at });
+    } else if (outcome.status === 'paused') {
+      // run.status and run.pausedApprovalId already set inside createApproval
+      run.paused_at = outcome.paused_at;
+      run._state = outcome._state; // carry resume state
+      run.results = Object.fromEntries(outcome.results);
+    } else {
+      // 'failed'
+      run.status = 'failed';
+      run.error = outcome.error;
+      run.results = Object.fromEntries(outcome.results);
+    }
+  } catch (err) {
+    run.status = 'failed';
+    run.error = err.message;
+    throw err;
+  }
 }
 
 // Call LLM — model-agnostic via LiteLLM or direct Ollama
@@ -1038,37 +1099,6 @@ async function callLLMWithTimeout(step, inputs, systemPrompt, timeoutMs) {
 }
 
 // ============================================================
-// Template Resolution
-// ============================================================
-
-function resolveTemplates(obj, results, context) {
-  if (typeof obj === 'string') {
-    return obj.replace(/\{\{([^}]+)\}\}/g, (_, expr) => {
-      const trimmed = expr.trim();
-      // Check context first (today, today_formatted, etc.)
-      if (context[trimmed] !== undefined) return context[trimmed];
-      // Check step results (step_id.output_field)
-      const parts = trimmed.split('.');
-      if (parts.length >= 2) {
-        const stepResult = results[parts[0]];
-        if (stepResult) {
-          const val = parts.slice(1).reduce((o, k) => o?.[k], stepResult);
-          return typeof val === 'object' ? JSON.stringify(val) : String(val ?? '');
-        }
-      }
-      return `{{${trimmed}}}`; // unresolve — leave as-is
-    });
-  }
-  if (Array.isArray(obj)) return obj.map(item => resolveTemplates(item, results, context));
-  if (obj && typeof obj === 'object') {
-    const resolved = {};
-    for (const [k, v] of Object.entries(obj)) resolved[k] = resolveTemplates(v, results, context);
-    return resolved;
-  }
-  return obj;
-}
-
-// ============================================================
 // Background: Heartbeat Checker
 // ============================================================
 
@@ -1100,19 +1130,6 @@ function timeSince(date) {
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   return `${Math.floor(s / 3600)}h ago`;
 }
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-function parseTimeout(str) {
-  if (!str) return 120_000; // 2 min default
-  const match = String(str).match(/^(\d+)\s*(m|min|s|sec|h|hr)?$/i);
-  if (!match) return 120_000;
-  const num = parseInt(match[1]);
-  const unit = (match[2] || 'm').toLowerCase();
-  if (unit.startsWith('s')) return num * 1000;
-  if (unit.startsWith('h')) return num * 3600_000;
-  return num * 60_000; // minutes
-}
-
 function nodeList() {
   return [...nodes.entries()].map(([id, n]) => ({
     node_id: id,

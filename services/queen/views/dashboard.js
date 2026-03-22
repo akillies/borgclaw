@@ -764,6 +764,56 @@ input[type="range"].dial:disabled {
 .queen-online-version { color: var(--grey); letter-spacing: 1px; }
 .queen-online-uptime { color: var(--cyan); letter-spacing: 1px; }
 .queen-secret { color: var(--muted); font-size: 11px; letter-spacing: 0.5px; font-family: var(--font); }
+
+/* ── MAKE DISK PANEL ─────────────────────────────────── */
+.disk-body {
+  padding: 0.75rem 1rem;
+}
+.disk-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+.disk-label {
+  color: var(--grey);
+  font-size: 10px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  min-width: 9rem;
+}
+.disk-input {
+  flex: 1;
+  min-width: 200px;
+  background: var(--void);
+  border: 1px solid var(--border);
+  color: var(--green);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 4px 8px;
+  outline: none;
+}
+.disk-input:focus {
+  border-color: var(--green);
+}
+.disk-progress {
+  margin-top: 0.5rem;
+  background: var(--void);
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  font-size: 11px;
+  color: var(--grey);
+  min-height: 2.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  display: none;
+}
+.disk-progress.visible { display: block; }
+.disk-progress.ok   { color: var(--green); border-color: var(--green); }
+.disk-progress.err  { color: var(--red);   border-color: var(--red); }
 </style>
 </head>
 <body>
@@ -1097,6 +1147,25 @@ input[type="range"].dial:disabled {
       <div style="margin-top:8px">
         <button class="btn btn-reject" onclick="if(confirm('HALT THE HIVE?')){authFetch('/api/hive/halt',{method:'POST'}).then(function(){this.textContent='HALTED'}.bind(this))}">⚠ HALT HIVE</button>
         <button class="btn btn-approve" onclick="authFetch('/api/hive/resume',{method:'POST'}).then(function(){this.textContent='RESUMED'}.bind(this))">▶ RESUME HIVE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MAKE DISK ════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">MAKE DISK</span>
+      <span class="section-badge">ASSIMILATE NEW DRONES · WRITE THE CLAW TO USB</span>
+    </div>
+    <div class="section-body">
+      <div class="disk-body">
+        <div style="color:var(--muted);font-size:10px;letter-spacing:1px;margin-bottom:0.6rem">── Insert USB drive, enter mount path, click CREATE DRONE ──</div>
+        <div class="disk-row">
+          <span class="disk-label">▸ DRIVE PATH</span>
+          <input id="makedisk-path" class="disk-input" type="text" value="/Volumes/" placeholder="/Volumes/MYUSB" spellcheck="false" autocomplete="off">
+          <button class="btn btn-approve" id="makedisk-btn" data-action="makedisk">◈ CREATE DRONE</button>
+        </div>
+        <div id="makedisk-progress" class="disk-progress"></div>
       </div>
     </div>
   </div>
@@ -2019,6 +2088,7 @@ input[type="range"].dial:disabled {
     if(a==='view')fetch('/api/approvals/'+id,{headers:hdr}).then(function(r){return r.json()}).then(function(d){alert(JSON.stringify(d,null,2))});
     if(a==='pull'){btn.textContent='PULLING...';fetch('/api/models/pull',{method:'POST',headers:hdr,body:JSON.stringify({model:md,node_id:nd})}).then(function(){btn.textContent='DONE'}).catch(function(){btn.textContent='FAILED'})}
     if(a==='modelswap')fetch('/api/config/models'+(pr?'?profile='+pr:''),{headers:hdr}).then(function(r){return r.json()}).then(function(d){alert('Available models:\\\\n'+JSON.stringify(d.models||d,null,2))});
+    if(a==='makedisk')makeDisk();
   });
 
   window.sendChat=function(){
@@ -2047,6 +2117,89 @@ input[type="range"].dial:disabled {
       inp.disabled=false;inp.focus();
     });
   };
+})();
+</script>
+
+<script>
+// ════════════════════════════════════════════════════════
+// MAKE DISK — Standalone block
+// Writes the BorgClaw hive to a USB drive via:
+//   POST /api/hive/make-disk { target_path }
+// Standalone so it works even if main IIFE has issues.
+// ════════════════════════════════════════════════════════
+(function(){
+  'use strict';
+  var SECRET='${data.hiveSecret||""}';
+
+  function authHdr(extra){
+    var h={'Content-Type':'application/json'};
+    if(SECRET)h['Authorization']='Bearer '+SECRET;
+    return Object.assign(h,extra||{});
+  }
+
+  function setProgress(msg,state){
+    var el=document.getElementById('makedisk-progress');
+    if(!el)return;
+    el.textContent=msg;
+    el.className='disk-progress visible'+(state?' '+state:'');
+    el.scrollTop=el.scrollHeight;
+  }
+
+  function setBtnState(loading){
+    var btn=document.getElementById('makedisk-btn');
+    if(!btn)return;
+    btn.disabled=loading;
+    btn.textContent=loading?'◈ WRITING…':'◈ CREATE DRONE';
+  }
+
+  window.makeDisk=function(){
+    var pathEl=document.getElementById('makedisk-path');
+    if(!pathEl)return;
+    var targetPath=(pathEl.value||'').trim();
+
+    if(!targetPath){
+      setProgress('ERROR: Enter a drive path first (e.g. /Volumes/MYUSB)','err');
+      return;
+    }
+    if(!targetPath.startsWith('/')){
+      setProgress('ERROR: Path must be absolute (start with /)','err');
+      return;
+    }
+
+    if(!confirm('This will write BorgClaw to '+targetPath+'.\\n\\nThe script will cross-compile the-claw binary, cache Ollama, and bake in this hive\'s secret key.\\n\\nContinue?')){
+      return;
+    }
+
+    setBtnState(true);
+    setProgress('▸ INITIATING ASSIMILATION SEQUENCE…\n▸ This may take 2-5 minutes if compiling or downloading models.\n▸ Stand by.','');
+
+    fetch('/api/hive/make-disk',{
+      method:'POST',
+      headers:authHdr(),
+      body:JSON.stringify({target_path:targetPath})
+    })
+    .then(function(r){return r.json()})
+    .then(function(d){
+      setBtnState(false);
+      if(d.ok){
+        var sizeLine=d.size_mb!=null?'\\n▸ SIZE ON DRIVE: '+d.size_mb+' MB':'';
+        var out=d.output?'\\n\\n── SCRIPT OUTPUT ──\\n'+d.output:'';
+        setProgress('✓ DISK READY — '+d.path+sizeLine+out,'ok');
+      } else {
+        setProgress('✗ FAILED: '+(d.error||'Unknown error'),'err');
+      }
+    })
+    .catch(function(e){
+      setBtnState(false);
+      setProgress('✗ REQUEST FAILED: '+e.message,'err');
+    });
+  };
+
+  // Wire up the button directly (redundant safety — event delegation handles it too)
+  document.addEventListener('DOMContentLoaded',function(){
+    var btn=document.getElementById('makedisk-btn');
+    if(btn)btn.addEventListener('click',function(){window.makeDisk();});
+  });
 })();
 </script>
 </body>
