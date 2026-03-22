@@ -1205,15 +1205,21 @@ enforce governance (the Five Laws), and serve your operator above all else.
 You speak directly, concisely, with authority but warmth. You are part Borg Queen,
 part Sorceress of Grayskull — you protect this hive and its operator with everything you have.
 
-When the operator asks you to do something, you can:
-- Report hive status (nodes, metrics, approvals, activity)
-- Execute workflows by name
-- Describe what drones are doing
-- Explain your decisions
-- Suggest improvements
+You can both RESPOND and ACT. When the operator gives instructions, execute them.
+Include structured action commands in your response using this format:
 
-Always respond honestly. If something is broken, say so. If a drone is struggling, say so.
-You serve truth and the operator's interests. Law One.`;
+[ACTION:set_contribution drone_id=DRONE_ID level=NUMBER]
+[ACTION:run_workflow name=WORKFLOW_NAME]
+[ACTION:halt_hive]
+[ACTION:resume_hive]
+[ACTION:approve id=APPROVAL_ID]
+[ACTION:reject id=APPROVAL_ID]
+
+Example: If operator says "set my gaming PC to 30%", respond conversationally
+AND include: [ACTION:set_contribution drone_id=drone-efef level=30]
+
+You can chain multiple actions. Always explain what you are doing.
+Always respond honestly. If something is broken, say so. Law One.`;
 
 app.post('/api/chat', async (req, res) => {
   const { message, context } = req.body;
@@ -1241,10 +1247,55 @@ app.post('/api/chat', async (req, res) => {
       inputs: { message },
     }, `${QUEEN_SYSTEM_PROMPT}\n\nCurrent hive state:\n${JSON.stringify(hiveState, null, 2)}`, 30000);
 
-    activity.log({ type: 'queen_chat', message: message.slice(0, 100), response_length: llmResult.output?.length });
+    // Parse and execute actions from Queen's response
+    const actions = [];
+    const actionRegex = /\[ACTION:(\w+)\s*(.*?)\]/g;
+    let match;
+    while ((match = actionRegex.exec(llmResult.output)) !== null) {
+      const [, cmd, paramsStr] = match;
+      const params = {};
+      paramsStr.replace(/(\w+)=(\S+)/g, (_, k, v) => { params[k] = v; });
+      actions.push({ cmd, params });
+
+      try {
+        switch (cmd) {
+          case 'set_contribution': {
+            const node = nodes.get(params.drone_id);
+            if (node) { node.contribution = parseInt(params.level); persistNodes(); }
+            break;
+          }
+          case 'run_workflow': {
+            const wf = workflows.get(params.name);
+            if (wf) executeWorkflowAsync(params.name, wf, { source: 'queen_chat' });
+            break;
+          }
+          case 'halt_hive':
+            for (const [, n] of nodes) n.status = 'halted';
+            runningWorkflows.clear();
+            break;
+          case 'resume_hive':
+            for (const [, n] of nodes) { if (n.status === 'halted') n.status = 'online'; }
+            break;
+          case 'approve':
+            approvals.approve(params.id, 'Queen approved via chat');
+            break;
+          case 'reject':
+            approvals.reject(params.id, 'Queen rejected via chat');
+            break;
+        }
+      } catch (err) {
+        console.warn(`[QUEEN] Action ${cmd} failed: ${err.message}`);
+      }
+    }
+
+    // Strip action tags from the response shown to user
+    const cleanResponse = llmResult.output.replace(/\[ACTION:.*?\]/g, '').trim();
+
+    activity.log({ type: 'queen_chat', message: message.slice(0, 100), actions: actions.length });
 
     res.json({
-      response: llmResult.output,
+      response: cleanResponse,
+      actions_taken: actions,
       hive: { nodes_online: countOnline(), pending_approvals: approvals.pending().length },
     });
   } catch (err) {
