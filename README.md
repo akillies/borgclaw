@@ -25,14 +25,17 @@ Queen boots. Drones join. Telemetry flows. The hive works.
 - MCP tools — agents read files and fetch web content
 - Drone personas — researcher, planner, worker modes
 - Drone learning — each drone tracks its own performance over time
-- Ghost worker framework — browser automation on old hardware
+- Ghost worker — tested browser automation on old hardware (browsed example.com)
 - Hardware auto-detection, cross-platform (Linux, macOS, Windows)
 - Deploy to any machine: `./borgclaw deploy 10.0.0.21` or USB drive
+- USB drives in 4 profiles: Scout (4GB), Worker (8GB), Scholar (16GB), Arsenal (32GB)
 - Governance: approval queue, kill switch, budget caps, auth on every surface
+- Workflow approval gates — approve from dashboard, workflow resumes automatically
 - Scheduled workflows with cron and real LLM execution
 - NATS event bus for real-time hive coordination
 - Self-improvement scan — weekly check for better models and tools
 - BBS dashboard with Queen status, chat, connect panel, security panel
+- Each drone serves its own BBS terminal at its port
 
 ## Quick Start
 

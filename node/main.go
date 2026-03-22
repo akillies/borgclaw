@@ -45,6 +45,7 @@ func main() {
 	maxConcurrent := flag.Int("concurrent", 0, "Max concurrent tasks (0 = auto-detect)")
 	hiveSecret := flag.String("secret", "", "Hive secret for Queen authentication")
 	printInfo := flag.Bool("info", false, "Print hardware info and exit")
+	noPull := flag.Bool("no-pull", false, "Disable automatic model pulling (for bandwidth-constrained environments)")
 
 	flag.Parse()
 
@@ -166,6 +167,16 @@ func main() {
 		}
 	}()
 
+	// Background model updater — runs after the drone has joined the hive.
+	// Checks which models are optimal for this tier and pulls any that are
+	// missing, one at a time. Sends a heartbeat after each pull so Queen can
+	// rebuild its LiteLLM routing table immediately.
+	if !*noPull {
+		go startModelUpdater(ctx, cfg, ollama, heartbeat)
+	} else {
+		log.Println("[models] --no-pull set: skipping automatic model updates")
+	}
+
 	log.Println("[init] drone online. Ctrl+C to detach from hive.")
 
 	// Wait for shutdown signal
@@ -178,6 +189,52 @@ func main() {
 	server.Shutdown(shutdownCtx)
 
 	log.Println("[shutdown] drone detached from hive.")
+}
+
+// startModelUpdater runs after the drone has joined the hive. It asks
+// EnsureOptimalModels (modelselect.go) which models are ideal for this
+// hardware tier, then pulls any that are missing — one at a time, sequentially,
+// so we don't saturate the network or overwhelm Ollama. After each successful
+// pull it triggers an immediate heartbeat so Queen can update its routing table.
+func startModelUpdater(ctx context.Context, cfg Config, ollama *OllamaClient, hb *HeartbeatReporter) {
+	// Small delay so the first heartbeat (hive join) goes out first.
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(5 * time.Second):
+	}
+
+	// Ask modelselect.go what we should have.
+	toPull := EnsureOptimalModels(ollama, cfg.Hardware)
+	if len(toPull) == 0 {
+		log.Printf("[models] all optimal models already present for tier=%s", cfg.Hardware.Tier)
+		return
+	}
+
+	log.Printf("[models] %d model(s) to pull for tier=%s: %v", len(toPull), cfg.Hardware.Tier, toPull)
+
+	for _, model := range toPull {
+		select {
+		case <-ctx.Done():
+			log.Println("[models] context cancelled — stopping model pulls")
+			return
+		default:
+		}
+
+		log.Printf("[models] pulling %s ...", model)
+		if err := ollama.Pull(ctx, model); err != nil {
+			// Non-fatal: log and continue to next model.
+			log.Printf("[models] pull %s failed: %v", model, err)
+			continue
+		}
+
+		log.Printf("[models] pull complete: %s", model)
+
+		// Inform Queen immediately — don't wait for the next scheduled heartbeat.
+		hb.TriggerNow(ctx)
+	}
+
+	log.Println("[models] model update pass complete")
 }
 
 func printHardwareInfo(cfg Config) {

@@ -246,7 +246,9 @@ func classifyTier(hw HardwareProfile) string {
 		return "edge" // Laptop, small desktop
 	case ram < 65536 || cores <= 16:
 		return "worker" // Desktop, workstation
+	case ram < 131072:
+		return "heavy" // Workstation, Mac Studio
 	default:
-		return "heavy" // Server, multi-GPU rig
+		return "beast" // Multi-GPU server, 128GB+ RAM
 	}
 }

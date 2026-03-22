@@ -90,6 +90,15 @@ func (hr *HeartbeatReporter) SetLearning(ls *LearningStore) {
 	hr.learning = ls
 }
 
+// TriggerNow sends a single heartbeat immediately, outside the normal interval.
+// Used by the model updater to inform Queen about a newly pulled model without
+// waiting for the next scheduled heartbeat.
+func (hr *HeartbeatReporter) TriggerNow(ctx context.Context) {
+	if err := hr.send(ctx); err != nil {
+		log.Printf("[heartbeat] immediate trigger failed: %v", err)
+	}
+}
+
 // Run starts the heartbeat loop. Blocks until context is cancelled.
 // Uses exponential backoff on failures, resets on success.
 func (hr *HeartbeatReporter) Run(ctx context.Context) {

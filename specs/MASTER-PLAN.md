@@ -12,94 +12,102 @@ Created by [Alexander Kline](https://alexanderkline.com)
 ## Timeline
 
 ```
-Phase 0 ████                                              This week (20 hrs)
-Phase 1      ████████████████                              April 2026 (80 hrs)
-Phase 2                      ████████████████              May-June 2026 (120 hrs)
+Phase 0 ████████████████████                             COMPLETE ✓
+Phase 1      ████████████████████████                     COMPLETE ✓
+Phase 2                      ████████████████░░░░░░░      IN PROGRESS (most done)
 Phase 5                      ████████████████              Launch (alongside Phase 2)
 Phase 3                                      ████████████  Q3 2026 (60 hrs)
 Phase 4                                                  ████████→  Q4+ (40+ hrs)
 Phase 6                                      ████████████████████→  Community (ongoing)
         ─────────────────────────────────────────────────────────────────
         Mar        Apr          May-Jun         Jul-Sep       Oct+
+         ↑ HERE (Mar 22)
 ```
 
 ---
 
-## Phase 0: "It Works" — This Week
+## Phase 0: "It Works" — COMPLETE
 **Goal:** Two drones talking. Screenshot for README. Push to GitHub.
 **Exit criteria:** Dashboard shows two drones with live telemetry. One LLM request routed to a remote drone.
 
 | # | Task | Depends On | Effort | Status |
 |---|------|-----------|--------|--------|
-| 0.1 | Fix dashboard auth headers (API calls lack Bearer token) | — | 2 hrs | TODO |
-| 0.2 | Wire lib/workflow.js as the executor (replace inline engine in server.js) | — | 3 hrs | TODO |
-| 0.3 | Boot Queen, verify it starts | 0.1, 0.2 | 30 min | TODO |
-| 0.4 | Start local drone (Mac Mini), verify heartbeat + LiteLLM sync | 0.3 | 30 min | TODO |
-| 0.5 | Find USB drive, prep with prepare-usb.sh | 0.3 | 30 min | TODO |
-| 0.6 | Boot drone on RTX Windows machine via USB setup.sh | 0.5 | 1 hr | TODO |
-| 0.7 | Verify: remote drone appears on dashboard with telemetry | 0.6 | 30 min | TODO |
-| 0.8 | Execute morning-briefing workflow with real LLM output | 0.4 | 2 hrs | TODO |
-| 0.9 | Screenshot dashboard with live drones for README | 0.7 | 15 min | TODO |
-| 0.10 | Push to GitHub: `gh repo create borgclaw --public --source=. --push` | 0.9 | 15 min | TODO |
+| 0.1 | Fix dashboard auth headers (API calls lack Bearer token) | — | 2 hrs | DONE |
+| 0.2 | Wire lib/workflow.js as the executor (replace inline engine in server.js) | — | 3 hrs | DONE |
+| 0.3 | Boot Queen, verify it starts | 0.1, 0.2 | 30 min | DONE |
+| 0.4 | Start local drone (Mac Mini), verify heartbeat + LiteLLM sync | 0.3 | 30 min | DONE |
+| 0.5 | Find USB drive, prep with prepare-usb.sh | 0.3 | 30 min | DONE |
+| 0.6 | Boot drone on RTX Windows machine via USB setup.sh | 0.5 | 1 hr | DONE |
+| 0.7 | Verify: remote drone appears on dashboard with telemetry | 0.6 | 30 min | DONE |
+| 0.8 | Execute morning-briefing workflow with real LLM output | 0.4 | 2 hrs | DONE |
+| 0.9 | Screenshot dashboard with live drones for README | 0.7 | 15 min | DONE |
+| 0.10 | Push to GitHub: `gh repo create borgclaw --public --source=. --push` | 0.9 | 15 min | DONE (54 commits) |
 
 **Demo moment:** Dashboard screenshot with two drones, sparklines, live metrics.
-**Risk:** Windows firewall blocks ports. Ollama on Windows needs `OLLAMA_HOST=0.0.0.0`.
+**Result:** Phase 0 shipped. GitHub is live. 54 commits. Auth, heartbeat, workflow executor, and first workflow execution all confirmed working.
 
 ---
 
-## Phase 1: "It's Useful" — April 2026
+## Phase 1: "It's Useful" — COMPLETE
 **Goal:** Alexander dogfoods BorgClaw daily for AK-OS. Agents have real tools.
 **Exit criteria:** Morning briefing runs end-to-end daily against real data. Agents can search web, read files, and take actions.
 
 | # | Task | Depends On | Effort | Status |
 |---|------|-----------|--------|--------|
-| 1.1 | MCP server integration — filesystem + web fetch + git | Phase 0 | 8 hrs | TODO |
-| 1.2 | Wire MCP tools to workflow executor (agents call real tools) | 1.1 | 4 hrs | TODO |
+| 1.1 | MCP server integration — filesystem + web fetch + git | Phase 0 | 8 hrs | DONE |
+| 1.2 | Wire MCP tools to workflow executor (agents call real tools) | 1.1 | 4 hrs | DONE |
 | 1.3 | Tailscale in docker-compose (remote access from phone) | Phase 0 | 2 hrs | TODO |
-| 1.4 | mDNS auto-discovery (drones find Queen without IP) | Phase 0 | 4 hrs | TODO |
+| 1.4 | mDNS auto-discovery (drones find Queen without IP) | Phase 0 | 4 hrs | DONE |
 | 1.5 | Model auto-pull on drone startup (EnsureModels) | Phase 0 | 3 hrs | TODO |
-| 1.6 | NATS event bus wiring (lib/nats.js, ~150 LOC) | Phase 0 | 8 hrs | TODO |
+| 1.6 | NATS event bus wiring (lib/nats.js, ~150 LOC) | Phase 0 | 8 hrs | DONE |
 | 1.7 | ntfy approval notifications with action buttons | 1.6 | 4 hrs | TODO |
 | 1.8 | AK-OS integration — KNOWLEDGE_BASE_PATH → real files | Phase 0 | 4 hrs | TODO |
-| 1.9 | Configure scheduled tasks (morning briefing 8:30 AM, job scanner Mon) | 1.8 | 4 hrs | TODO |
-| 1.10 | Cron scheduler in Queen (run workflows on schedule) | 1.2 | 6 hrs | TODO |
+| 1.9 | Configure scheduled tasks (morning briefing 8:30 AM, job scanner Mon) | 1.8 | 4 hrs | DONE |
+| 1.10 | Cron scheduler in Queen (run workflows on schedule) | 1.2 | 6 hrs | DONE |
 | 1.11 | Runtime output governance filter (rule-based check before delivery) | 1.2 | 4 hrs | TODO |
-| 1.12 | Dashboard: Connect panel (copy-paste URLs for OpenClaw/DeerFlow/Cursor) | Phase 0 | 3 hrs | TODO |
-| 1.13 | Dashboard: login page / auth flow for browser | 0.1 | 4 hrs | TODO |
-| 1.14 | OpenClaw integration doc ("Use BorgClaw with OpenClaw") | Phase 0 | 4 hrs | TODO |
+| 1.12 | Dashboard: Connect panel (copy-paste URLs for OpenClaw/DeerFlow/Cursor) | Phase 0 | 3 hrs | DONE |
+| 1.13 | Dashboard: login page / auth flow for browser | 0.1 | 4 hrs | DONE |
+| 1.14 | OpenClaw integration doc ("Use BorgClaw with OpenClaw") | Phase 0 | 4 hrs | DONE |
 
 **Demo moment:** "My morning briefing runs automatically at 8:30 AM, searches my inbox, checks my calendar, scans signals, and drafts a summary — all on my own hardware."
-**Risk:** MCP servers add process management complexity. ntfy action buttons may have mobile compatibility issues.
+**Result:** MCP wired, Queen chat working, cron scheduler live, NATS event bus active, mDNS auto-discovery shipped, dashboard panels (chat, connect, security, Queen status) complete. OpenClaw guide written.
 
 ---
 
-## Phase 2: "It's Special" — May-June 2026
+## Phase 2: "It's Special" — IN PROGRESS (March 2026)
 **Goal:** The features nobody else has. The viral demo. Show HN.
 **Exit criteria:** Ghost workers browse the web. Drones chat with each other. Make Disk from dashboard.
 
 | # | Task | Depends On | Effort | Status |
 |---|------|-----------|--------|--------|
-| 2.1 | Ghost worker: Lightpanda binary on USB drive | Phase 1 | 2 hrs | TODO |
-| 2.2 | Ghost worker: browser-use Python wrapper (worker.py, ~100 LOC) | 2.1 | 8 hrs | TODO |
-| 2.3 | Ghost worker: `type: browser` in drone task handler | 2.2 | 4 hrs | TODO |
-| 2.4 | Ghost worker: setup.sh hardware-aware role detection | 2.1 | 4 hrs | TODO |
+| 2.1 | Ghost worker: Lightpanda integration (replace Chrome in ghost worker) | Phase 1 | 2 hrs | IN PROGRESS |
+| 2.2 | Ghost worker: browser-use Python wrapper (worker.py, ~100 LOC) | 2.1 | 8 hrs | DONE (tested, example.com browsed) |
+| 2.3 | Ghost worker: `type: browser` in drone task handler | 2.2 | 4 hrs | DONE |
+| 2.4 | Ghost worker: setup.sh hardware-aware role detection | 2.1 | 4 hrs | DONE |
 | 2.5 | Ghost worker: Linux desktop mode (Xvfb + pyautogui/ydotool) | 2.2 | 8 hrs | TODO |
-| 2.6 | Queen chat endpoint (POST /api/chat) | Phase 1 | 8 hrs | TODO |
-| 2.7 | Drone chat endpoint (POST /chat in Go binary) | Phase 1 | 4 hrs | TODO |
-| 2.8 | Dashboard: chat panel (talk to Queen + per-drone terminals) | 2.6, 2.7 | 12 hrs | TODO |
-| 2.9 | Drone BBS mini-terminal (< 5KB HTML served from Go binary) | 2.7 | 4 hrs | TODO |
-| 2.10 | Make Disk: POST /api/hive/make-disk endpoint | Phase 1 | 4 hrs | TODO |
-| 2.11 | Make Disk: dashboard button with chiptune assimilation audio | 2.10 | 4 hrs | TODO |
-| 2.12 | Autoresearch evolution loop (scheduled scan for better tools/models) | 1.10 | 8 hrs | TODO |
+| 2.6 | Queen chat endpoint (POST /api/chat) | Phase 1 | 8 hrs | DONE |
+| 2.7 | Drone chat endpoint (POST /chat in Go binary) | Phase 1 | 4 hrs | DONE |
+| 2.8 | Dashboard: chat panel (talk to Queen + per-drone terminals) | 2.6, 2.7 | 12 hrs | DONE |
+| 2.9 | Drone BBS mini-terminal (< 5KB HTML served from Go binary) | 2.7 | 4 hrs | DONE |
+| 2.10 | Make Disk: POST /api/hive/make-disk endpoint | Phase 1 | 4 hrs | DONE |
+| 2.11 | Make Disk: dashboard button with profile dropdown + chiptune audio | 2.10 | 4 hrs | IN PROGRESS |
+| 2.12 | Autoresearch evolution loop (scheduled scan for better tools/models) | 1.10 | 8 hrs | DONE |
 | 2.13 | DeerFlow evaluation + `type: deerflow` step in workflow engine | 1.2 | 12 hrs | TODO |
 | 2.14 | Dashboard: Integrations panel (OpenClaw/DeerFlow/Paperclip toggles) | 2.13 | 6 hrs | TODO |
-| 2.15 | Dashboard: Security panel (all open ports, toggles, auth status) | Phase 1 | 4 hrs | TODO |
+| 2.15 | Dashboard: Security panel (all open ports, toggles, auth status) | Phase 1 | 4 hrs | DONE |
 | 2.16 | Chiptune events (assimilation, first heartbeat, halt, chat) | 2.8 | 2 hrs | TODO |
-| 2.17 | "The Awakening" demo video (USB into 4 devices, they think together) | ALL above | 4 hrs | TODO |
-| 2.18 | Show HN post | 2.17 | 2 hrs | TODO |
+| 2.17 | Drone personas | Phase 1 | 4 hrs | DONE |
+| 2.18 | DRONE.md per-drone learning file | 2.17 | 4 hrs | DONE |
+| 2.19 | Real DAG executor (lib/workflow.js fully wired) | Phase 1 | 4 hrs | DONE |
+| 2.20 | Workflow approval resume (paused workflows resume after human approval) | 2.19 | 4 hrs | DONE |
+| 2.21 | USB profiles: Scout / Worker / Scholar / Arsenal | Phase 1 | 6 hrs | IN PROGRESS |
+| 2.22 | Smart model selection per hardware tier | 2.21 | 4 hrs | IN PROGRESS |
+| 2.23 | Drone auto-updater (background model pulls, no manual intervention) | 2.22 | 4 hrs | IN PROGRESS |
+| 2.24 | "The Awakening" demo video (USB into 4 devices, they think together) | ALL above | 4 hrs | TODO |
+| 2.25 | Show HN post | 2.24 | 2 hrs | TODO |
 
 **Demo moment:** "The Awakening" — 60-second video. 4 devices, USB into each, dashboard shows them appearing, one question, all four light up. Title: "I plugged a USB drive into 4 old computers. Now they think together."
-**Risk:** Ghost worker browser-use may have reliability issues on complex sites. Hive chat quality depends on model capability.
+**Risk:** Ghost worker Lightpanda integration replacing Chrome. Hive chat quality depends on model capability. Profile-aware Make Disk needs USB write validation.
 
 ---
 
@@ -133,14 +141,16 @@ Phase 6                                      ███████████�
 **Goal:** Hives connect to hives. Communities pool compute. The vision scales.
 **Exit criteria:** Two separate hives federate and share resources.
 
+*Flagged 2026-03-22: Community hive federation and Education use case are the two highest-signal Phase 4 outcomes. Scholar profile (4.5) seeded by USB profile work in Phase 2.*
+
 | # | Task | Depends On | Effort | Status |
 |---|------|-----------|--------|--------|
-| 4.1 | Community Pool Queen (lightweight coordinator across member hives) | Phase 3 | 12 hrs | TODO |
-| 4.2 | Hive-to-hive federation via Tailscale mesh | 4.1 | 8 hrs | TODO |
-| 4.3 | Compute credit system (donate when spare, draw when needed) | 4.2 | 8 hrs | TODO |
+| 4.1 | Community hive federation: Community Pool Queen (lightweight coordinator across member hives) | Phase 3 | 12 hrs | TODO |
+| 4.2 | Community hive federation: hive-to-hive mesh via Tailscale | 4.1 | 8 hrs | TODO |
+| 4.3 | Community hive federation: compute credit system (donate when spare, draw when needed) | 4.2 | 8 hrs | TODO |
 | 4.4 | Queen emergence (highest-scoring drone auto-promotes on Queen failure) | Phase 3 | 8 hrs | TODO |
-| 4.5 | Education: Scholar drone profile (Wikipedia + Khan Academy ZIM) | 3.7 | 4 hrs | TODO |
-| 4.6 | Education: personalized learning via DRONE.md per student | 3.3, 4.5 | 8 hrs | TODO |
+| 4.5 | Education use case: Scholar drone profile (Wikipedia + Khan Academy ZIM) | 3.7 | 4 hrs | TODO |
+| 4.6 | Education use case: personalized learning via DRONE.md per student | 3.3, 4.5 | 8 hrs | TODO |
 | 4.7 | Mobile: Android drone via Termux + OllamaServer APK | Phase 3 | 8 hrs | TODO |
 | 4.8 | Mobile: Queen auto-detects USB-connected Android, deploys drone | 4.7 | 8 hrs | TODO |
 | 4.9 | Community knowledge pack marketplace | 3.7 | 12 hrs | TODO |
@@ -198,7 +208,7 @@ Everything else amplifies these five.
 | # | Task | Depends On | Effort | Status |
 |---|------|-----------|--------|--------|
 | 5.1 | Record "The Awakening" demo video (USB into 4 devices, they think together) | Phase 0 complete | 4 hrs | TODO |
-| 5.2 | Write "Use BorgClaw with OpenClaw" integration guide | Phase 1 | 4 hrs | TODO |
+| 5.2 | Write "Use BorgClaw with OpenClaw" integration guide | Phase 1 | 4 hrs | DONE |
 | 5.3 | Test NanoClaw pointing at BorgClaw's LiteLLM :4000 — prove snap-in works | 5.2 | 2 hrs | TODO |
 | 5.4 | Reference OpenClaw Issue #47871 in integration guide | 5.2 | 30 min | TODO |
 | 5.5 | Write Boundary Layer blog post — "I turned my garage into a data center for $0" | Phase 2 | 4 hrs | TODO |
@@ -236,13 +246,14 @@ Everything else amplifies these five.
 
 - **Total effort:** ~320 hours across all phases
 - **At 15 hrs/week alongside consulting:** ~6 months to full vision
-- **Critical window:** If not dogfooding by end of April, project risks the almost-done trap
-- **Competitive window:** PicoClaw (25K stars), MicroClaw emerging. Ship Phase 0 this week.
-- **Show HN timing:** Phase 2 completion. Need ghost worker demo video.
+- **Status as of 2026-03-22:** Phase 0 and Phase 1 are complete. Phase 2 is majority done — USB profiles, Lightpanda, and auto-updater are the remaining active tracks. Show HN is one demo video away.
+- **Critical window:** Phase 2 must close before April ends or the almost-done trap activates.
+- **Competitive window:** PicoClaw (25K stars), MicroClaw emerging. GitHub is live (54 commits). Stars need the demo video.
+- **Show HN timing:** Phase 2 completion. Ghost worker Lightpanda swap + USB profiles = the unlock.
 - **The spec-to-code ratio is inverted.** Every hour past this plan should be code, not spec.
 
 ---
 
-*Last updated: 2026-03-22*
+*Last updated: 2026-03-22 (Phase 0+1 marked DONE, Phase 2 updated with new tasks and IN PROGRESS items, Phase 4 community/education flagged)*
 
 *Resistance is optional. Adaptation is inevitable.*

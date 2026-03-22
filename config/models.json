@@ -110,6 +110,36 @@
     }
   },
 
+  "drone_tiers": {
+    "_comment": "Programmatic tier-to-model mapping consumed by node/modelselect.go. Update here when model recommendations change — the drone reads TierModels directly from Go code, but this JSON is the human-readable source of truth and must stay in sync.",
+    "_last_updated": "2026-03-22",
+    "nano": {
+      "description": "Raspberry Pi, SBC, or any machine with <4GB RAM",
+      "recommended": ["gemma3:1b"],
+      "rationale": "Only a 1B model fits reliably. Good for search and lightweight triage."
+    },
+    "edge": {
+      "description": "Laptop or small desktop, 4-8GB RAM",
+      "recommended": ["phi4-mini"],
+      "rationale": "phi4-mini (3.5GB) fits with headroom for context. Best reasoning-per-param in sub-5B class."
+    },
+    "worker": {
+      "description": "Desktop or workstation, 8-24GB RAM",
+      "recommended": ["phi4-mini", "qwen3:8b"],
+      "rationale": "phi4-mini for routing/triage, qwen3:8b for general tasks. Both fit in 8GB with swap headroom."
+    },
+    "heavy": {
+      "description": "High-spec workstation or server, 24-64GB RAM",
+      "recommended": ["phi4-mini", "qwen3:8b", "gemma3:27b"],
+      "rationale": "Full stack: triage + general + synthesis (128K context). gemma3:27b needs ~18GB, fits cleanly."
+    },
+    "beast": {
+      "description": "Multi-GPU server or Mac Studio with 64GB+ unified memory",
+      "recommended": ["phi4-mini", "qwen3:8b", "gemma3:27b", "qwen2.5-coder:14b"],
+      "rationale": "Everything. qwen2.5-coder:14b adds #1-ranked local code generation."
+    }
+  },
+
   "routing_rules": {
     "_comment": "NadirClaw uses these in Phase 2. Jarvis routes manually in Phase 1.",
     "simple_triage": "local_general",

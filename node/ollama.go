@@ -205,6 +205,56 @@ func (oc *OllamaClient) Generate(ctx context.Context, req OllamaGenerateRequest)
 	return &genResp, nil
 }
 
+// OllamaPullRequest is the body for /api/pull.
+type OllamaPullRequest struct {
+	Model  string `json:"model"`
+	Stream bool   `json:"stream"`
+}
+
+// OllamaPullResponse is the final response body from /api/pull (non-streaming).
+type OllamaPullResponse struct {
+	Status string `json:"status"`
+}
+
+// Pull downloads a model from the Ollama registry. Blocks until the pull
+// completes or the context is cancelled. Uses a separate http.Client with a
+// generous timeout because large models can take many minutes to download.
+func (oc *OllamaClient) Pull(ctx context.Context, model string) error {
+	pullClient := &http.Client{Timeout: 60 * time.Minute}
+
+	body, err := json.Marshal(OllamaPullRequest{Model: model, Stream: false})
+	if err != nil {
+		return fmt.Errorf("marshal pull request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", oc.baseURL+"/api/pull", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := pullClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("pull %s: %w", model, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("pull %s: ollama returned %d: %s", model, resp.StatusCode, string(respBody))
+	}
+
+	var pullResp OllamaPullResponse
+	if err := json.NewDecoder(resp.Body).Decode(&pullResp); err != nil {
+		return fmt.Errorf("pull %s: parsing response: %w", model, err)
+	}
+	if pullResp.Status != "success" {
+		return fmt.Errorf("pull %s: unexpected status %q", model, pullResp.Status)
+	}
+
+	return nil
+}
+
 // Stats returns aggregate inference stats.
 func (oc *OllamaClient) Stats() (requests int64, tokens int64, avgTokPerSec float64) {
 	oc.mu.Lock()
