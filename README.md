@@ -311,6 +311,82 @@ borgclaw/
 └── research/                    ← Technology audits + tool evaluations
 ```
 
+## Technical Details
+
+### The Drone Binary
+
+Single Go binary. ~10MB. Cross-compiled for Linux, macOS (Intel + ARM), Windows. Zero dependencies on the target machine.
+
+Every 30 seconds, the drone heartbeats to Queen with: CPU/RAM/GPU utilization, tok/s, temperature, available models, task capacity, contribution level, and its LAN IP. Queen uses this telemetry for routing decisions, sparkline rendering, and LiteLLM endpoint management.
+
+**Hardware auto-detection:** `gopsutil` for CPU/RAM, `nvidia-smi` for NVIDIA GPUs, `system_profiler` for Apple Silicon. Classifies into tiers: nano (<4GB), edge (<16GB), worker (<64GB), heavy (64GB+).
+
+**Contribution dial:** Semaphore-based concurrency control. At 50%, half the goroutine pool is available. Also scales Ollama's `num_ctx` — lower contribution = smaller context window = less RAM per request. Game on your GPU at 30% while the drone uses the leftovers.
+
+### LiteLLM Dynamic Routing
+
+When a drone heartbeats with its model list, Queen rebuilds `litellm.yaml` with all known Ollama endpoints. LiteLLM load-balances automatically — same model on two machines gets load-balanced. Drone goes offline, fallback kicks in. Cloud tier as last resort with hard budget cap.
+
+```
+Tier 1 — Local drones     $0/task        70% of workload
+Tier 2 — Cheap cloud      ~$0.00003     Fast structured tasks
+Tier 3 — Mid-tier cloud   ~$0.001       Complex reasoning
+Tier 4 — Frontier API     ~$0.075       Hard-capped, rare, last resort
+```
+
+Fallback chains: `local → local-fallback → cheap-cloud → mid-tier`. Budget: $55/month hard limit across Tier 4. Response caching: identical prompts skip the LLM entirely.
+
+### Queen Chat + Action Parsing
+
+Talk to the Queen in plain English. She reasons over live hive state and executes commands:
+
+```
+You:   "Set the gaming PC to 30% and run the morning briefing"
+
+Queen: "Setting drone-a3b7 to 30% — your session won't be interrupted.
+        Starting morning briefing now. I'll push results to your
+        approval queue when ready."
+
+        [internally executes: set contribution, trigger workflow]
+```
+
+The Queen parses structured action tags from her own LLM response and executes them — contribution changes, workflow triggers, approvals, halt/resume. Natural language governance.
+
+### USB Drive Contents
+
+```
+BORGCLAW/              2.4GB total — fits on a 4GB drive
+├── drone-linux        10MB
+├── drone-mac-arm64    10MB
+├── drone-mac-intel    10MB
+├── drone-windows.exe  10MB
+├── setup.sh           Cross-platform install + --uninstall
+├── ollama-install.sh  Cached installer (no download needed)
+├── config/drone.json  Queen IP + hive secret pre-baked
+└── models/            phi4-mini pre-cached (2.3GB)
+```
+
+`bash setup.sh` → detects platform → installs Ollama → loads cached model → starts drone → joins hive. Under 60 seconds. `bash setup.sh --uninstall` → removes everything cleanly.
+
+### Connect Any App
+
+```bash
+# OpenAI-compatible (Cursor, Aider, Continue, CrewAI, LangChain)
+export OPENAI_BASE_URL=http://QUEEN_IP:4000
+
+# Anthropic-compatible (Claude Code, Claude SDK)
+export ANTHROPIC_BASE_URL=http://QUEEN_IP:4000
+
+# Ollama-native (Open WebUI, Enchanted)
+export OLLAMA_HOST=http://QUEEN_IP:11434
+```
+
+Two doors. `localhost:4000` for simple inference (LiteLLM, load-balanced across all drones). `localhost:9090` for orchestrated work (workflows, approvals, governance). One hive behind both. `./borgclaw connect` prints everything.
+
+### Security
+
+Hive secret generated on first boot (32 bytes, hex). Every API route checks `Authorization: Bearer <secret>`. Dashboard, SSE, drone endpoints — all authenticated. USB drives get the secret pre-baked. Zero manual key management. See [docs/SECURITY.md](docs/SECURITY.md) for the full model.
+
 ## What BorgClaw Composes
 
 | Component | Project | Stars | Role |
