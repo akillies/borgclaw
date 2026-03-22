@@ -72,34 +72,39 @@ Queen boots at `http://localhost:9090/dashboard`. Note your IP address.
 ./borgclaw stop        # shut it down
 ```
 
-### Adding Drones (USB method)
+### Adding Drones (network deploy — fastest)
 
-Prep a USB drive on the Queen machine:
+Deploy to any machine on your network with one command:
+
+```bash
+# Deploy to one machine
+./borgclaw deploy 10.0.0.21
+
+# Deploy to twelve machines at once
+./borgclaw deploy 10.0.0.21 10.0.0.22 10.0.0.23 10.0.0.24 \
+                  10.0.0.25 10.0.0.26 10.0.0.27 10.0.0.28 \
+                  10.0.0.29 10.0.0.30 10.0.0.31 10.0.0.32
+
+# Different SSH user
+./borgclaw deploy 10.0.0.21 --user admin
+```
+
+For each machine, it: detects the OS via SSH, pushes the right drone binary, writes config with Queen IP + hive secret, installs Ollama if missing, pulls the model, and starts the drone. The machine appears on your dashboard within 30 seconds.
+
+### Adding Drones (USB method — offline / no SSH)
+
+For machines not on the network yet, or when you want to hand someone a drive:
 
 ```bash
 bash scripts/prepare-usb.sh /Volumes/MYUSB
 ```
 
-This packages everything onto the drive (~2.4GB):
-- Drone binary (Linux, Mac, Windows — all included)
-- Ollama installer
-- Pre-cached LLM model (phi4-mini, 2.3GB — no download needed on target)
-- Config with Queen's IP auto-detected
+Packages everything onto the drive (~2.4GB): drone binaries for all platforms, Ollama installer, pre-cached model, config with hive secret. Plug in, run `setup.sh`, machine joins. `setup.sh --uninstall` removes everything cleanly.
 
-Plug the USB into any machine. Run one command:
+### Adding Drones (manual)
 
 ```bash
-bash /path/to/BORGCLAW/setup.sh
-```
-
-The machine installs Ollama, loads the cached model, starts the drone, and joins the hive. It appears on the Queen dashboard within 30 seconds.
-
-### Adding Drones (manual method)
-
-If you prefer, download the drone binary for your platform from the `node/` directory, or compile it:
-
-```bash
-cd node && go build -o drone . && ./drone --queen http://QUEEN_IP:9090
+cd node && go build -o drone . && ./drone --queen http://QUEEN_IP:9090 --secret YOUR_HIVE_SECRET
 ```
 
 ### How it works

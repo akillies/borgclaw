@@ -313,12 +313,116 @@ cmd_resume() {
   ok "Hive resumed. Nodes will re-register via heartbeat."
 }
 
+cmd_deploy() {
+  if [ $# -lt 1 ]; then
+    err "Usage: borgclaw deploy <ip1> [ip2] [ip3] ... [--user USER]"
+    echo "  Deploys drone binary to remote machines via SSH."
+    echo "  Example: borgclaw deploy 10.0.0.21 10.0.0.22 10.0.0.23"
+    echo "  Default SSH user: \$USER. Override with --user."
+    return 1
+  fi
+
+  local SSH_USER="$USER"
+  local TARGETS=()
+
+  # Parse args
+  for arg in "$@"; do
+    if [ "$arg" = "--user" ]; then shift; SSH_USER="$1"; shift; continue; fi
+    TARGETS+=("$arg")
+  done
+
+  # Get hive secret
+  local SECRET=""
+  local IDENTITY="$BORGCLAW_HOME/data/hive-identity.json"
+  if [ -f "$IDENTITY" ]; then
+    SECRET=$(python3 -c "import json; print(json.load(open('$IDENTITY'))['secret'])" 2>/dev/null)
+  fi
+  if [ -z "$SECRET" ]; then
+    err "No hive-identity.json found. Start Queen first: ./borgclaw start"
+    return 1
+  fi
+
+  local QUEEN_IP
+  QUEEN_IP=$(ipconfig getifaddr en0 2>/dev/null || ip route get 1 2>/dev/null | awk '{print $7; exit}' || echo "localhost")
+
+  # Detect target platform and deploy
+  local NODE_DIR="$BORGCLAW_HOME/node"
+  local SUCCESS=0
+  local FAIL=0
+
+  for TARGET in "${TARGETS[@]}"; do
+    echo -e "${CYAN}→${NC} Deploying to ${TARGET}..."
+
+    # Detect remote OS
+    local REMOTE_OS
+    REMOTE_OS=$(ssh -o ConnectTimeout=5 "${SSH_USER}@${TARGET}" "uname -s" 2>/dev/null)
+    if [ $? -ne 0 ]; then
+      err "Cannot reach ${TARGET} via SSH (user: ${SSH_USER})"
+      FAIL=$((FAIL + 1))
+      continue
+    fi
+
+    local BINARY=""
+    case "$REMOTE_OS" in
+      Linux*)  BINARY="drone-linux" ;;
+      Darwin*) BINARY="drone-mac-arm64" ;; # TODO: detect intel vs arm
+      MINGW*|MSYS*) BINARY="drone-windows.exe" ;;
+      *)       err "Unknown OS on ${TARGET}: ${REMOTE_OS}"; FAIL=$((FAIL + 1)); continue ;;
+    esac
+
+    # Check if binary exists locally
+    if [ ! -f "$NODE_DIR/$BINARY" ]; then
+      echo -e "${YELLOW}⚠${NC} Compiling $BINARY..."
+      (cd "$NODE_DIR" && GOOS=linux GOARCH=amd64 go build -o drone-linux . 2>/dev/null)
+    fi
+
+    # Deploy
+    ssh "${SSH_USER}@${TARGET}" "mkdir -p ~/.local/bin ~/.config/borgclaw" 2>/dev/null
+    scp -q "$NODE_DIR/$BINARY" "${SSH_USER}@${TARGET}:~/.local/bin/drone" 2>/dev/null
+    ssh "${SSH_USER}@${TARGET}" "chmod +x ~/.local/bin/drone" 2>/dev/null
+
+    # Write config
+    ssh "${SSH_USER}@${TARGET}" "cat > ~/.config/borgclaw/drone.json << DRONECONF
+{
+  \"queen_url\": \"http://${QUEEN_IP}:${QUEEN_PORT}\",
+  \"listen_addr\": \":9091\",
+  \"ollama_url\": \"http://localhost:11434\",
+  \"hive_secret\": \"${SECRET}\",
+  \"contribution\": 50,
+  \"heartbeat_sec\": 30,
+  \"preferred_models\": [\"phi4-mini\"]
+}
+DRONECONF" 2>/dev/null
+
+    # Check if Ollama is installed on target
+    local HAS_OLLAMA
+    HAS_OLLAMA=$(ssh "${SSH_USER}@${TARGET}" "which ollama 2>/dev/null")
+    if [ -z "$HAS_OLLAMA" ]; then
+      echo -e "${YELLOW}⚠${NC} Ollama not found on ${TARGET}. Installing..."
+      ssh "${SSH_USER}@${TARGET}" "curl -fsSL https://ollama.com/install.sh | sh" 2>/dev/null
+      ssh "${SSH_USER}@${TARGET}" "OLLAMA_HOST=0.0.0.0 ollama serve &>/dev/null &" 2>/dev/null
+      sleep 3
+      ssh "${SSH_USER}@${TARGET}" "ollama pull phi4-mini" 2>/dev/null
+    fi
+
+    # Start drone
+    ssh "${SSH_USER}@${TARGET}" "OLLAMA_HOST=0.0.0.0 nohup ~/.local/bin/drone --config ~/.config/borgclaw/drone.json &>/tmp/borgclaw-drone.log &" 2>/dev/null
+
+    ok "Deployed to ${TARGET} (${REMOTE_OS})"
+    SUCCESS=$((SUCCESS + 1))
+  done
+
+  echo ""
+  ok "${SUCCESS} deployed, ${FAIL} failed. Check dashboard: http://localhost:${QUEEN_PORT}/dashboard"
+}
+
 case "${1:-help}" in
   start)     cmd_start ;;
   stop)      cmd_stop ;;
   connect)   cmd_connect ;;
   halt)      cmd_halt ;;
   resume)    cmd_resume ;;
+  deploy)    shift; cmd_deploy "$@" ;;
   status)    cmd_status ;;
   dashboard) cmd_dashboard ;;
   nodes)     cmd_nodes ;;
