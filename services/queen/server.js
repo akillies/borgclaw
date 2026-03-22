@@ -14,7 +14,7 @@
 
 import express from 'express';
 import fs from 'fs/promises';
-import { readFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
@@ -144,7 +144,7 @@ const runningWorkflows = new Map(); // workflow runs in progress
 try {
   const wfDir = path.join(CONFIG_DIR, 'workflows');
   if (existsSync(wfDir)) {
-    const files = require('fs').readdirSync(wfDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+    const files = readdirSync(wfDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
     for (const file of files) {
       const raw = readFileSync(path.join(wfDir, file), 'utf-8');
       const spec = yaml.load(raw);
@@ -183,7 +183,7 @@ function initHiveSecret() {
       created_at: new Date().toISOString(),
       queen_id: `queen-${crypto.randomBytes(2).toString('hex')}`,
     };
-    require('fs').writeFileSync(HIVE_IDENTITY_FILE, JSON.stringify(identity, null, 2));
+    writeFileSync(HIVE_IDENTITY_FILE, JSON.stringify(identity, null, 2));
     console.log(`[QUEEN] ═══════════════════════════════════════════`);
     console.log(`[QUEEN]   NEW HIVE SECRET GENERATED`);
     console.log(`[QUEEN]   ${HIVE_SECRET}`);

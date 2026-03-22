@@ -106,7 +106,7 @@ fi
 
 # --- Read hive secret ---
 HIVE_SECRET=""
-HIVE_IDENTITY="$DATA_DIR/hive-identity.json"
+HIVE_IDENTITY="$BORGCLAW_HOME/data/hive-identity.json"
 if [ -f "$HIVE_IDENTITY" ]; then
   HIVE_SECRET=$(python3 -c "import json; print(json.load(open('$HIVE_IDENTITY'))['secret'])" 2>/dev/null || echo "")
 fi

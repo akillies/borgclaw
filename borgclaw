@@ -308,7 +308,7 @@ cmd_halt() {
 }
 
 cmd_resume() {
-  info "Resuming hive operations..."
+  echo -e "${CYAN}→${NC} Resuming hive operations..."
   curl -s -X POST "http://localhost:${QUEEN_PORT}/api/hive/resume" | python3 -m json.tool 2>/dev/null
   ok "Hive resumed. Nodes will re-register via heartbeat."
 }
