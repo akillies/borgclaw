@@ -26,7 +26,10 @@ export default function renderDashboard(data) {
     runs = [],
     workflowsLoaded = 0,
     runningWorkflows: runningCount = 0,
+    hiveSecret = '',
   } = data;
+  const port = process.env.QUEEN_PORT || '9090';
+  const queenHost = (() => { try { return require('os').networkInterfaces().en0?.find(i => i.family === 'IPv4')?.address || 'localhost'; } catch { return 'localhost'; } })();
 
   // ── Node rows ──────────────────────────────────────────────
   function statusDot(status) {
@@ -981,6 +984,66 @@ input[type="range"].dial:disabled {
     </div>
   </div>
 
+  <!-- ═══ QUEEN CHAT ══════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">QUEEN CHAT</span>
+      <span class="section-badge">NATURAL LANGUAGE GOVERNANCE · TALK TO THE HIVE</span>
+    </div>
+    <div class="section-body" style="padding:0">
+      <div id="chat-log" style="height:200px;overflow-y:auto;padding:0.5rem;font-size:11px;border-bottom:1px solid var(--border)">
+        <div style="color:var(--muted)">── QUEEN READY ── type a command or question below</div>
+      </div>
+      <div style="display:flex;border-top:1px solid var(--border)">
+        <span style="padding:6px 8px;color:var(--green);font-size:12px;background:var(--surface)">▶</span>
+        <input id="chat-input" type="text" placeholder="Talk to the Queen..."
+          style="flex:1;background:var(--surface);border:none;color:var(--green);font:12px monospace;padding:6px 8px;outline:none"
+          onkeydown="if(event.key==='Enter')sendChat()">
+        <button onclick="sendChat()" style="background:var(--green);color:var(--void);border:none;padding:6px 12px;font:11px monospace;cursor:pointer">SEND</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ CONNECT ═══════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">CONNECT</span>
+      <span class="section-badge">SNAP YOUR AI INTO THE HIVE</span>
+    </div>
+    <div class="section-body" style="padding:0.75rem;font-size:11px">
+      <div style="margin-bottom:8px;color:var(--muted)">── Point any AI app at these URLs ──</div>
+      <table style="width:100%">
+        <tr><td style="color:var(--cyan);width:180px">OpenAI-compatible</td><td><code style="color:var(--green)">OPENAI_BASE_URL=http://${queenHost}:4000</code></td></tr>
+        <tr><td style="color:var(--cyan)">Anthropic-compatible</td><td><code style="color:var(--green)">ANTHROPIC_BASE_URL=http://${queenHost}:4000</code></td></tr>
+        <tr><td style="color:var(--cyan)">Ollama-native</td><td><code style="color:var(--green)">OLLAMA_HOST=http://${queenHost}:11434</code></td></tr>
+        <tr><td style="color:var(--cyan)">Queen API</td><td><code style="color:var(--green)">http://${queenHost}:${port}</code></td></tr>
+      </table>
+      <div style="margin-top:8px;color:var(--muted)">Works with: OpenClaw · NanoClaw · DeerFlow · Cursor · Aider · Continue · CrewAI · LangChain · any OpenAI SDK</div>
+    </div>
+  </div>
+
+  <!-- ═══ SECURITY ════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">SECURITY</span>
+      <span class="section-badge">HIVE DOORS · AUTH STATUS</span>
+    </div>
+    <div class="section-body" style="padding:0.75rem;font-size:11px">
+      <table style="width:100%">
+        <tr><td style="width:200px">Queen API (:${port})</td><td style="color:var(--green)">● AUTHENTICATED</td><td style="color:var(--muted)">Bearer token required</td></tr>
+        <tr><td>LiteLLM (:4000)</td><td style="color:${services.litellm?.status === 'online' ? 'var(--amber)' : 'var(--muted)'}">● ${services.litellm?.status === 'online' ? 'SET LITELLM_MASTER_KEY' : 'OFFLINE'}</td><td style="color:var(--muted)">Set in .env</td></tr>
+        <tr><td>Drone endpoints (:9091)</td><td style="color:var(--green)">● AUTHENTICATED</td><td style="color:var(--muted)">Hive secret on all routes</td></tr>
+        <tr><td>NATS (:4222)</td><td style="color:var(--cyan)">● INTERNAL ONLY</td><td style="color:var(--muted)">Not exposed externally</td></tr>
+        <tr><td>ntfy (:2586)</td><td style="color:${services.ntfy?.status === 'online' ? 'var(--green)' : 'var(--muted)'}">● ${services.ntfy?.status === 'online' ? 'ONLINE' : 'OFFLINE'}</td><td style="color:var(--muted)">Push notifications</td></tr>
+        <tr><td>Dashboard</td><td style="color:var(--green)">● AUTHENTICATED</td><td style="color:var(--muted)">All API calls use Bearer token</td></tr>
+      </table>
+      <div style="margin-top:8px">
+        <button class="btn btn-reject" onclick="if(confirm('HALT THE HIVE? All drones stop, workflows cancel, approvals rejected.')){authFetch('/api/hive/halt',{method:'POST'}).then(()=>location.reload())}">⚠ HALT HIVE</button>
+        <button class="btn btn-approve" onclick="authFetch('/api/hive/resume',{method:'POST'}).then(()=>location.reload())">▶ RESUME HIVE</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ FOOTER ══════════════════════════════════════════ -->
   <div class="footer-wrap">
     <div class="footer-inner">
@@ -1801,6 +1864,56 @@ input[type="range"].dial:disabled {
     costAccumulator += estimate;
     updateCostDisplay();
   }
+
+  // ── Queen Chat ─────────────────────────────────────────
+  window.sendChat = function () {
+    var input = document.getElementById('chat-input');
+    var log = document.getElementById('chat-log');
+    var msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+    input.disabled = true;
+
+    // Show user message
+    log.innerHTML += '<div style="color:var(--cyan);margin-top:4px">▶ ' + escHtml(msg) + '</div>';
+    log.innerHTML += '<div style="color:var(--muted)">⏳ Queen is thinking...</div>';
+    log.scrollTop = log.scrollHeight;
+
+    authFetch('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message: msg }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        // Remove "thinking" indicator
+        var thinking = log.querySelector('div:last-child');
+        if (thinking && thinking.textContent.includes('thinking')) thinking.remove();
+
+        // Show Queen response
+        log.innerHTML += '<div style="color:var(--green);margin-top:2px">♛ ' + escHtml(data.response || data.error || 'No response') + '</div>';
+
+        // Show actions taken
+        if (data.actions_taken && data.actions_taken.length > 0) {
+          data.actions_taken.forEach(function (a) {
+            log.innerHTML += '<div style="color:var(--amber);font-size:10px">  ⚡ ' + escHtml(a.cmd) + ' ' + JSON.stringify(a.params) + '</div>';
+          });
+          // Refresh node display if actions changed state
+          refreshNodes();
+        }
+
+        log.scrollTop = log.scrollHeight;
+        input.disabled = false;
+        input.focus();
+      })
+      .catch(function (err) {
+        var thinking = log.querySelector('div:last-child');
+        if (thinking && thinking.textContent.includes('thinking')) thinking.remove();
+        log.innerHTML += '<div style="color:var(--red)">✗ ' + escHtml(err.message) + '</div>';
+        log.scrollTop = log.scrollHeight;
+        input.disabled = false;
+        input.focus();
+      });
+  };
 
   // ── Init ───────────────────────────────────────────────
   initSndBtn();
