@@ -1038,8 +1038,8 @@ input[type="range"].dial:disabled {
         <tr><td>Dashboard</td><td style="color:var(--green)">● AUTHENTICATED</td><td style="color:var(--muted)">All API calls use Bearer token</td></tr>
       </table>
       <div style="margin-top:8px">
-        <button class="btn btn-reject" onclick="if(confirm('HALT THE HIVE? All drones stop, workflows cancel, approvals rejected.')){authFetch('/api/hive/halt',{method:'POST'}).then(()=>location.reload())}">⚠ HALT HIVE</button>
-        <button class="btn btn-approve" onclick="authFetch('/api/hive/resume',{method:'POST'}).then(()=>location.reload())">▶ RESUME HIVE</button>
+        <button class="btn btn-reject" onclick="if(confirm('HALT THE HIVE?')){authFetch('/api/hive/halt',{method:'POST'}).then(function(){this.textContent='HALTED'}.bind(this))}">⚠ HALT HIVE</button>
+        <button class="btn btn-approve" onclick="authFetch('/api/hive/resume',{method:'POST'}).then(function(){this.textContent='RESUMED'}.bind(this))">▶ RESUME HIVE</button>
       </div>
     </div>
   </div>

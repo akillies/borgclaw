@@ -1,10 +1,17 @@
 [
   {
-    "id": "evt-1774162761393-hfbc",
-    "ts": "2026-03-22T06:59:21.393Z",
+    "id": "evt-1774163871492-rw5y",
+    "ts": "2026-03-22T07:17:51.492Z",
     "type": "queen_started",
     "version": "0.2.0",
     "node_id": "queen",
     "profile": "unknown"
+  },
+  {
+    "id": "evt-1774163887471-gv8l",
+    "ts": "2026-03-22T07:18:07.471Z",
+    "type": "queen_chat",
+    "message": "hey sexy lady",
+    "actions": 1
   }
 ]
