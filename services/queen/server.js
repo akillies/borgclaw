@@ -1897,7 +1897,7 @@ async function callLLMWithTimeout(step, inputs, systemPrompt, timeoutMs) {
     // Try LiteLLM first (port 4000), then Ollama (port 11434), then return mock
     const providers = [
       { url: 'http://localhost:4000/v1/chat/completions', model: 'auto' },
-      { url: 'http://localhost:11434/v1/chat/completions', model: 'phi4-mini' },
+      { url: 'http://localhost:11434/v1/chat/completions', model: process.env.QUEEN_MODEL || 'phi4-mini' },
     ];
 
     const prompt = `You are the ${step.agent} agent.\n\nTask: ${step.action}\nDescription: ${step.description || ''}\n\nInputs:\n${JSON.stringify(inputs, null, 2)}`;
