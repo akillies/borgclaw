@@ -101,17 +101,37 @@ steps:
     timeout: 8m
     requires_approval: false
 
-  # --- Evaluation: depends on both scans ---
+  - id: scan_devices
+    agent: cerebro-analyst
+    action: research_devices
+    description: "Check for new hardware relevant to BorgClaw drones. Update config/devices.json if new devices found."
+    inputs:
+      current_devices: "config/devices.json"
+      search_sources:
+        - "New SBCs and edge AI boards (Jetson, Orange Pi, Radxa, etc.)"
+        - "GPU price drops (used mining cards, new budget GPUs)"
+        - "New NPU-enabled devices with LLM support"
+      flag_criteria:
+        - "better tok/s per dollar than current devices in same tier"
+        - "new device category not represented (e.g., new NPU platform)"
+        - "significant price drop on existing recommended hardware"
+    outputs:
+      - device_updates    # Proposed changes to config/devices.json
+    timeout: 5m
+    requires_approval: false
+
+  # --- Evaluation: depends on all three scans ---
 
   - id: evaluate
     agent: cerebro-analyst
     action: score_and_rank
     description: "Score every flagged item. Rank by composite score. Select top 3 upgrade recommendations."
-    depends_on: [scan_models, scan_tools]
+    depends_on: [scan_models, scan_tools, scan_devices]
     inputs:
       candidates:
         models: "{{scan_models.model_candidates}}"
         tools: "{{scan_tools.tool_candidates}}"
+        devices: "{{scan_devices.device_updates}}"
       scoring_rubric:
         quality:
           description: "How much better is this than what we have? (benchmark delta, capability gain)"

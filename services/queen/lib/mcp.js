@@ -33,9 +33,9 @@ export function initMcp({ fsRoots, knowledgeBasePath, nasMountPath, version }) {
       args: ['-y', '@modelcontextprotocol/server-filesystem', ...MCP_FS_ROOTS],
     },
     fetch: {
-      description: 'Web content fetching via @modelcontextprotocol/server-fetch',
+      description: 'Web content fetching via mcp-fetch-server',
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-fetch'],
+      args: ['-y', 'mcp-fetch-server'],
     },
   };
 }
