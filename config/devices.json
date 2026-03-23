@@ -1,0 +1,30 @@
+{
+  "_version": "2026-03-22",
+  "_maintained_by": "queen_autoresearch",
+  "_note": "Queen reads this to recommend models for hardware. Autoresearch loop updates it.",
+  "tiers": {
+    "nano":       { "ram_max_mb": 4096,   "models": ["gemma3:1b"],                           "role": "satellite",    "note": "Pi, thin client. Knowledge + relay only." },
+    "edge":       { "ram_max_mb": 8192,   "models": ["phi4-mini"],                            "role": "ghost",        "note": "Old laptop, Chromebook. Ghost worker + light inference." },
+    "worker":     { "ram_max_mb": 24576,  "models": ["qwen3:8b", "phi4-mini"],                "role": "worker",       "note": "Desktop, gaming PC. Main inference." },
+    "heavy":      { "ram_max_mb": 65536,  "models": ["gemma3:27b", "qwen3:8b", "phi4-mini"],  "role": "worker",       "note": "Workstation, Mac Studio. Deep synthesis." },
+    "beast":      { "ram_max_mb": 131072, "models": ["qwen3:32b", "gemma3:27b", "qwen3:8b"],  "role": "worker",       "note": "Multi-GPU server, 128GB+. Everything." }
+  },
+  "gpu_profiles": {
+    "nvidia_cuda":    { "models_add": ["nemotron-mini"], "note": "NVIDIA GPUs get Nemotron for function calling." },
+    "apple_metal":    { "models_add": [],                "note": "MLX backend. Unified memory = larger models fit." },
+    "rockchip_npu":   { "models_add": [],                "note": "Use rkllama for NPU inference. Ollama for CPU fallback." }
+  },
+  "devices": {
+    "jetson_orin":    { "tier": "worker",  "gpu": "nvidia_cuda", "tok_s": 21,  "watts": 25,  "price": 249, "note": "Purpose-built inference drone." },
+    "orange_pi_5":    { "tier": "edge",    "gpu": "rockchip_npu","tok_s": 15,  "watts": 15,  "price": 140, "note": "Best NPU per dollar under $200." },
+    "mac_mini_m1":    { "tier": "worker",  "gpu": "apple_metal", "tok_s": 15,  "watts": 12,  "price": 375, "note": "Silent, efficient, already supported." },
+    "thin_client":    { "tier": "nano",    "gpu": null,          "tok_s": 2,   "watts": 15,  "price": 35,  "note": "Ghost worker + knowledge node. Not for inference." },
+    "mining_p106":    { "tier": "worker",  "gpu": "nvidia_cuda", "tok_s": 30,  "watts": 90,  "price": 25,  "note": "Cheapest CUDA drone. No display output." },
+    "mining_rtx3070": { "tier": "worker",  "gpu": "nvidia_cuda", "tok_s": 63,  "watts": 220, "price": 175, "note": "Best mainstream mining GPU for inference." },
+    "raspberry_pi5":  { "tier": "nano",    "gpu": null,          "tok_s": 4,   "watts": 8,   "price": 80,  "note": "Knowledge node. Light inference only." },
+    "steam_deck":     { "tier": "edge",    "gpu": null,          "tok_s": 4,   "watts": 25,  "price": 400, "note": "Works if you have one. Don't buy one for this." },
+    "synology_nas":   { "tier": "edge",    "gpu": null,          "tok_s": 6,   "watts": 30,  "price": 0,   "note": "Already on. Free always-on node via Docker." },
+    "chromebook":     { "tier": "edge",    "gpu": null,          "tok_s": 8,   "watts": 15,  "price": 0,   "note": "Crostini Linux. CPU only. If you have one." },
+    "rack_server":    { "tier": "beast",   "gpu": null,          "tok_s": 8,   "watts": 300, "price": 150, "note": "Dual Xeon. Only way to run 70B under $300." }
+  }
+}
