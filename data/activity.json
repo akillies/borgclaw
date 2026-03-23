@@ -143,5 +143,49 @@
     "type": "approval_approved",
     "approval_id": "appr-1774240336577-l9mc",
     "summary": "Approve step 'propose' in workflow 'autoresearch'"
+  },
+  {
+    "id": "evt-1774243215584-7iov",
+    "ts": "2026-03-23T05:20:15.584Z",
+    "type": "hive_halt",
+    "reason": "operator triggered"
+  },
+  {
+    "id": "evt-1774243215584-u2xp",
+    "ts": "2026-03-23T05:20:15.584Z",
+    "type": "workflow_halted",
+    "workflow_id": "run-1774240312034-k7m1"
+  },
+  {
+    "id": "evt-1774243215616-nh1q",
+    "ts": "2026-03-23T05:20:15.616Z",
+    "type": "litellm_sync",
+    "local_endpoints": 0,
+    "cloud_endpoints": 6
+  },
+  {
+    "id": "evt-1774243235830-tv38",
+    "ts": "2026-03-23T05:20:35.830Z",
+    "type": "hive_halt",
+    "reason": "operator triggered"
+  },
+  {
+    "id": "evt-1774243235842-bt01",
+    "ts": "2026-03-23T05:20:35.842Z",
+    "type": "litellm_sync",
+    "local_endpoints": 0,
+    "cloud_endpoints": 6
+  },
+  {
+    "id": "evt-1774243236212-6wvz",
+    "ts": "2026-03-23T05:20:36.212Z",
+    "type": "node_offline",
+    "node_id": "drone-efef"
+  },
+  {
+    "id": "evt-1774243236213-n8nj",
+    "ts": "2026-03-23T05:20:36.213Z",
+    "type": "node_offline",
+    "node_id": "qa-test-drone-0001"
   }
 ]

@@ -429,6 +429,34 @@ function escHtmlAttr(str) {
   return String(str ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Standalone chat page — no refresh, resizable, draggable in browser
+app.get('/chat', (req, res) => {
+  if (!hasValidSession(req)) return res.redirect('/auth/login?next=/chat');
+  const secret = parseCookies(req.headers.cookie).bc_api_token || '';
+  res.type('html').send(`<!DOCTYPE html><html><head><title>Queen Chat</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#00ff88;font:13px monospace;height:100vh;display:flex;flex-direction:column}
+#log{flex:1;overflow-y:auto;padding:12px;white-space:pre-wrap;line-height:1.6}
+.u{color:#00ccff}.q{color:#00ff88}.a{color:#fbbf24;font-size:11px}.e{color:#ff4444}
+#bar{display:flex;border-top:1px solid #333;background:#111}
+#bar input{flex:1;background:#111;border:none;color:#00ff88;font:13px monospace;padding:8px 12px;outline:none}
+#bar button{background:#00ff88;color:#0a0a0a;border:none;padding:8px 16px;font:12px monospace;cursor:pointer}</style></head>
+<body><div id="log">QUEEN ONLINE -- type below\n</div><div id="bar"><input id="i" placeholder="Talk to the Queen..." autofocus><button onclick="tx()">TX</button></div>
+<script>var S='${secret}',H={'Content-Type':'application/json'};if(S)H['Authorization']='Bearer '+S;
+var log=document.getElementById('log'),inp=document.getElementById('i');
+inp.onkeydown=function(e){if(e.key==='Enter')tx()};
+function tx(){var m=inp.value.trim();if(!m)return;inp.value='';inp.disabled=true;
+log.innerHTML+='<div class="u">> '+esc(m)+'</div><div style="color:#555">thinking...</div>';
+log.scrollTop=log.scrollHeight;
+fetch('/api/chat',{method:'POST',headers:H,body:JSON.stringify({message:m})})
+.then(function(r){return r.json()}).then(function(d){
+var t=log.querySelectorAll('div');var l=t[t.length-1];if(l&&l.textContent.includes('thinking'))l.remove();
+log.innerHTML+='<div class="q">'+esc(d.response||d.error||'...')+'</div>';
+if(d.actions_taken)d.actions_taken.forEach(function(a){log.innerHTML+='<div class="a">  > '+a.cmd+' '+JSON.stringify(a.params)+'</div>'});
+log.scrollTop=log.scrollHeight;inp.disabled=false;inp.focus()})
+.catch(function(e){log.innerHTML+='<div class="e">ERR: '+e.message+'</div>';inp.disabled=false;inp.focus()})}
+function esc(s){return String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</script></body></html>`);
+});
+
 // Public endpoint — drones can discover hive info without auth
 app.get('/api/hive/info', (_req, res) => {
   res.json({

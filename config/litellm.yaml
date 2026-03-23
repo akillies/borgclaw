@@ -60,15 +60,6 @@ model_list:
         - deep-foresight
         - frontier-reasoning
       note: ~5% of total workload. Hard budget cap enforced.
-  - model_name: local-phi4-mini
-    litellm_params:
-      model: ollama/phi4-mini
-      api_base: http://localhost:11434
-    model_info:
-      tier: 1
-      cost_per_token: 0
-      node_id: qa-test-drone-0001
-      _managed_by: queen
 router_settings:
   routing_strategy: simple-shuffle
   num_retries: 2
