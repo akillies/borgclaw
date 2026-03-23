@@ -11,29 +11,39 @@ import (
 )
 
 // droneBBSHTML is the inline BBS terminal page served at GET /.
-// Verbs (in order): NodeID×2, Tier, Contribution, CPUPercent, RAMPercent,
-// GPUName, ActiveModel, AvgTokPerSec, uptime, TasksCompleted, TasksActive,
-// KnowledgeDomains, PersonaMode, LearnedInsights, LearnTasksDone, LearnApprovalRate.
+// Verbs (in order): title, NodeID, Tier, uptime, TasksCompleted, TasksActive,
+// cpuBar, CPUPercent, ramBar, RAMPercent, GPUName, ActiveModel, AvgTokPerSec,
+// contBar, Contribution, KnowledgeDomains, PersonaMode, LearnedInsights,
+// LearnTasksDone, LearnApprovalRate, shortNodeID.
 // Note: no HiveSecret in the template — /chat is exempt from auth so the
 // BBS page can talk to the drone without exposing the secret in public HTML.
-const droneBBSHTML = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>%s</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#00ff88;font-family:monospace;font-size:13px;padding:16px;min-height:100vh}pre{white-space:pre}.dim{color:#005533}.hi{color:#00ffaa}input{background:#0a0a0a;border:1px solid #00ff88;color:#00ff88;font-family:monospace;font-size:13px;padding:4px 8px;width:calc(100%% - 80px);outline:none}button{background:#003322;border:1px solid #00ff88;color:#00ff88;font-family:monospace;font-size:13px;padding:4px 12px;cursor:pointer;margin-left:4px}button:hover{background:#00ff88;color:#0a0a0a}#resp{margin-top:8px;color:#00cc66;min-height:1em;white-space:pre-wrap;word-break:break-word}.blink{animation:blink 1s step-end infinite}@keyframes blink{0%%,100%%{opacity:1}50%%{opacity:0}}</style></head><body><pre>
-&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
-&#x2502;  B O R G C L A W   D R O N E   T E R M  &#x2502;
-&#x2502;  NODE: <span class="hi">%-26s</span>&#x2502;
-&#x2502;  TIER: %-8s  CONTRIBUTION: %3d%%        &#x2502;
-&#x251C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2524;
-&#x2502;  CPU  %5.1f%%   RAM  %5.1f%%                 &#x2502;
-&#x2502;  GPU  %-30s&#x2502;
-&#x2502;  MDL  %-22s %6.1f t/s &#x2502;
-&#x251C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2524;
-&#x2502;  UP   %-14s  DONE %5d  ACT %3d &#x2502;
-&#x2502;  KNOW %-30s&#x2502;
-&#x2502;  MODE %-30s&#x2502;
-&#x251C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2524;
-&#x2502;  INTEL %-29s&#x2502;
-&#x2502;  LEARN %5d tasks  APPR %5.1f%%      &#x2502;
-&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;
-</pre><div style="margin-top:12px"><input id="msg" type="text" placeholder="transmit to drone..." autocomplete="off"><button onclick="send()">TX</button></div><div id="resp"><span class="dim">awaiting transmission<span class="blink">_</span></span></div><script>function send(){var m=document.getElementById('msg').value.trim();if(!m)return;document.getElementById('resp').textContent='...';fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})}).then(function(r){return r.json()}).then(function(d){document.getElementById('resp').textContent=d.response||d.error||'no response'}).catch(function(e){document.getElementById('resp').textContent='ERR: '+e})}</script></body></html>`
+const droneBBSHTML = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>%s</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#00ff88;font-family:"Courier New",monospace;font-size:13px;line-height:1.5;padding:20px;min-height:100vh}body::after{content:"";position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.06) 3px,rgba(0,0,0,.06) 4px);pointer-events:none;z-index:99}pre{white-space:pre}.c{color:#00ccff}.r{color:#ff4444}.d{color:#1f5c3a}.g{color:#00ff88}input{background:#0a0a0a;border:none;border-bottom:1px solid #00ff88;color:#00ff88;font-family:"Courier New",monospace;font-size:13px;padding:2px 4px;width:300px;outline:none}button{background:#0a0a0a;border:1px solid #00ff88;color:#00ff88;font-family:"Courier New",monospace;font-size:12px;padding:2px 10px;cursor:pointer;margin-left:6px}button:hover{background:#00ff88;color:#0a0a0a}#resp{margin-top:6px;color:#00cc66;min-height:1.4em;white-space:pre-wrap;word-break:break-word;max-width:600px}.bk{animation:b 1s step-end infinite}@keyframes b{0%%,100%%{opacity:1}50%%{opacity:0}}</style></head><body><pre><span class="c">╔══════════════════════════════════════════════╗
+║  ██████  ████████  ████████  ██████  ██  ██ ║
+║  ██  ██  ██    ██  ██    ██ ██       ██  ██ ║
+║  ██████  ██    ██  ████████ ██  ███  ██  ██ ║
+║  ██  ██  ██    ██  ██    ██ ██   ██  ██  ██ ║
+║  ██████  ████████  ██    ██  ██████  ██████ ║
+║                 C L A W · D R O N E         ║
+╠══════════════════════════════════════════════╣</span>
+<span class="d">║</span> <span class="c">NODE</span> <span class="g">%-23s</span>  <span class="c">TIER</span> <span class="g">%-9s</span>  <span class="d">║</span>
+<span class="d">║</span> <span class="c">UP</span>   <span class="g">%-12s</span>   <span class="c">DONE</span> <span class="g">%5d</span>   <span class="c">ACT</span> <span class="g">%2d</span>  <span class="d">║</span>
+<span class="c">╠══════════════════════════════════════════════╣</span>
+<span class="d">║</span> <span class="c">CPU</span> <span class="g">[%-10s]</span> <span class="g">%5.1f%%</span>                      <span class="d">║</span>
+<span class="d">║</span> <span class="c">RAM</span> <span class="g">[%-10s]</span> <span class="g">%5.1f%%</span>                      <span class="d">║</span>
+<span class="d">║</span> <span class="c">GPU</span> <span class="g">%-41s</span><span class="d">║</span>
+<span class="c">╠══════════════════════════════════════════════╣</span>
+<span class="d">║</span> <span class="c">MDL</span> <span class="g">%-26s</span>  <span class="g">%6.1f</span> <span class="c">t/s</span>  <span class="d">║</span>
+<span class="d">║</span> <span class="c">CNT</span> <span class="g">[%-10s]</span> <span class="g">%3d%%</span>                        <span class="d">║</span>
+<span class="c">╠══════════════════════════════════════════════╣</span>
+<span class="d">║</span> <span class="c">KNOW</span> <span class="g">%-40s</span>  <span class="d">║</span>
+<span class="d">║</span> <span class="c">MODE</span> <span class="g">%-40s</span>  <span class="d">║</span>
+<span class="c">╠══════════════════════════════════════════════╣</span>
+<span class="d">║</span> <span class="c">›</span>    <span class="g">%-40s</span>  <span class="d">║</span>
+<span class="d">║</span> <span class="c">HIST</span> <span class="g">%5d</span>  <span class="c">learned</span>    <span class="c">APPR</span> <span class="g">%5.1f%%</span>       <span class="d">║</span>
+<span class="c">╚══════════════════════════════════════════════╝</span></pre>
+<pre style="margin-top:8px"><span class="d">drone-</span><span class="c">%s</span><span class="d"> ›</span> <input id="msg" type="text" autocomplete="off" spellcheck="false"><button onclick="tx()">TX</button><span class="bk g"> _</span></pre>
+<div id="resp"><span class="d">awaiting transmission...</span></div>
+<script>function tx(){var m=document.getElementById('msg').value.trim();if(!m)return;document.getElementById('resp').innerHTML='<span class="c">routing\u2026</span>';fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})}).then(r=>r.json()).then(d=>{document.getElementById('resp').textContent=d.response||d.error||'no response'}).catch(e=>{document.getElementById('resp').textContent='ERR: '+e})}document.getElementById('msg').addEventListener('keydown',e=>{if(e.key==='Enter')tx()})</script></body></html>`
 
 // Server is the node's HTTP API surface.
 type Server struct {
@@ -156,6 +166,44 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// bbsBar builds a ▓░ progress bar of the given width for a 0–100 percentage.
+func bbsBar(pct float64, width int) string {
+	if pct < 0 {
+		pct = 0
+	}
+	if pct > 100 {
+		pct = 100
+	}
+	filled := int(pct/100*float64(width) + 0.5)
+	b := make([]byte, 0, width*3) // UTF-8: each block char is 3 bytes
+	for i := 0; i < width; i++ {
+		if i < filled {
+			b = append(b, "\xe2\x96\x93"...) // ▓
+		} else {
+			b = append(b, "\xe2\x96\x91"...) // ░
+		}
+	}
+	return string(b)
+}
+
+// bbsTrunc truncates s to at most n runes, appending "…" if cut.
+func bbsTrunc(s string, n int) string {
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s
+	}
+	return string(runes[:n-1]) + "…"
+}
+
+// bbsShortID returns the last 4 chars of the node ID for the prompt line.
+func bbsShortID(id string) string {
+	r := []rune(id)
+	if len(r) >= 4 {
+		return string(r[len(r)-4:])
+	}
+	return id
+}
+
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	m := s.metrics.Current()
 	hw := s.cfg.Hardware
@@ -181,18 +229,12 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	knowStr := "none"
 	if len(domains) > 0 {
 		knowStr = strings.Join(domains, " ")
-		if len(knowStr) > 30 {
-			knowStr = knowStr[:27] + "..."
-		}
 	}
 
 	// Persona mode — derived from the first preferred model's role context
 	personaMode := "WORKER"
 	if len(s.cfg.PreferredModels) > 0 {
 		personaMode = strings.ToUpper(s.cfg.PreferredModels[0])
-		if len(personaMode) > 30 {
-			personaMode = personaMode[:27] + "..."
-		}
 	}
 
 	// Learning stats
@@ -206,29 +248,36 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		if insight := s.learning.LastInsights(3); insight != "" {
 			intelLine = insight
 		}
-		if len(intelLine) > 29 {
-			intelLine = intelLine[:26] + "..."
-		}
 	}
 
+	// Pre-compute visual bars and truncated fields.
+	contLevel := s.throttle.Level()
+	cpuBar := bbsBar(m.CPUPercent, 10)
+	ramBar := bbsBar(m.RAMPercent, 10)
+	contBar := bbsBar(float64(contLevel), 10)
+
 	page := fmt.Sprintf(droneBBSHTML,
-		s.cfg.NodeID,       // <title>
-		s.cfg.NodeID,       // NODE: display
-		hw.Tier,            // TIER:
-		s.throttle.Level(), // CONTRIBUTION:
-		m.CPUPercent,       // CPU
-		m.RAMPercent,       // RAM
-		gpuName,            // GPU
-		activeModel,        // MDL name
-		m.AvgTokPerSec,     // tok/s
-		uptimeStr,          // UP
-		m.TasksCompleted,   // DONE
-		m.TasksActive,      // ACT
-		knowStr,            // KNOW
-		personaMode,        // MODE
-		intelLine,          // INTEL
-		learnDone,          // LEARN tasks
-		learnApprRate,      // APPR %
+		s.cfg.NodeID,               // title
+		bbsTrunc(s.cfg.NodeID, 23), // NODE display
+		bbsTrunc(hw.Tier, 9),       // TIER
+		uptimeStr,                  // UP
+		m.TasksCompleted,           // DONE
+		m.TasksActive,              // ACT
+		cpuBar,                     // CPU bar [%-10s]
+		m.CPUPercent,               // CPU %%
+		ramBar,                     // RAM bar [%-10s]
+		m.RAMPercent,               // RAM %%
+		bbsTrunc(gpuName, 41),      // GPU %-41s
+		bbsTrunc(activeModel, 26),  // MDL name %-26s
+		m.AvgTokPerSec,             // tok/s %6.1f
+		contBar,                    // contribution bar [%-10s]
+		contLevel,                  // contribution %3d%%
+		bbsTrunc(knowStr, 40),      // KNOW %-40s
+		bbsTrunc(personaMode, 40),  // MODE %-40s
+		bbsTrunc(intelLine, 40),    // intel line %-40s
+		learnDone,                  // HIST %5d
+		learnApprRate,              // APPR %5.1f%%
+		bbsShortID(s.cfg.NodeID),   // prompt short ID
 	)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
