@@ -120,18 +120,39 @@ steps:
     timeout: 5m
     requires_approval: false
 
-  # --- Evaluation: depends on all three scans ---
+  - id: scan_forks
+    agent: cerebro-analyst
+    action: research_forks
+    description: "Check BorgClaw GitHub forks for features worth assimilating back into main."
+    inputs:
+      repo: "akillies/borgclaw"
+      method: "gh api repos/akillies/borgclaw/forks --jq '.[].full_name' then check each fork's commits ahead of main"
+      evaluate_criteria:
+        - "New features not in main (new files, new routes, new drone capabilities)"
+        - "Bug fixes we missed"
+        - "Performance improvements with benchmarks"
+        - "New device support or model integrations"
+      ignore:
+        - "Cosmetic changes (README tweaks, comment edits)"
+        - "Forks with no commits ahead of main"
+    outputs:
+      - fork_candidates    # Forks with interesting changes worth reviewing
+    timeout: 5m
+    requires_approval: false
+
+  # --- Evaluation: depends on all four scans ---
 
   - id: evaluate
     agent: cerebro-analyst
     action: score_and_rank
     description: "Score every flagged item. Rank by composite score. Select top 3 upgrade recommendations."
-    depends_on: [scan_models, scan_tools, scan_devices]
+    depends_on: [scan_models, scan_tools, scan_devices, scan_forks]
     inputs:
       candidates:
         models: "{{scan_models.model_candidates}}"
         tools: "{{scan_tools.tool_candidates}}"
         devices: "{{scan_devices.device_updates}}"
+        forks: "{{scan_forks.fork_candidates}}"
       scoring_rubric:
         quality:
           description: "How much better is this than what we have? (benchmark delta, capability gain)"
