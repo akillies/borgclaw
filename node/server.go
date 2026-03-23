@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -34,6 +36,8 @@ const droneBBSHTML = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"
 <span class="c">╠══════════════════════════════════════════════╣</span>
 <span class="d">║</span> <span class="c">›</span>    <span class="g">%-40s</span>  <span class="d">║</span>
 <span class="d">║</span> <span class="c">HIST</span> <span class="g">%5d</span>  <span class="c">learned</span>    <span class="c">APPR</span> <span class="g">%5.1f%%</span>       <span class="d">║</span>
+<span class="c">╠══════════════════════════════════════════════╣</span>
+<span class="d">║</span> %s <span class="d">║</span>
 <span class="c">╚══════════════════════════════════════════════╝</span></pre>` +
 	`<pre style="margin-top:8px"><span class="d">drone-</span><span class="c">%s</span><span class="d"> ›</span> <input id="msg" type="text" autocomplete="off" spellcheck="false"><button onclick="tx()">TX</button><span class="bk g"> _</span></pre><div id="resp"><span class="d">awaiting transmission...</span></div><script>function tx(){var m=document.getElementById('msg').value.trim();if(!m)return;document.getElementById('resp').innerHTML='<span class="c">routing\u2026</span>';fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})}).then(r=>r.json()).then(d=>{document.getElementById('resp').textContent=d.response||d.error||'no response'}).catch(e=>{document.getElementById('resp').textContent='ERR: '+e})}document.getElementById('msg').addEventListener('keydown',e=>{if(e.key==='Enter')tx()})</script></body></html>`
 
@@ -66,12 +70,13 @@ func NewServer(cfg Config, metrics *MetricsCollector, ollama *OllamaClient, thro
 	mux.HandleFunc("GET /info", s.handleInfo)
 	mux.HandleFunc("POST /chat", s.handleChat)
 	mux.HandleFunc("GET /knowledge/search", s.handleKnowledgeSearch)
+	mux.HandleFunc("GET /screensaver", s.handleScreensaver)
 
 	var handler http.Handler = mux
 	if cfg.HiveSecret != "" {
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
-			case "/", "/health", "/chat", "/metrics/prom":
+			case "/", "/health", "/chat", "/metrics/prom", "/screensaver":
 				mux.ServeHTTP(w, r)
 				return
 			}
@@ -188,6 +193,14 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	contLevel := s.throttle.Level()
+
+	var idleLine string
+	if m.TasksActive == 0 {
+		idleLine = `<span class="r">IDLE</span> <span class="d">──</span> <a href="/screensaver" style="color:#fbbf24;text-decoration:none"><span class="c">[SCREENSAVER]</span></a>               `
+	} else {
+		idleLine = fmt.Sprintf(`<span class="g">ACTIVE</span> <span class="d">──</span> <span class="c">%d</span> <span class="g">tasks in queue</span>              `, m.TasksActive)
+	}
+
 	page := fmt.Sprintf(droneBBSHTML,
 		s.cfg.NodeID, bbsTrunc(s.cfg.NodeID, 23), bbsTrunc(hw.Tier, 9),
 		uptimeStr, m.TasksCompleted, m.TasksActive,
@@ -197,12 +210,35 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		bbsBar(float64(contLevel), 10), contLevel,
 		bbsTrunc(knowStr, 40), bbsTrunc(personaMode, 40),
 		bbsTrunc(intelLine, 40), learnDone, learnApprRate,
+		idleLine,
 		bbsShortID(s.cfg.NodeID),
 	)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Write([]byte(page))
+}
+
+func (s *Server) handleScreensaver(w http.ResponseWriter, r *http.Request) {
+	path := resolveScreensaverPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		http.Error(w, "screensaver not found", 404)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write(data)
+}
+
+func resolveScreensaverPath() string {
+	if exe, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), "..", "scripts", "browser-worker", "screensaver.html")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return "scripts/browser-worker/screensaver.html"
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
