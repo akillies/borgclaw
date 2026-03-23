@@ -475,31 +475,154 @@ ok "Node config written (Queen: http://${QUEEN_IP}:9090, profile: ${PROFILE}, se
 cat > "$CLAW_DIR/setup.sh" << 'SETUP'
 #!/usr/bin/env bash
 # ============================================================
-# THE CLAW — One-Script Assimilation
+# BORGCLAW — WAREZ-STYLE ASSIMILATION SCRIPT
 # ============================================================
+# Works on: Linux, macOS (Intel + ARM)
 # Plug in the drive. Run this script. Machine joins the hive.
+# Flags: --uninstall   Remove BorgClaw from this machine
+#        --silent      Skip theatrics (for automation)
 # ============================================================
 
 set -euo pipefail
 
-GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
-ok()   { echo -e "${GREEN}✓${NC} $1"; }
-warn() { echo -e "${YELLOW}⚠${NC} $1"; }
-info() { echo -e "${CYAN}→${NC} $1"; }
+# --- Colors ---
+R='\033[0;31m'; G='\033[0;32m'; Y='\033[1;33m'; C='\033[0;36m'
+BG='\033[38;2;0;255;136m'; DIM='\033[2m'; B='\033[1m'; NC='\033[0m'
+ok()   { echo -e "  ${G}[+]${NC} $1"; }
+warn() { echo -e "  ${Y}[!]${NC} $1"; }
+info() { echo -e "  ${C}[>]${NC} $1"; }
+err()  { echo -e "  ${R}[X]${NC} $1"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SILENT=0
 
-echo ""
-echo "  ╔══════════════════════════════════════╗"
-echo "  ║         T H E   C L A W              ║"
-echo "  ║   Resistance is optional.            ║"
-echo "  ║   Adaptation is inevitable.          ║"
-echo "  ╚══════════════════════════════════════╝"
-echo ""
+# --- Parse flags ---
+for arg in "$@"; do
+  case "$arg" in
+    --silent) SILENT=1 ;;
+    --uninstall) ;;
+  esac
+done
 
-# Step 1: Install Ollama
+# --- Theatrics helpers ---
+scene() {
+  [ "$SILENT" -eq 1 ] && return
+  echo ""
+  echo -e "  ${DIM}${C}----[ ${NC}${BG}$1${NC}${DIM}${C} ]----${NC}"
+  echo ""
+}
+
+slow() {
+  [ "$SILENT" -eq 1 ] && echo -e "$1" && return
+  echo -e "$1"
+  sleep "$2"
+}
+
+progress_bar() {
+  [ "$SILENT" -eq 1 ] && return
+  local label="$1" pct=0 total=30 filled=0 empty=0
+  for pct in 5 12 24 38 55 70 82 91 100; do
+    filled=$((pct * total / 100))
+    empty=$((total - filled))
+    printf "\r  ${DIM}${C}%s${NC} [" "$label"
+    printf '%0.s\xe2\x96\x93' $(seq 1 $filled) 2>/dev/null
+    printf '%0.s\xe2\x96\x91' $(seq 1 $empty) 2>/dev/null
+    printf '] %3d%%' "$pct"
+    sleep 0.06
+  done
+  echo ""
+}
+
+open_chiptune() {
+  [ "$SILENT" -eq 1 ] && return
+  local html="$SCRIPT_DIR/browser-worker/chiptune.html"
+  [ ! -f "$html" ] && return
+  case "$(uname -s)" in
+    Darwin*) open "$html" 2>/dev/null & ;;
+    Linux*)  xdg-open "$html" 2>/dev/null & ;;
+  esac
+}
+
+# ============================================================
+# UNINSTALL
+# ============================================================
+if [ "${1:-}" = "--uninstall" ]; then
+  echo ""
+  echo -e "  ${R}============================================${NC}"
+  echo -e "  ${R}   S E V E R I N G   H I V E   L I N K     ${NC}"
+  echo -e "  ${R}============================================${NC}"
+  echo ""
+  pkill -f "the-claw" 2>/dev/null && ok "Claw process terminated" || echo -e "  ${DIM}(no claw running)${NC}"
+  rm -f "$HOME/.local/bin/the-claw" 2>/dev/null
+  ok "Binary removed"
+  rm -rf "$HOME/.config/borgclaw" 2>/dev/null
+  ok "Config purged"
+  echo ""
+  echo -e "  ${DIM}Ollama and models are NOT removed (shared resource).${NC}"
+  echo -e "  ${DIM}To also remove: rm -rf ~/.ollama && sudo rm -f /usr/local/bin/ollama${NC}"
+  echo ""
+  echo -e "  ${R}DISCONNECTED FROM THE COLLECTIVE.${NC}"
+  echo ""
+  exit 0
+fi
+
+# ============================================================
+# THE SHOW BEGINS
+# ============================================================
+
+open_chiptune
+
+if [ "$SILENT" -eq 0 ]; then
+  clear 2>/dev/null || true
+  echo ""
+  slow "" 0.1
+  slow "  ${DIM}${G}initializing...${NC}" 0.3
+  echo ""
+  slow "  ${BG}    ____                    ________               ${NC}" 0.04
+  slow "  ${BG}   / __ )____  _________ _/ ____/ /___ __      __ ${NC}" 0.04
+  slow "  ${BG}  / __  / __ \\/ ___/ __ \`/ /   / / __ \`/ | /| / / ${NC}" 0.04
+  slow "  ${BG}  / /_/ / /_/ / /  / /_/ / /___/ / /_/ /| |/ |/ /  ${NC}" 0.04
+  slow "  ${BG} /_____/\\____/_/   \\__, /\\____/_/\\__,_/ |__/|__/   ${NC}" 0.04
+  slow "  ${BG}                  /____/                            ${NC}" 0.04
+  echo ""
+  slow "  ${DIM}${C}+-----------------------------------------------+${NC}" 0.05
+  slow "  ${DIM}${C}|${NC}  ${B}YOUR MACHINES. YOUR MODELS. YOUR RULES.${NC}     ${DIM}${C}|${NC}" 0.05
+  slow "  ${DIM}${C}|${NC}  ${DIM}Resistance is optional.${NC}                     ${DIM}${C}|${NC}" 0.05
+  slow "  ${DIM}${C}|${NC}  ${DIM}Adaptation is inevitable.${NC}                   ${DIM}${C}|${NC}" 0.05
+  slow "  ${DIM}${C}+-----------------------------------------------+${NC}" 0.05
+  echo ""
+  sleep 0.5
+fi
+
+# ============================================================
+# SCENE 1: PROBING HARDWARE
+# ============================================================
+scene "PROBING HARDWARE"
+
+OS="$(uname -s)"
+ARCH="$(uname -m)"
+
+case "$OS" in
+  Linux*)   PLATFORM="linux" ;;
+  Darwin*)  PLATFORM="mac" ;;
+  *)        err "Unsupported OS: $OS"; exit 1 ;;
+esac
+
+ok "Platform: $OS / $ARCH"
+progress_bar "HARDWARE SCAN"
+
+if [ ! -f "$SCRIPT_DIR/the-claw" ]; then
+  err "Binary not found: $SCRIPT_DIR/the-claw"
+  exit 1
+fi
+
+# ============================================================
+# SCENE 2: INITIALIZING NEURAL PATHWAYS (Ollama)
+# ============================================================
+scene "INITIALIZING NEURAL PATHWAYS"
+
 if command -v ollama &>/dev/null; then
-  ok "Ollama already installed ($(ollama --version 2>/dev/null || echo 'unknown version'))"
+  ok "Ollama already present"
 else
   info "Installing Ollama..."
   if [ -f "$SCRIPT_DIR/ollama-install.sh" ]; then
@@ -510,50 +633,68 @@ else
   ok "Ollama installed"
 fi
 
-# Step 2: Start Ollama if not running
+progress_bar "NEURAL INIT"
+
+# Start Ollama if not running
 if ! curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
   info "Starting Ollama..."
   ollama serve &>/dev/null &
   sleep 3
+  if curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
+    ok "Ollama online"
+  else
+    warn "Ollama may still be starting -- continuing"
+  fi
 fi
 
-# Step 3: Load cached models (or pull if no cache)
+# ============================================================
+# SCENE 3: LOADING CONSCIOUSNESS (Models)
+# ============================================================
+scene "LOADING CONSCIOUSNESS"
+
 if [ -d "$SCRIPT_DIR/models/blobs" ] && [ "$(ls -A "$SCRIPT_DIR/models/blobs" 2>/dev/null)" ]; then
-  info "Loading cached models from drive..."
+  info "Injecting cached model blobs from drive..."
   OLLAMA_HOME="${OLLAMA_HOME:-$HOME/.ollama}"
   mkdir -p "$OLLAMA_HOME/models"
   rsync -a "$SCRIPT_DIR/models/" "$OLLAMA_HOME/models/"
-  ok "Models loaded from cache"
+  ok "Models loaded from cache (network bypass)"
 else
-  info "No cached models on drive — pulling phi4-mini (default)..."
+  info "No cached models -- pulling phi4-mini (2.3GB)..."
   ollama pull phi4-mini
   ok "phi4-mini pulled"
 fi
 
-# Step 4: Install The Claw binary
+progress_bar "CONSCIOUSNESS"
+
+# ============================================================
+# SCENE 4: ESTABLISHING HIVE LINK (Config)
+# ============================================================
+scene "ESTABLISHING HIVE LINK"
+
 INSTALL_DIR="$HOME/.local/bin"
 mkdir -p "$INSTALL_DIR"
 cp "$SCRIPT_DIR/the-claw" "$INSTALL_DIR/the-claw"
 chmod +x "$INSTALL_DIR/the-claw"
-ok "The Claw installed to $INSTALL_DIR/the-claw"
+ok "Binary deployed to $INSTALL_DIR/the-claw"
 
-# Step 5: Copy config
 CLAW_CONFIG_DIR="$HOME/.config/borgclaw"
 mkdir -p "$CLAW_CONFIG_DIR"
+
+QUEEN_URL="(unknown)"
 if [ -f "$SCRIPT_DIR/config/drone.json" ]; then
   cp "$SCRIPT_DIR/config/drone.json" "$CLAW_CONFIG_DIR/drone.json"
   QUEEN_URL=$(grep -o '"queen_url"[[:space:]]*:[[:space:]]*"[^"]*"' "$CLAW_CONFIG_DIR/drone.json" | cut -d'"' -f4)
-  ok "Config installed (Queen: $QUEEN_URL)"
+  ok "Hive config installed (Queen: $QUEEN_URL)"
 fi
 
-# Step 6: Copy browser-worker (optional — used for browser task type)
+# Copy browser-worker if present
 if [ -d "$SCRIPT_DIR/browser-worker" ]; then
   mkdir -p "$HOME/.local/share/borgclaw"
   cp -r "$SCRIPT_DIR/browser-worker/." "$HOME/.local/share/borgclaw/browser-worker/"
-  ok "browser-worker scripts installed"
+  ok "Browser-worker scripts deployed"
 fi
 
-# Step 7: Copy knowledge packs if present on the drive
+# Copy knowledge packs if present
 KNOWLEDGE_DIR="$HOME/.config/borgclaw/knowledge"
 mkdir -p "$KNOWLEDGE_DIR"
 ZIM_COUNT=0
@@ -564,27 +705,56 @@ if [ -d "$SCRIPT_DIR/knowledge" ]; then
     ZIM_COUNT=$((ZIM_COUNT + 1))
   done
 fi
-if [ "$ZIM_COUNT" -gt 0 ]; then
-  ok "Knowledge packs installed: $ZIM_COUNT .zim file(s) → $KNOWLEDGE_DIR"
+[ "$ZIM_COUNT" -gt 0 ] && ok "Knowledge packs: $ZIM_COUNT .zim file(s) installed"
+
+progress_bar "HIVE LINK"
+
+# ============================================================
+# SCENE 5: ACTIVATING DRONE
+# ============================================================
+scene "ACTIVATING DRONE"
+
+CLAW_BIN="$INSTALL_DIR/the-claw"
+"$CLAW_BIN" --config "$CLAW_CONFIG_DIR/drone.json" &
+CLAW_PID=$!
+sleep 2
+
+progress_bar "ACTIVATION"
+
+# ============================================================
+# ASSIMILATION COMPLETE
+# ============================================================
+
+if kill -0 $CLAW_PID 2>/dev/null; then
+  if [ "$SILENT" -eq 0 ]; then
+    echo ""
+    echo -e "  ${BG}    _   ____ ____ ____ _  _ ____ _    ____ ___ ____ ____ _  _  ${NC}"
+    echo -e "  ${BG}    |   [__  [__  |  | |\/| |  | |    |__|  |  |  | |  | |\ |  ${NC}"
+    echo -e "  ${BG}    |   ___] ___] |__| |  | |__| |___ |  |  |  |__| |__| | \|  ${NC}"
+    echo -e "  ${BG}                                                                ${NC}"
+    echo -e "  ${BG}          C O M P L E T E                                       ${NC}"
+    echo ""
+    echo -e "  ${DIM}${C}+-----------------------------------------------+${NC}"
+    echo -e "  ${DIM}${C}|${NC}  ${G}DRONE ACTIVE${NC}  PID: $CLAW_PID"
+    echo -e "  ${DIM}${C}|${NC}  ${G}QUEEN${NC}         $QUEEN_URL"
+    echo -e "  ${DIM}${C}|${NC}  ${G}DASHBOARD${NC}     $QUEEN_URL/dashboard"
+    echo -e "  ${DIM}${C}|${NC}"
+    echo -e "  ${DIM}${C}|${NC}  Stop:      ${DIM}pkill the-claw${NC}"
+    echo -e "  ${DIM}${C}|${NC}  Restart:   ${DIM}the-claw --config ~/.config/borgclaw/drone.json${NC}"
+    echo -e "  ${DIM}${C}|${NC}  Remove:    ${DIM}bash $SCRIPT_DIR/setup.sh --uninstall${NC}"
+    echo -e "  ${DIM}${C}+-----------------------------------------------+${NC}"
+    echo ""
+    echo -e "  ${DIM}GREETS TO: The Collective, Queen, All Drones Past And Future${NC}"
+    echo -e "  ${DIM}           cracked by BORGCLAW CREW 2026 -- WE ARE ONE${NC}"
+    echo ""
+  else
+    echo "BORGCLAW: Drone active (PID: $CLAW_PID) -- Queen: $QUEEN_URL"
+  fi
 else
-  info "No .zim files on drive — add packs to $KNOWLEDGE_DIR to enable offline knowledge"
+  err "Drone failed to start. Run manually:"
+  echo "  $CLAW_BIN --config $CLAW_CONFIG_DIR/drone.json"
+  exit 1
 fi
-
-# Step 9: Start The Claw
-info "Starting The Claw..."
-"$INSTALL_DIR/the-claw" --config "$CLAW_CONFIG_DIR/drone.json" &
-
-echo ""
-ok "═══════════════════════════════════════"
-ok "  THIS MACHINE HAS JOINED THE HIVE    "
-ok "═══════════════════════════════════════"
-echo ""
-echo "  The Claw is running in the background."
-echo "  Check Queen dashboard to see this node."
-echo ""
-echo "  To stop:   pkill the-claw"
-echo "  To restart: the-claw --config ~/.config/borgclaw/drone.json"
-echo ""
 SETUP
 chmod +x "$CLAW_DIR/setup.sh"
 ok "Setup script written"
