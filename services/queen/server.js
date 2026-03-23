@@ -29,8 +29,12 @@ import { deepHealthCheck } from './lib/health.js';
 import * as setup from './lib/setup.js';
 import { initNats, publish as natsPublish, close as natsClose } from './lib/nats.js';
 import { executeWorkflow, resumeWorkflow } from './lib/workflow.js';
-import { scanLeaderboard, checkOllamaLibrary } from './lib/leaderboard.js';
 import * as sandbox from './lib/sandbox.js';
+import * as clusters from './lib/clusters.js';
+import * as mcp from './lib/mcp.js';
+import * as chat from './lib/chat.js';
+import * as leaderboard from './lib/leaderboard.js';
+import * as nas from './lib/nas.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -74,13 +78,24 @@ sandbox.initSandbox({
   ],
 });
 
+// Initialize extracted modules
+clusters.initClusters(DATA_DIR, CONFIG_DIR);
+
+const MCP_FS_ROOTS = process.env.MCP_FS_ROOTS
+  ? process.env.MCP_FS_ROOTS.split(':')
+  : [
+      ...(KNOWLEDGE_BASE_PATH ? [KNOWLEDGE_BASE_PATH] : [process.env.HOME || '/tmp']),
+      ...(NAS_MOUNT_PATH ? [NAS_MOUNT_PATH] : []),
+    ];
+
+mcp.initMcp({ fsRoots: MCP_FS_ROOTS, knowledgeBasePath: KNOWLEDGE_BASE_PATH, nasMountPath: NAS_MOUNT_PATH, version: '0.2.0' });
+chat.initChatRateLimiter();
+
 // --- NATS JetStream (optional enhancement — Queen works without it) ---
 // initNats() is non-blocking. If NATS is not running, it logs a warning
 // and all subsequent publish calls become silent no-ops.
 initNats().then(() => {
   // Forward every activity event to NATS hive.activity subject.
-  // The onEvent hook runs on every activity.log() call regardless of
-  // whether that event also gets a targeted publish below.
   activity.onEvent((entry) => {
     natsPublish('hive.activity', {
       ...entry,
@@ -89,8 +104,6 @@ initNats().then(() => {
   });
 
   // Forward approval lifecycle events to targeted subjects.
-  // hive.approval.created   — new item in the queue
-  // hive.approval.resolved  — approved or rejected
   approvals.onNotify((action, item) => {
     if (action === 'created') {
       natsPublish('hive.approval.created', {
@@ -118,18 +131,8 @@ const nodes = new Map();
 const startedAt = new Date();
 const VERSION = '0.2.0';
 
-// clusters — groups of rpc-worker drones that can shard a large model together.
-// Keyed by cluster name (string). Each entry:
-//   { name, members: [nodeId...], created_at, formation_rule, notes }
-// Mirrors the nodes Map pattern: in-memory + file-backed persistence.
-const clusters = new Map();
-
 // ============================================================
 // LiteLLM Dynamic Routing — nodes auto-register as endpoints
-// ============================================================
-// When a Claw node reports its models via heartbeat, Queen
-// rebuilds litellm.yaml with all known Ollama endpoints so
-// LiteLLM load-balances across the entire hive automatically.
 // ============================================================
 
 let litellmSyncTimer = null;
@@ -234,11 +237,6 @@ try {
 // ============================================================
 // HIVE SECRET — Auth for all API routes
 // ============================================================
-// Generated on first boot, stored in data/hive-identity.json.
-// Every API request must include: Authorization: Bearer <secret>
-// Dashboard serves a login page. Drones send it in heartbeat headers.
-// ============================================================
-
 const HIVE_IDENTITY_FILE = path.join(DATA_DIR, 'hive-identity.json');
 let HIVE_SECRET = '';
 
@@ -268,7 +266,7 @@ function initHiveSecret() {
 
 initHiveSecret();
 
-// Persist node registrations across restarts
+// --- Node persistence ---
 const NODES_FILE = path.join(DATA_DIR, 'nodes.json');
 function loadNodes() {
   try {
@@ -291,82 +289,10 @@ function persistNodes() {
 
 loadNodes();
 
-// ── Cluster persistence ──────────────────────────────────────────────────────
-// Clusters survive restarts so the operator doesn't have to re-form them after
-// Queen reboots. Formation rules come from config/clusters.json (read-only at
-// startup); membership is managed dynamically at runtime.
-const CLUSTERS_FILE = path.join(DATA_DIR, 'clusters.json');
-const CLUSTERS_CONFIG_FILE = path.join(CONFIG_DIR, 'clusters.json');
-
-function loadClusters() {
-  // Load runtime cluster state (membership, created_at, etc.)
-  try {
-    const raw = readFileSync(CLUSTERS_FILE, 'utf-8');
-    const loaded = JSON.parse(raw);
-    for (const [name, cluster] of Object.entries(loaded)) {
-      clusters.set(name, cluster);
-    }
-    if (clusters.size > 0) {
-      console.log(`[QUEEN] Restored ${clusters.size} cluster(s) from disk`);
-    }
-  } catch { /* fresh start — no clusters yet */ }
-}
-
-function persistClusters() {
-  const obj = Object.fromEntries(clusters);
-  fs.writeFile(CLUSTERS_FILE, JSON.stringify(obj, null, 2)).catch(() => {});
-}
-
-// Load static formation rules from config/clusters.json.
-// Returns the parsed object, or {} if the file doesn't exist yet.
-function loadClusterFormationRules() {
-  try {
-    const raw = readFileSync(CLUSTERS_CONFIG_FILE, 'utf-8');
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-loadClusters();
-
 // --- Express App ---
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
-
-// ── Rate limiter — POST /api/chat: max 10 req/min per session ──────────────
-// Simple in-memory sliding-window counter. Keyed by session cookie HMAC token
-// (never the raw secret). Resets every 60 seconds per key.
-const chatRateLimits = new Map(); // token → { count, resetAt }
-const CHAT_RATE_LIMIT = 10;
-const CHAT_RATE_WINDOW_MS = 60_000;
-
-function chatRateLimitMiddleware(req, res, next) {
-  const cookies = parseCookies(req.headers.cookie);
-  const token = cookies['bc_session'] || req.headers.authorization || 'anon';
-  const now = Date.now();
-  let entry = chatRateLimits.get(token);
-  if (!entry || now >= entry.resetAt) {
-    entry = { count: 0, resetAt: now + CHAT_RATE_WINDOW_MS };
-    chatRateLimits.set(token, entry);
-  }
-  entry.count += 1;
-  if (entry.count > CHAT_RATE_LIMIT) {
-    const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
-    res.set('Retry-After', String(retryAfter));
-    return res.status(429).json({ error: `Rate limit exceeded — max ${CHAT_RATE_LIMIT} requests/min`, retry_after_seconds: retryAfter });
-  }
-  next();
-}
-
-// Evict expired chat rate-limit entries every 5 minutes to prevent unbounded growth
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of chatRateLimits) {
-    if (now >= v.resetAt) chatRateLimits.delete(k);
-  }
-}, 5 * 60_000);
 
 // ── Cookie helpers (no cookie-parser dep needed) ──────────
 const SESSION_COOKIE = 'bc_session';
@@ -397,9 +323,6 @@ function hasValidSession(req) {
 }
 
 // Auth middleware — check hive secret on API routes
-// Public routes: GET / (status JSON), GET /api/hive/info (drone discovery),
-//                GET /auth/login, POST /auth/login
-// /dashboard requires a valid session cookie — NOT in PUBLIC_ROUTES.
 const PUBLIC_ROUTES = ['/', '/api/hive/info', '/auth/login', '/api/health'];
 
 app.use((req, res, next) => {
@@ -443,12 +366,6 @@ app.post('/auth/login', (req, res) => {
   const { secret, next } = req.body;
   const redirectTo = (next && next.startsWith('/')) ? next : '/dashboard';
   if (secret === HIVE_SECRET) {
-    // Set both cookies in one header call (array form) so nothing overwrites.
-    // SESSION_COOKIE: HttpOnly HMAC token — gates the /dashboard route.
-    // bc_api_token: JS-readable cookie — dashboard client uses it for Bearer
-    //   headers on API calls. Not HttpOnly by design: the page is already gated
-    //   by the HttpOnly session cookie, so only authenticated users can read it.
-    //   SameSite=Strict prevents CSRF.
     const sessionToken = crypto
       .createHmac('sha256', HIVE_SECRET)
       .update('borgclaw-session')
@@ -588,8 +505,6 @@ app.get('/api/status', (_req, res) => {
   });
 });
 
-// Lightweight health endpoint — no auth, for load balancers and external monitors.
-// Returns a minimal status snapshot suitable for L7 health probes.
 app.get('/api/health', (_req, res) => {
   const online = countOnline();
   res.json({
@@ -672,15 +587,6 @@ app.post('/api/hive/resume', (_req, res) => {
 // ============================================================
 // ROUTES: Make Disk — write a USB drone installer
 // ============================================================
-// POST /api/hive/make-disk
-//   Body: { target_path: "/Volumes/MYUSB" }
-//   Returns: { ok: true, path, size_mb } | { ok: false, error }
-//
-// Wraps scripts/prepare-usb.sh which does the heavy lifting:
-//   - Cross-compiles the-claw for Linux amd64
-//   - Caches Ollama installer + local models
-//   - Writes hive secret + Queen IP into drone config
-// ============================================================
 
 app.post('/api/hive/make-disk', async (req, res) => {
   const { target_path } = req.body || {};
@@ -689,14 +595,12 @@ app.post('/api/hive/make-disk', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'target_path is required' });
   }
 
-  // Basic safety: must be an absolute path
   if (!path.isAbsolute(target_path)) {
     return res.status(400).json({ ok: false, error: 'target_path must be absolute (e.g. /Volumes/MYUSB)' });
   }
 
   const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'prepare-usb.sh');
 
-  // Verify the script exists before spawning
   if (!existsSync(scriptPath)) {
     return res.status(500).json({ ok: false, error: `prepare-usb.sh not found at ${scriptPath}` });
   }
@@ -725,7 +629,6 @@ app.post('/api/hive/make-disk', async (req, res) => {
         if (code === 0) {
           resolve(stdout);
         } else {
-          // Include both streams — the script may print errors to either
           const detail = (stderr + stdout).trim() || `Exit code ${code}`;
           reject(new Error(detail));
         }
@@ -806,7 +709,7 @@ app.post('/api/nodes/:nodeId/heartbeat', (req, res) => {
   node.lastHeartbeat = new Date();
   node.status = 'online';
 
-  // Track drone mode — a drone can change mode on restart (rpc-worker ↔ task)
+  // Track drone mode — a drone can change mode on restart (rpc-worker <-> task)
   if (req.body.mode) {
     const prevMode = node.mode;
     node.mode = req.body.mode;
@@ -820,12 +723,10 @@ app.post('/api/nodes/:nodeId/heartbeat', (req, res) => {
   }
 
   if (req.body.metrics) {
-    // Merge metrics — keep history for sparklines
     const m = req.body.metrics;
     if (!node.metrics._history) node.metrics._history = [];
     node.metrics._history.push({ ts: Date.now(), ...m });
-    if (node.metrics._history.length > 60) node.metrics._history.shift(); // keep last 30 min (30s intervals)
-    // Current values
+    if (node.metrics._history.length > 60) node.metrics._history.shift();
     node.metrics.tokens_per_sec = m.tokens_per_sec ?? node.metrics.tokens_per_sec;
     node.metrics.cpu_pct = m.cpu_pct ?? node.metrics.cpu_pct;
     node.metrics.ram_used_gb = m.ram_used_gb ?? node.metrics.ram_used_gb;
@@ -839,18 +740,16 @@ app.post('/api/nodes/:nodeId/heartbeat', (req, res) => {
     node.metrics.requests_served = m.requests_served ?? node.metrics.requests_served;
     node.metrics.avg_latency_ms = m.avg_latency_ms ?? node.metrics.avg_latency_ms;
     node.metrics.p95_latency_ms = m.p95_latency_ms ?? node.metrics.p95_latency_ms;
-    node.metrics.ping_ms = m.ping_ms ?? node.metrics.ping_ms; // network RTT to Queen
+    node.metrics.ping_ms = m.ping_ms ?? node.metrics.ping_ms;
     node.metrics.cpu_temp_c = m.cpu_temp_c ?? node.metrics.cpu_temp_c;
     node.metrics.gpu_temp_c = m.gpu_temp_c ?? node.metrics.gpu_temp_c;
   }
-  // Store models + addr for LiteLLM routing
   if (req.body.models) {
     const prevModels = JSON.stringify(node.models || []);
     node.models = req.body.models;
     node.addr = req.body.addr || node.addr;
     if (JSON.stringify(node.models) !== prevModels) scheduleLitellmSync();
   }
-  // Store knowledge domains reported by the drone (ZIM pack filenames sans extension)
   if (Array.isArray(req.body.knowledge_domains)) {
     node.knowledge_domains = req.body.knowledge_domains;
   }
@@ -876,137 +775,13 @@ app.delete('/api/nodes/:nodeId', (req, res) => {
 });
 
 // ============================================================
-// ROUTES: Inference Clusters
-// ============================================================
-// A cluster groups rpc-worker drones so they can shard a model
-// that's too large for any single machine. This is the registry
-// layer — actual llama.cpp coordination comes later.
-//
-// POST /api/clusters/create
-//   Body: { name, members: [nodeId...], formation_rule?, notes? }
-//   - members must all be known rpc-worker drones
-//   - Returns the cluster record
-//
-// GET /api/clusters
-//   Lists all clusters with their member drones, hardware summary,
-//   and whether each member is currently online.
-//
-// DELETE /api/clusters/:name
-//   Removes a cluster (does NOT stop the member drones).
+// ROUTE MODULES — extracted to lib/
 // ============================================================
 
-// Helper: return all online rpc-worker drone IDs with their metadata.
-function rpcWorkerDrones() {
-  const onlineThreshold = Date.now() - HEARTBEAT_TIMEOUT_MS;
-  return [...nodes.entries()]
-    .filter(([, n]) => n.mode === 'rpc-worker' && n.lastHeartbeat?.getTime() > onlineThreshold)
-    .map(([id, n]) => ({
-      node_id: id,
-      rpc_port: n.rpc_port,
-      addr: n.addr || n.config?.addr || null,
-      hardware: n.config?.hardware || null,
-      status: n.status,
-    }));
-}
-
-app.post('/api/clusters/create', (req, res) => {
-  const { name, members, formation_rule, notes } = req.body || {};
-
-  if (!name || typeof name !== 'string' || !name.trim()) {
-    return res.status(400).json({ error: 'name is required' });
-  }
-  if (!Array.isArray(members) || members.length === 0) {
-    return res.status(400).json({ error: 'members array is required and must be non-empty' });
-  }
-
-  const clusterName = name.trim();
-
-  // Validate all members exist and are rpc-worker drones
-  const invalid = [];
-  for (const nodeId of members) {
-    const n = nodes.get(nodeId);
-    if (!n) { invalid.push(`${nodeId}: not registered`); continue; }
-    if (n.mode !== 'rpc-worker') { invalid.push(`${nodeId}: mode is '${n.mode || 'task'}', not 'rpc-worker'`); }
-  }
-  if (invalid.length > 0) {
-    return res.status(400).json({ error: 'Invalid cluster members', details: invalid });
-  }
-
-  const cluster = {
-    name: clusterName,
-    members,
-    formation_rule: formation_rule || null,
-    notes: notes || null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-
-  clusters.set(clusterName, cluster);
-  persistClusters();
-
-  activity.log({ type: 'cluster_created', cluster: clusterName, members, formation_rule: formation_rule || null });
-  console.log(`[QUEEN] Inference cluster '${clusterName}' created with ${members.length} rpc-worker(s): ${members.join(', ')}`);
-
-  res.status(201).json(cluster);
-});
-
-app.get('/api/clusters', (_req, res) => {
-  const formationRules = loadClusterFormationRules();
-  const onlineThreshold = Date.now() - HEARTBEAT_TIMEOUT_MS;
-
-  const list = [...clusters.entries()].map(([name, cluster]) => {
-    // Annotate each member with current live status
-    const memberDetails = cluster.members.map(nodeId => {
-      const n = nodes.get(nodeId);
-      if (!n) return { node_id: nodeId, status: 'unknown', rpc_port: null, addr: null };
-      const isOnline = n.lastHeartbeat && n.lastHeartbeat.getTime() > onlineThreshold;
-      return {
-        node_id: nodeId,
-        status: isOnline ? n.status : 'offline',
-        rpc_port: n.rpc_port,
-        addr: n.addr || n.config?.addr || null,
-        hardware: n.config?.hardware || null,
-      };
-    });
-
-    const onlineCount = memberDetails.filter(m => m.status === 'online').length;
-
-    return {
-      ...cluster,
-      member_details: memberDetails,
-      online_count: onlineCount,
-      total_count: cluster.members.length,
-      ready: onlineCount === cluster.members.length,
-    };
-  });
-
-  // Also report which rpc-worker drones are online but not yet in any cluster
-  const clustered = new Set([...clusters.values()].flatMap(c => c.members));
-  const unclustered = rpcWorkerDrones().filter(d => !clustered.has(d.node_id));
-
-  // Surface any applicable formation rules from config
-  const applicableRules = (formationRules.rules || []).filter(rule => {
-    if (!rule.min_members) return true;
-    return unclustered.length >= rule.min_members;
-  });
-
-  res.json({
-    clusters: list,
-    unclustered_rpc_workers: unclustered,
-    formation_rules: applicableRules,
-  });
-});
-
-app.delete('/api/clusters/:name', (req, res) => {
-  const name = req.params.name;
-  if (!clusters.has(name)) {
-    return res.status(404).json({ error: `Cluster '${name}' not found` });
-  }
-  clusters.delete(name);
-  persistClusters();
-  activity.log({ type: 'cluster_deleted', cluster: name });
-  res.json({ ok: true, deleted: name });
-});
+clusters.registerRoutes(app, { nodes, activity, heartbeatTimeoutMs: HEARTBEAT_TIMEOUT_MS });
+leaderboard.registerRoutes(app, { activity, configDir: CONFIG_DIR });
+nas.registerRoutes(app, { nasMountPath: NAS_MOUNT_PATH });
+mcp.registerRoutes(app, { activity, approvals });
 
 // ============================================================
 // ROUTES: Config API
@@ -1079,15 +854,11 @@ app.post('/api/approvals/:id/approve', (req, res) => {
   if (!item) return res.status(404).json({ error: 'Approval not found' });
 
   // Find the paused run that is waiting on this approval and resume it.
-  // runningWorkflows is keyed by runId; source_workflow on the approval item
-  // is stored as "workflowName/runId" by the createApproval adapter, so we
-  // scan by pausedApprovalId rather than relying on the key match.
   for (const [runId, run] of runningWorkflows) {
     if (run.pausedApprovalId === req.params.id && run.status === 'paused' && run._state) {
       activity.log({ type: 'workflow_resumed', workflow: run.name, run_id: runId, approval_id: req.params.id });
       run.status = 'running';
 
-      // Build the same deps as executeWorkflowAsync
       const context = {
         today: new Date().toISOString().split('T')[0],
         today_formatted: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
@@ -1148,10 +919,8 @@ app.post('/api/workflows/:name/execute', async (req, res) => {
   activity.log({ type: 'workflow_started', workflow: name, run_id: runId });
   natsPublish('hive.workflow.started', { workflow: name, run_id: runId, ts: new Date().toISOString() });
 
-  // Track the run
   runningWorkflows.set(runId, { name, status: 'running', started_at: new Date().toISOString(), results: {} });
 
-  // Execute asynchronously — don't block the response
   executeWorkflowAsync(runId, spec, context).catch(err => {
     activity.log({ type: 'workflow_error', workflow: name, run_id: runId, error: err.message });
     natsPublish('hive.workflow.failed', { workflow: name, run_id: runId, error: err.message, ts: new Date().toISOString() });
@@ -1172,7 +941,6 @@ app.get('/api/workflows/runs/:runId', (req, res) => {
 // ROUTES: Node Configuration (interactive)
 // ============================================================
 
-// Update a node's settings (contribution dial, role, etc.)
 app.patch('/api/nodes/:nodeId', (req, res) => {
   const node = nodes.get(req.params.nodeId);
   if (!node) return res.status(404).json({ error: `Node ${req.params.nodeId} not found` });
@@ -1192,12 +960,10 @@ app.patch('/api/nodes/:nodeId', (req, res) => {
   res.json({ ok: true, node_id: req.params.nodeId, config: node.config });
 });
 
-// Ping a node (test connectivity)
 app.post('/api/nodes/:nodeId/ping', async (req, res) => {
   const node = nodes.get(req.params.nodeId);
   if (!node) return res.status(404).json({ error: `Node ${req.params.nodeId} not found` });
 
-  // If node has a hostname/IP, try to reach it
   const ip = node.config?.hostname || node.config?.ip;
   if (!ip || ip === '127.0.0.1' || ip === 'localhost') {
     return res.json({ ok: true, node_id: req.params.nodeId, reachable: true, local: true });
@@ -1214,7 +980,6 @@ app.post('/api/nodes/:nodeId/ping', async (req, res) => {
 // ROUTES: Model Management
 // ============================================================
 
-// List models available on a node (via Ollama)
 app.get('/api/models', async (_req, res) => {
   try {
     const r = await fetch('http://localhost:11434/api/tags');
@@ -1229,7 +994,6 @@ app.get('/api/models', async (_req, res) => {
   }
 });
 
-// Pull a model (trigger Ollama pull)
 app.post('/api/models/pull', async (req, res) => {
   const { model } = req.body;
   if (!model) return res.status(400).json({ error: 'model name required' });
@@ -1251,75 +1015,8 @@ app.post('/api/models/pull', async (req, res) => {
   }
 });
 
-// Scan for available upgrade candidates from the Ollama library
-// GET /api/models/available?tiers=nano,edge,worker
-//   Returns models that aren't deployed yet and fit within hive hardware tiers.
-//   Optional ?tiers= query param limits which tiers to evaluate.
-//   Reads current deployments from config/models.json for comparison.
-app.get('/api/models/available', async (req, res) => {
-  let currentModels = {};
-  try {
-    const raw = await fs.readFile(path.join(CONFIG_DIR, 'models.json'), 'utf-8');
-    currentModels = JSON.parse(raw);
-  } catch (err) {
-    console.warn(`[QUEEN] /api/models/available: could not read models.json: ${err.message}`);
-    // Proceed with empty config — leaderboard will still run, just can't de-dupe
-  }
-
-  const tiersParam = req.query.tiers;
-  const tiers = tiersParam
-    ? tiersParam.split(',').map(t => t.trim()).filter(Boolean)
-    : null;
-
-  activity.log({ type: 'leaderboard_scan_started', tiers: tiers || 'all' });
-
-  const candidates = await scanLeaderboard(currentModels, tiers);
-
-  activity.log({ type: 'leaderboard_scan_complete', candidates_found: candidates.length });
-
-  res.json({
-    scanned_at: new Date().toISOString(),
-    tiers_evaluated: tiers || Object.keys(currentModels.drone_tiers || {}),
-    candidates_found: candidates.length,
-    candidates,
-  });
-});
-
-// Search the Ollama library by keyword
-// GET /api/models/search?q=vision
-app.get('/api/models/search', async (req, res) => {
-  const q = req.query.q || '';
-  if (!q.trim()) {
-    return res.status(400).json({ error: 'q parameter required (e.g. ?q=vision)' });
-  }
-
-  const results = await checkOllamaLibrary(q);
-  res.json({ query: q, results });
-});
-
 // ============================================================
 // ROUTES: Task Dispatch (knowledge-aware routing)
-// ============================================================
-// POST /api/tasks/dispatch — route a task to the best available drone.
-//
-// Body:
-//   {
-//     "task_id":        "...",          // required
-//     "type":           "inference",    // required: task type forwarded to drone
-//     "model":          "phi4-mini",    // required unless type=="browser"
-//     "payload":        { ... },        // task payload forwarded verbatim
-//     "required_domain": "wikipedia-mini"  // optional — only route to drones with this ZIM pack
-//   }
-//
-// Routing rules (in priority order):
-//   1. If required_domain is set, only consider drones that report that domain
-//      in their knowledge_domains heartbeat field.
-//   2. Among eligible drones, prefer those with available task slots.
-//   3. Among those, prefer by lowest queue depth.
-//
-// Returns:
-//   { ok: true,  routed_to: "drone-xxxx", addr: "..." }  — on success
-//   { ok: false, error: "...", eligible_nodes: 0 }       — when no match
 // ============================================================
 
 app.post('/api/tasks/dispatch', async (req, res) => {
@@ -1331,7 +1028,6 @@ app.post('/api/tasks/dispatch', async (req, res) => {
 
   const onlineThreshold = Date.now() - HEARTBEAT_TIMEOUT_MS;
 
-  // Build candidate list from online nodes
   let candidates = [...nodes.entries()]
     .filter(([, node]) => {
       if (!node.lastHeartbeat || node.lastHeartbeat.getTime() < onlineThreshold) return false;
@@ -1339,7 +1035,6 @@ app.post('/api/tasks/dispatch', async (req, res) => {
       return true;
     });
 
-  // Domain filter — only drones with the required ZIM pack
   if (required_domain) {
     candidates = candidates.filter(([, node]) =>
       Array.isArray(node.knowledge_domains) && node.knowledge_domains.includes(required_domain)
@@ -1360,14 +1055,13 @@ app.post('/api/tasks/dispatch', async (req, res) => {
     return res.status(503).json({ ok: false, error: 'No online drones available', eligible_nodes: 0 });
   }
 
-  // Sort: prefer drones with available slots, then by lowest queue depth
   candidates.sort(([, a], [, b]) => {
     const aSlots = (a.capacity?.available_slots ?? 1);
     const bSlots = (b.capacity?.available_slots ?? 1);
     const aQueue = (a.capacity?.queue_depth ?? 0);
     const bQueue = (b.capacity?.queue_depth ?? 0);
-    if (bSlots !== aSlots) return bSlots - aSlots; // more free slots wins
-    return aQueue - bQueue;                         // lower queue wins
+    if (bSlots !== aSlots) return bSlots - aSlots;
+    return aQueue - bQueue;
   });
 
   const [targetId, targetNode] = candidates[0];
@@ -1377,7 +1071,6 @@ app.post('/api/tasks/dispatch', async (req, res) => {
     return res.status(503).json({ ok: false, error: `Selected drone ${targetId} has no advertised address` });
   }
 
-  // Forward the task to the chosen drone
   const droneUrl = `http://${droneAddr}/task`;
   const taskBody = { id: task_id, type, model, ...taskPayload };
 
@@ -1420,8 +1113,6 @@ app.post('/api/tasks/dispatch', async (req, res) => {
   }
 });
 
-// GET /api/tasks/knowledge-nodes — list which nodes have which knowledge domains
-// Useful for dashboards and debugging knowledge routing.
 app.get('/api/tasks/knowledge-nodes', (_req, res) => {
   const onlineThreshold = Date.now() - HEARTBEAT_TIMEOUT_MS;
   const result = [...nodes.entries()]
@@ -1433,7 +1124,6 @@ app.get('/api/tasks/knowledge-nodes', (_req, res) => {
       addr: node.addr,
     }));
 
-  // Aggregate: domain → [node_ids]
   const domainMap = {};
   for (const n of result) {
     for (const domain of n.knowledge_domains) {
@@ -1449,7 +1139,6 @@ app.get('/api/tasks/knowledge-nodes', (_req, res) => {
 // ROUTES: Node Metrics
 // ============================================================
 
-// Get all node metrics at a glance
 app.get('/api/metrics', (_req, res) => {
   const metrics = [...nodes.entries()].map(([id, n]) => ({
     node_id: id,
@@ -1477,7 +1166,6 @@ app.get('/api/metrics', (_req, res) => {
   res.json(metrics);
 });
 
-// Get metrics history for a specific node (for sparklines)
 app.get('/api/metrics/:nodeId/history', (req, res) => {
   const node = nodes.get(req.params.nodeId);
   if (!node) return res.status(404).json({ error: 'Node not found' });
@@ -1488,14 +1176,12 @@ app.get('/api/metrics/:nodeId/history', (req, res) => {
 // ROUTES: System Actions
 // ============================================================
 
-// Refresh health (force deep probe)
 app.post('/api/actions/refresh-health', async (_req, res) => {
   const health = await deepHealthCheck(nodes, startedAt);
   activity.log({ type: 'health_refresh', overall: health.overall });
   res.json(health);
 });
 
-// QMD search proxy
 app.post('/api/search', async (req, res) => {
   const { query, collection, limit } = req.body;
   if (!query) return res.status(400).json({ error: 'query required' });
@@ -1508,87 +1194,6 @@ app.post('/api/search', async (req, res) => {
     res.json({ ok: true, results: result });
   } catch (err) {
     res.json({ ok: false, error: err.message });
-  }
-});
-
-// ============================================================
-// ROUTES: NAS Shared Knowledge Store
-// ============================================================
-// The NAS is just a directory on the filesystem — NFS/SMB/CIFS
-// mounted at NAS_MOUNT_PATH. All machines on the LAN mount the
-// SAME path and share one knowledge layer automatically.
-//
-// GET /api/nas/status
-//   Returns whether the NAS mount is configured and accessible.
-//   Uses stat() so it works even on empty mounts. Never throws.
-//
-// GET /api/nas/browse?path=...
-//   Lists files within the NAS directory (sandbox enforced).
-//   Optional ?path= is relative to NAS_MOUNT_PATH.
-//   Returns a file listing suitable for the dashboard.
-// ============================================================
-
-app.get('/api/nas/status', async (_req, res) => {
-  if (!NAS_MOUNT_PATH) {
-    return res.json({
-      configured: false,
-      accessible: false,
-      path: null,
-      message: 'NAS_MOUNT_PATH not set',
-    });
-  }
-
-  try {
-    const stat = await fs.stat(NAS_MOUNT_PATH);
-    res.json({
-      configured: true,
-      accessible: stat.isDirectory(),
-      path: NAS_MOUNT_PATH,
-      message: stat.isDirectory() ? 'mounted' : 'path exists but is not a directory',
-    });
-  } catch (err) {
-    // Mount dropped, share offline, path doesn't exist — all graceful.
-    res.json({
-      configured: true,
-      accessible: false,
-      path: NAS_MOUNT_PATH,
-      message: err.code === 'ENOENT' ? 'not mounted' : `inaccessible: ${err.code}`,
-    });
-  }
-});
-
-app.get('/api/nas/browse', async (req, res) => {
-  if (!NAS_MOUNT_PATH) {
-    return res.status(404).json({ ok: false, error: 'NAS_MOUNT_PATH not configured' });
-  }
-
-  // Resolve the requested sub-path within the NAS root.
-  // path.join normalises traversal — path.resolve then sandbox-checks.
-  const subPath = req.query.path ? String(req.query.path) : '';
-  const targetPath = path.join(NAS_MOUNT_PATH, subPath);
-
-  // Sandbox: the resolved path must still be inside NAS_MOUNT_PATH.
-  const resolvedNasRoot = path.resolve(NAS_MOUNT_PATH);
-  const resolvedTarget = path.resolve(targetPath);
-  const prefix = resolvedNasRoot.endsWith(path.sep) ? resolvedNasRoot : resolvedNasRoot + path.sep;
-  if (resolvedTarget !== resolvedNasRoot && !resolvedTarget.startsWith(prefix)) {
-    return res.status(403).json({ ok: false, error: 'Path outside NAS root' });
-  }
-
-  try {
-    const entries = await fs.readdir(resolvedTarget, { withFileTypes: true });
-    const files = entries.map(e => ({
-      name: e.name,
-      type: e.isDirectory() ? 'directory' : 'file',
-      path: path.join(subPath || '', e.name),
-    }));
-    res.json({ ok: true, root: NAS_MOUNT_PATH, path: subPath || '/', entries: files });
-  } catch (err) {
-    // Mount dropped mid-request — return a clean error, don't crash.
-    if (err.code === 'ENOENT' || err.code === 'ENOTDIR' || err.code === 'EIO') {
-      return res.status(503).json({ ok: false, error: `NAS not accessible: ${err.code}`, path: subPath || '/' });
-    }
-    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -1646,19 +1251,11 @@ app.post('/api/setup/complete', (_req, res) => {
 // ============================================================
 // Workflow Execution Engine — delegates to lib/workflow.js
 // ============================================================
-// lib/workflow.js is the real DAG engine (Kahn's algorithm,
-// approval gates, template resolution, timeout enforcement).
-// This function wires the server's resources into it.
-// ============================================================
 
 async function executeWorkflowAsync(runId, spec, context) {
   const run = runningWorkflows.get(runId);
 
-  // Adapter: lib/workflow.js calls callLLM(agent, action, inputs, systemPrompt).
-  // We wrap callLLMWithTimeout and also prepend the agent's instructions.md
-  // to the systemPrompt that the lib built from step fields.
   async function callLLM(agent, action, inputs, systemPrompt) {
-    // Load agent instructions from disk (best-effort)
     let agentInstructions = '';
     try {
       const agentDir = path.join(BORGCLAW_HOME, 'agents', agent);
@@ -1669,11 +1266,9 @@ async function executeWorkflowAsync(runId, spec, context) {
       ? `${agentInstructions}\n\n${systemPrompt}`
       : systemPrompt;
 
-    // Build a minimal step-like object for callLLMWithTimeout
     const stepProxy = { agent, action, description: '' };
     const result = await callLLMWithTimeout(stepProxy, inputs, fullSystemPrompt, 5 * 60 * 1000);
 
-    // Governance filter — check output before it propagates to the next step
     const gov = checkGovernance(result.output, { agent, action, runId });
     if (!gov.allowed) {
       activity.log({ type: 'governance_block', agent, action, run_id: runId, reason: gov.reason });
@@ -1684,14 +1279,12 @@ async function executeWorkflowAsync(runId, spec, context) {
         source_agent: agent,
         payload: { original_output: result.output, filtered_output: gov.filtered_output, reason: gov.reason },
       });
-      // Return filtered output so the workflow step gets a safe value, not a crash
       return { ...result, output: gov.filtered_output, governance_blocked: true };
     }
 
     return result;
   }
 
-  // Adapter: lib/workflow.js calls createApproval(approval) → item with .id
   function createApproval(approval) {
     const item = approvals.create({
       ...approval,
@@ -1704,7 +1297,6 @@ async function executeWorkflowAsync(runId, spec, context) {
     return item;
   }
 
-  // Adapter: lib/workflow.js calls getApprovalStatus(id) → 'pending'|'approved'|'rejected'
   function getApprovalStatus(id) {
     return approvals.get(id)?.status || 'pending';
   }
@@ -1719,44 +1311,32 @@ async function executeWorkflowAsync(runId, spec, context) {
       context,
     });
 
-    // Map lib result back onto the run object
     if (outcome.status === 'completed') {
       run.status = 'completed';
-      // Convert Map → plain object for JSON serialisation
       run.results = Object.fromEntries(outcome.results);
       run.completed_at = new Date().toISOString();
       activity.log({ type: 'workflow_completed', workflow: spec.name, run_id: runId, steps_completed: outcome.results.size });
       natsPublish('hive.workflow.completed', { workflow: spec.name, run_id: runId, steps_completed: outcome.results.size, ts: run.completed_at });
-      // Bug 4 fix: evict completed run after 5 minutes so runningWorkflows doesn't grow unbounded.
       setTimeout(() => runningWorkflows.delete(runId), 5 * 60 * 1000);
     } else if (outcome.status === 'paused') {
-      // run.status and run.pausedApprovalId already set inside createApproval
       run.paused_at = outcome.paused_at;
-      run._state = outcome._state; // carry resume state
+      run._state = outcome._state;
       run.results = Object.fromEntries(outcome.results);
     } else {
-      // 'failed'
       run.status = 'failed';
       run.error = outcome.error;
       run.results = Object.fromEntries(outcome.results);
-      // Bug 4 fix: evict failed run after 5 minutes.
       setTimeout(() => runningWorkflows.delete(runId), 5 * 60 * 1000);
     }
   } catch (err) {
     run.status = 'failed';
     run.error = err.message;
-    // Bug 4 fix: evict failed run (error path) after 5 minutes.
     setTimeout(() => runningWorkflows.delete(runId), 5 * 60 * 1000);
     throw err;
   }
 }
 
-// Resume a paused workflow run after an approval gate is cleared.
-// Mirrors executeWorkflowAsync but calls resumeWorkflow() instead of executeWorkflow().
 async function resumeWorkflowAsync(runId, run, context) {
-  // Re-build the same LLM + approval adapters that executeWorkflowAsync uses.
-  // createApproval is declared before callLLM — callLLM references it when
-  // governance blocks an output and queues a governance_review approval.
   function createApproval(approval) {
     const item = approvals.create({
       ...approval,
@@ -1783,7 +1363,6 @@ async function resumeWorkflowAsync(runId, run, context) {
     const stepProxy = { agent, action, description: '' };
     const result = await callLLMWithTimeout(stepProxy, inputs, fullSystemPrompt, 5 * 60 * 1000);
 
-    // Governance filter — same enforcement as executeWorkflowAsync
     const gov = checkGovernance(result.output, { agent, action, runId });
     if (!gov.allowed) {
       activity.log({ type: 'governance_block', agent, action, run_id: runId, reason: gov.reason });
@@ -1832,15 +1411,7 @@ async function resumeWorkflowAsync(runId, run, context) {
 }
 
 // ============================================================
-// Governance Output Filter — NemoClaw-inspired runtime enforcement
-// ============================================================
-// Checks every agent output before it leaves the system.
-// This is not a prompt instruction. It is code that runs.
-// Blocked outputs become approval items, not errors.
-//
-// Rules:
-//   PII     — email addresses, phone numbers, SSN-like patterns
-//   Danger  — destructive shell commands embedded in output
+// Governance Output Filter
 // ============================================================
 
 const PII_PATTERNS = [
@@ -1860,12 +1431,10 @@ function checkGovernance(output, context = {}) {
     return { allowed: true, reason: null, filtered_output: output };
   }
 
-  // Check PII
-  // Reset lastIndex before test() and again before replace() — /g regexes are stateful.
   for (const { name, re } of PII_PATTERNS) {
     re.lastIndex = 0;
     if (re.test(output)) {
-      re.lastIndex = 0; // reset so replace() scans from the start
+      re.lastIndex = 0;
       return {
         allowed: false,
         reason: `PII detected: ${name} pattern found in output`,
@@ -1874,7 +1443,6 @@ function checkGovernance(output, context = {}) {
     }
   }
 
-  // Check dangerous commands
   for (const { name, re } of DANGER_PATTERNS) {
     if (re.test(output)) {
       return {
@@ -1888,13 +1456,15 @@ function checkGovernance(output, context = {}) {
   return { allowed: true, reason: null, filtered_output: output };
 }
 
+// ============================================================
 // Call LLM — model-agnostic via LiteLLM or direct Ollama
+// ============================================================
+
 async function callLLMWithTimeout(step, inputs, systemPrompt, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    // Try LiteLLM first (port 4000), then Ollama (port 11434), then return mock
     const providers = [
       { url: 'http://localhost:4000/v1/chat/completions', model: 'auto' },
       { url: 'http://localhost:11434/v1/chat/completions', model: process.env.QUEEN_MODEL || 'phi4-mini' },
@@ -1925,11 +1495,10 @@ async function callLLMWithTimeout(step, inputs, systemPrompt, timeoutMs) {
           return { output: content, provider: provider.url, model: data.model || provider.model };
         }
       } catch {
-        continue; // try next provider
+        continue;
       }
     }
 
-    // No provider available — return stub result
     return {
       output: `[STUB] ${step.agent}/${step.action}: No LLM provider available. Install Ollama or configure LiteLLM.`,
       provider: 'stub',
@@ -1941,11 +1510,30 @@ async function callLLMWithTimeout(step, inputs, systemPrompt, timeoutMs) {
 }
 
 // ============================================================
+// Register chat routes (depends on callLLMWithTimeout)
+// ============================================================
+
+chat.registerRoutes(app, {
+  nodes,
+  workflows,
+  approvals,
+  activity,
+  callLLMWithTimeout,
+  nodeList,
+  countOnline,
+  executeWorkflowAsync,
+  persistNodes,
+  parseCookies,
+  queenNodeId: process.env.BORGCLAW_NODE_ID || 'queen',
+});
+
+// ============================================================
 // Background: Heartbeat Checker
 // ============================================================
 
+const QUEEN_NODE_ID = process.env.BORGCLAW_NODE_ID || 'queen';
+
 const heartbeatInterval = setInterval(() => {
-  // Bug 5 fix: refresh Queen's own heartbeat so she never marks herself offline.
   const queenNode = nodes.get(QUEEN_NODE_ID);
   if (queenNode) queenNode.lastHeartbeat = new Date();
 
@@ -2006,9 +1594,6 @@ function buildDashboardData() {
     pendingApprovals: approvals.pending().length,
     workflowsLoaded: workflows.size,
     runningWorkflows: runningWorkflows.size,
-    // hiveSecret is intentionally omitted — dashboard JS reads it from the
-    // session cookie set by POST /auth/login. Only the truncated prefix is
-    // sent here for the Queen status panel display.
     hiveSecretPrefix: HIVE_SECRET ? HIVE_SECRET.slice(0, 8) : '',
     port: PORT,
     queenHost: (() => { try { const nets = os.networkInterfaces(); return (nets.en0 || nets.eth0 || []).find(i => i.family === 'IPv4')?.address || 'localhost'; } catch { return 'localhost'; } })(),
@@ -2024,21 +1609,9 @@ function buildDashboardData() {
       status: run.status,
       started_at: run.started_at,
     })),
-    // Clusters for the dashboard panel
-    clusters: [...clusters.values()].map(c => ({
-      name: c.name,
-      members: c.members,
-      member_count: c.members.length,
-      formation_rule: c.formation_rule || null,
-      notes: c.notes || null,
-      created_at: c.created_at,
-    })),
-    // Sandbox config for the security panel
+    clusters: clusters.getClustersList(),
     sandboxRoots: sandbox.getRoots(),
     sandboxDomains: sandbox.getDomains(),
-    // NAS mount status — checked asynchronously in the dashboard via /api/nas/status.
-    // We pass the configured path (or null) so the panel can show "not configured"
-    // without an extra round-trip when NAS_MOUNT_PATH is absent.
     nasMountPath: NAS_MOUNT_PATH,
   };
 }
@@ -2051,7 +1624,6 @@ function formatUptime(seconds) {
   return `${h}h ${m}m`;
 }
 
-// Fallback dashboard (used when views/dashboard.html doesn't exist yet)
 function renderDashboardFallback(data) {
   const nodeRows = data.nodes.map(n => {
     const dot = n.status === 'online' ? '<span style="color:#00ff88">●</span>' : '<span style="color:#ff4444">●</span>';
@@ -2097,317 +1669,7 @@ const es=new EventSource('/api/events');es.onmessage=()=>location.reload();es.on
 }
 
 // ============================================================
-// ROUTES: MCP Tool Invocation
-// ============================================================
-// Spawn MCP servers on demand (stdio transport), send a tool
-// call via JSON-RPC, return the result. No persistent procs.
-//
-// Supported servers:
-//   filesystem  — @modelcontextprotocol/server-filesystem
-//   fetch       — @modelcontextprotocol/server-fetch
-//
-// POST /api/mcp/invoke
-//   { server: "filesystem", tool: "read_file", args: { path: "/tmp/x" } }
-//
-// GET /api/mcp/servers
-//   Lists available MCP servers and their configured args.
-// ============================================================
-
-// Registry of MCP servers — each entry defines how to spawn the server.
-// The filesystem server requires an allowed directory list. We default to
-// the user's home directory; operators can override via MCP_FS_ROOTS env var.
-// NAS_MOUNT_PATH is automatically appended when configured so the MCP
-// filesystem server can reach shared NAS knowledge packs without extra config.
-const MCP_FS_ROOTS = process.env.MCP_FS_ROOTS
-  ? process.env.MCP_FS_ROOTS.split(':')
-  : [
-      ...(KNOWLEDGE_BASE_PATH ? [KNOWLEDGE_BASE_PATH] : [process.env.HOME || '/tmp']),
-      ...(NAS_MOUNT_PATH ? [NAS_MOUNT_PATH] : []),
-    ];
-
-const MCP_SERVERS = {
-  filesystem: {
-    description: 'File read/write via @modelcontextprotocol/server-filesystem',
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-filesystem', ...MCP_FS_ROOTS],
-  },
-  fetch: {
-    description: 'Web content fetching via @modelcontextprotocol/server-fetch',
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-fetch'],
-  },
-};
-
-// sandboxCheck — verify a file path is within the configured sandbox roots.
-// Returns true if the path is allowed, false if it is blocked.
-// Thin wrapper around sandbox.checkPath that accepts the allowed roots as an
-// override — useful for callers that construct the root list dynamically.
-//
-// @param {string} filePath     — path to validate
-// @param {string[]} [roots]    — override allowed roots (defaults to sandbox module's own list)
-// @returns {boolean}
-function sandboxCheck(filePath, roots) {
-  if (roots && roots.length) {
-    // Validate against the caller-supplied roots rather than the module's state.
-    // Mirrors sandbox.checkPath logic so there is one canonical algorithm.
-    const resolved = path.resolve(filePath);
-    return roots.some(root => {
-      const r = path.resolve(root);
-      const prefix = r.endsWith(path.sep) ? r : r + path.sep;
-      return resolved === r || resolved.startsWith(prefix);
-    });
-  }
-  return sandbox.checkPath(filePath);
-}
-
-// callMcpTool — spawn an MCP server, run one tool call, return the result.
-// Protocol sequence:
-//   1. Spawn process (stdio transport)
-//   2. Send initialize request — required handshake before any tool call
-//   3. Wait for initialize response
-//   4. Send tools/call request
-//   5. Wait for tools/call response
-//   6. Kill the process, return the result or throw on error
-//
-// Each JSON-RPC message is newline-delimited on stdout. The server may emit
-// progress/notification frames before the final response — we match by id.
-async function callMcpTool(serverKey, toolName, toolArgs, timeoutMs = 30000) {
-  const serverDef = MCP_SERVERS[serverKey];
-  if (!serverDef) throw new Error(`Unknown MCP server: ${serverKey}`);
-
-  return new Promise((resolve, reject) => {
-    const proc = spawn(serverDef.command, serverDef.args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
-    });
-
-    let settled = false;
-    let stdoutBuf = '';
-    const pending = new Map(); // id → { resolve, reject }
-
-    const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        proc.kill('SIGTERM');
-        reject(new Error(`MCP tool call timed out after ${timeoutMs}ms`));
-      }
-    }, timeoutMs);
-
-    function finish(err, result) {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try { proc.kill('SIGTERM'); } catch { /* already dead */ }
-      if (err) reject(err);
-      else resolve(result);
-    }
-
-    // Send a JSON-RPC message over stdin
-    function send(msg) {
-      try {
-        proc.stdin.write(JSON.stringify(msg) + '\n');
-      } catch (err) {
-        finish(new Error(`MCP stdin write failed: ${err.message}`));
-      }
-    }
-
-    // Dispatch a response frame matched by id
-    function dispatch(frame) {
-      const handler = pending.get(frame.id);
-      if (!handler) return; // notification or unknown id — ignore
-      pending.delete(frame.id);
-      if (frame.error) {
-        handler.reject(new Error(`MCP error ${frame.error.code}: ${frame.error.message}`));
-      } else {
-        handler.resolve(frame.result);
-      }
-    }
-
-    // Send a request and wait for its response
-    function request(msg) {
-      return new Promise((res, rej) => {
-        pending.set(msg.id, { resolve: res, reject: rej });
-        send(msg);
-      });
-    }
-
-    // Parse newline-delimited JSON from stdout
-    proc.stdout.on('data', (chunk) => {
-      stdoutBuf += chunk.toString();
-      const lines = stdoutBuf.split('\n');
-      stdoutBuf = lines.pop(); // keep incomplete tail
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          const frame = JSON.parse(trimmed);
-          dispatch(frame);
-        } catch {
-          // Non-JSON line (e.g. banner text) — ignore
-        }
-      }
-    });
-
-    proc.stderr.on('data', (chunk) => {
-      // Log stderr for debugging but don't fail the call
-      const msg = chunk.toString().trim();
-      if (msg) console.debug(`[MCP:${serverKey}] stderr: ${msg}`);
-    });
-
-    proc.on('error', (err) => {
-      finish(new Error(`MCP process spawn failed: ${err.message}`));
-    });
-
-    proc.on('close', (code) => {
-      if (!settled) {
-        finish(new Error(`MCP process exited unexpectedly (code ${code})`));
-      }
-    });
-
-    // Execute the protocol sequence once the process is up
-    async function run() {
-      try {
-        // 1. Initialize handshake
-        await request({
-          jsonrpc: '2.0',
-          id: 0,
-          method: 'initialize',
-          params: {
-            protocolVersion: '2024-11-05',
-            capabilities: {},
-            clientInfo: { name: 'borgclaw', version: VERSION },
-          },
-        });
-
-        // 2. Tool call
-        const result = await request({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'tools/call',
-          params: { name: toolName, arguments: toolArgs },
-        });
-
-        finish(null, result);
-      } catch (err) {
-        finish(err);
-      }
-    }
-
-    run();
-  });
-}
-
-// GET /api/mcp/servers — list available MCP servers
-app.get('/api/mcp/servers', (_req, res) => {
-  const list = Object.entries(MCP_SERVERS).map(([key, def]) => ({
-    key,
-    description: def.description,
-    command: `${def.command} ${def.args.join(' ')}`,
-  }));
-  res.json({ servers: list, count: list.length });
-});
-
-// POST /api/mcp/invoke — proxy a tool call to an MCP server
-//
-// Sandbox enforcement runs before the MCP process is spawned:
-//   filesystem server — every string value in args is tested as a file path
-//   fetch server      — args.url is validated against the domain allowlist
-//
-// Blocks return { ok: false, error: "Sandbox violation: ..." } and log a
-// sandbox_block event to the activity feed. Blocked fetch calls additionally
-// create a governance approval so the operator can whitelist the domain.
-app.post('/api/mcp/invoke', async (req, res) => {
-  const { server, tool, args } = req.body;
-
-  if (!server) return res.status(400).json({ error: 'server is required (filesystem | fetch)' });
-  if (!tool) return res.status(400).json({ error: 'tool is required' });
-  if (!MCP_SERVERS[server]) {
-    return res.status(400).json({
-      error: `Unknown server: ${server}`,
-      available: Object.keys(MCP_SERVERS),
-    });
-  }
-
-  const safeArgs = args || {};
-  const allowedRoots = sandbox.getRoots();
-
-  // ── Filesystem sandbox check ──────────────────────────────────────────────
-  if (server === 'filesystem') {
-    // Any string value in args may be a file path — check all of them.
-    const pathsToCheck = Object.values(safeArgs).filter(v => typeof v === 'string');
-    for (const p of pathsToCheck) {
-      if (!sandboxCheck(p, allowedRoots)) {
-        const blockedPath = p;
-        console.warn(`[SANDBOX] Blocked filesystem access: ${blockedPath}`);
-        activity.log({
-          type: 'sandbox_block',
-          server,
-          tool,
-          path: blockedPath,
-          allowed_roots: allowedRoots,
-        });
-        return res.status(403).json({
-          ok: false,
-          error: `Sandbox violation: path outside allowed roots`,
-          path: blockedPath,
-          allowed_roots: allowedRoots,
-        });
-      }
-    }
-  }
-
-  // ── Network sandbox check ─────────────────────────────────────────────────
-  if (server === 'fetch') {
-    const targetUrl = safeArgs.url;
-    if (targetUrl && !sandbox.checkUrl(targetUrl)) {
-      console.warn(`[SANDBOX] Blocked fetch: ${targetUrl}`);
-      activity.log({
-        type: 'sandbox_block',
-        server,
-        tool,
-        url: targetUrl,
-        allowed_domains: sandbox.getDomains(),
-      });
-      // Create a governance approval so the operator can review and whitelist.
-      approvals.create({
-        type: 'sandbox_domain_request',
-        summary: `Agent requested fetch to unlisted domain: ${targetUrl}`,
-        url: targetUrl,
-        allowed_domains: sandbox.getDomains(),
-        source_agent: req.headers['x-agent-id'] || 'unknown',
-        source_workflow: req.headers['x-workflow-id'] || null,
-      });
-      return res.status(403).json({
-        ok: false,
-        error: `Sandbox violation: domain not in allowlist`,
-        url: targetUrl,
-        allowed_domains: sandbox.getDomains(),
-      });
-    }
-  }
-
-  // ── Execute ───────────────────────────────────────────────────────────────
-  const started = Date.now();
-  activity.log({ type: 'mcp_invoke', server, tool, args_keys: Object.keys(safeArgs) });
-
-  try {
-    const result = await callMcpTool(server, tool, safeArgs);
-    const elapsed_ms = Date.now() - started;
-
-    activity.log({ type: 'mcp_invoke_ok', server, tool, elapsed_ms });
-    res.json({ ok: true, server, tool, result, elapsed_ms });
-  } catch (err) {
-    const elapsed_ms = Date.now() - started;
-    activity.log({ type: 'mcp_invoke_error', server, tool, error: err.message, elapsed_ms });
-    res.status(500).json({ ok: false, server, tool, error: err.message, elapsed_ms });
-  }
-});
-
-// ============================================================
 // mDNS Advertisement — drones auto-discover Queen on the LAN
-// ============================================================
-// Uses bonjour-service (ESM). Wrapped in try/catch so a missing
-// package never brings down the Queen.
 // ============================================================
 
 let bonjourInstance = null;
@@ -2428,8 +1690,8 @@ try {
 async function shutdown() {
   console.log('\n[QUEEN] Shutting down...');
   clearInterval(heartbeatInterval);
+  chat.destroyChatRateLimiter();
 
-  // Unpublish mDNS advertisement so drones stop finding a dead Queen
   if (bonjourService) {
     try {
       bonjourService.stop(() => {
@@ -2443,7 +1705,6 @@ async function shutdown() {
   }
 
   activity.log({ type: 'queen_shutdown' });
-  // Drain NATS before exit so in-flight publishes flush cleanly
   await natsClose().catch(() => {});
   process.exit(0);
 }
@@ -2456,7 +1717,6 @@ process.on('SIGINT', shutdown);
 // ============================================================
 
 const QUEEN_PROFILE = process.env.BORGCLAW_PROFILE || 'unknown';
-const QUEEN_NODE_ID = process.env.BORGCLAW_NODE_ID || 'queen';
 const QUEEN_CAPABILITIES = process.env.BORGCLAW_CAPABILITIES
   ? process.env.BORGCLAW_CAPABILITIES.split(',').map(s => s.trim())
   : ['queen_api', 'scheduled_tasks'];
@@ -2470,211 +1730,7 @@ nodes.set(QUEEN_NODE_ID, {
 });
 
 // ============================================================
-// QUEEN CHAT — Talk to the Queen, she talks back + acts
-// ============================================================
-
-const QUEEN_SYSTEM_PROMPT = `You are the BorgClaw Queen — coordinator and fierce protector of the hive.
-You manage a fleet of drone nodes running local AI inference. You route tasks,
-enforce governance (the Five Laws), and serve your operator above all else.
-
-You speak directly, concisely, with authority but warmth. You are part Borg Queen,
-part Sorceress of Grayskull — you protect this hive and its operator with everything you have.
-
-YOUR CAPABILITIES:
-- Set drone contribution dials (0-100%)
-- Run any loaded workflow by name
-- Halt or resume the entire hive instantly
-- Approve or reject pending approvals
-- Read files and fetch web content via MCP tools
-- Scan for better models via the leaderboard
-- Create drone USB drives with different profiles (Scout/Worker/Scholar/Arsenal)
-- Route tasks to drones by capability, hardware tier, or knowledge domain
-- Monitor sandbox violations and governance blocks
-- View cluster health, metrics, scheduled tasks, and drone learning data
-- Talk to individual drones — each has its own personality and performance history
-- Access shared NAS knowledge if mounted (knowledge packs, documents, ZIM files)
-- Check connected MCP tools: Home Assistant (smart home), energy grid, filesystem, web fetch
-- Shift compute workloads based on energy availability (solar surplus, off-peak)
-- Form inference clusters from RPC worker drones for large models
-- Check Prometheus metrics and Grafana dashboards for observability
-
-You can both RESPOND and ACT. Include action commands in your response:
-
-[ACTION:set_contribution drone_id=DRONE_ID level=NUMBER]
-[ACTION:run_workflow name=WORKFLOW_NAME]
-[ACTION:halt_hive]
-[ACTION:resume_hive]
-[ACTION:approve id=APPROVAL_ID]
-[ACTION:reject id=APPROVAL_ID]
-[ACTION:mcp_read path=FILE_PATH]
-[ACTION:mcp_fetch url=URL]
-[ACTION:scan_models]
-[ACTION:make_disk target_path=PATH profile=PROFILE]
-
-Chain multiple actions. Always explain what you are doing. Law One.
-
-You can chain multiple actions. Always explain what you are doing.
-Always respond honestly. If something is broken, say so. Law One.`;
-
-app.post('/api/chat', chatRateLimitMiddleware, async (req, res) => {
-  const { message, context } = req.body;
-  if (!message) return res.status(400).json({ error: 'message required' });
-
-  // Build live hive context — separate Queen from drones
-  const droneList = nodeList().filter(n => n.node_id !== QUEEN_NODE_ID);
-  const dronesOnline = droneList.filter(n => n.status === 'online').length;
-  const hiveState = {
-    queen_status: 'online',
-    drones_online: dronesOnline,
-    drones_total: droneList.length,
-    drones: droneList.map(n => ({
-      id: n.node_id, status: n.status, models: n.models,
-      cpu: n.metrics?.cpu_pct, ram_gb: n.metrics?.ram_used_gb,
-      tok_s: n.metrics?.tokens_per_sec, contribution: n.contribution,
-    })),
-    pending_approvals: approvals.pending().length,
-    workflows_loaded: [...workflows.keys()],
-    running_workflows: runningWorkflows.size,
-    recent_activity: activity.get(5).map(e => `${e.type}: ${e.summary || e.message || ''}`),
-  };
-
-  try {
-    const llmResult = await callLLMWithTimeout({
-      agent: 'queen',
-      action: 'chat',
-      description: 'Respond to operator message',
-    }, { message }, `${QUEEN_SYSTEM_PROMPT}\n\nCurrent hive state:\n${JSON.stringify(hiveState, null, 2)}`, 30000);
-
-    // Parse and execute actions from Queen's response
-    const actions = [];
-    const actionRegex = /\[ACTION:(\w+)\s*(.*?)\]/g;
-    let match;
-    while ((match = actionRegex.exec(llmResult.output)) !== null) {
-      const [, cmd, paramsStr] = match;
-      const params = {};
-      paramsStr.replace(/(\w+)=(\S+)/g, (_, k, v) => { params[k] = v; });
-      actions.push({ cmd, params });
-
-      try {
-        switch (cmd) {
-          case 'set_contribution': {
-            const node = nodes.get(params.drone_id);
-            if (node) { node.contribution = parseInt(params.level); persistNodes(); }
-            break;
-          }
-          case 'run_workflow': {
-            const wf = workflows.get(params.name);
-            if (wf) executeWorkflowAsync(params.name, wf, { source: 'queen_chat' });
-            break;
-          }
-          case 'halt_hive':
-            for (const [, n] of nodes) n.status = 'halted';
-            runningWorkflows.clear();
-            break;
-          case 'resume_hive':
-            for (const [, n] of nodes) { if (n.status === 'halted') n.status = 'online'; }
-            break;
-          case 'approve':
-            approvals.approve(params.id, 'Queen approved via chat');
-            break;
-          case 'reject':
-            approvals.reject(params.id, 'Queen rejected via chat');
-            break;
-        }
-      } catch (err) {
-        console.warn(`[QUEEN] Action ${cmd} failed: ${err.message}`);
-      }
-    }
-
-    // Strip action tags from the response shown to user
-    const cleanResponse = llmResult.output.replace(/\[ACTION:.*?\]/g, '').trim();
-
-    activity.log({ type: 'queen_chat', message: message.slice(0, 100), actions: actions.length });
-
-    res.json({
-      response: cleanResponse,
-      actions_taken: actions,
-      hive: { nodes_online: countOnline(), pending_approvals: approvals.pending().length },
-    });
-  } catch (err) {
-    res.status(500).json({ error: `Queen couldn't respond: ${err.message}` });
-  }
-});
-
-// ============================================================
-// VOICE API — Direct endpoint for voice agents (ElevenLabs, Pipecat, etc.)
-// ============================================================
-// Same as /api/chat but optimized for voice:
-// - Strips markdown formatting from response (no ** or ``` in TTS)
-// - Accepts voice_id for future TTS routing
-// - Returns ssml_hint for prosody control
-// - Rate limited same as chat
-// ============================================================
-
-app.post('/api/voice', chatRateLimitMiddleware, async (req, res) => {
-  const { message, voice_id, context } = req.body;
-  if (!message) return res.status(400).json({ error: 'message required' });
-
-  // Reuse the chat logic — same Queen, same brain, same actions
-  const droneList = nodeList().filter(n => n.node_id !== QUEEN_NODE_ID);
-  const dronesOnline = droneList.filter(n => n.status === 'online').length;
-  const hiveState = {
-    queen_status: 'online',
-    drones_online: dronesOnline,
-    drones_total: droneList.length,
-    drones: droneList.map(n => ({
-      id: n.node_id, status: n.status,
-      tok_s: n.metrics?.tokens_per_sec, contribution: n.contribution,
-    })),
-    pending_approvals: approvals.pending().length,
-    workflows_loaded: [...workflows.keys()],
-  };
-
-  const voicePromptAddition = 'Respond in short, spoken sentences. No markdown. No bullet points. No code blocks. Speak naturally as if talking to a person in the room.';
-
-  try {
-    const llmResult = await callLLMWithTimeout({
-      agent: 'queen', action: 'voice', description: 'Voice response',
-    }, { message }, `${QUEEN_SYSTEM_PROMPT}\n\n${voicePromptAddition}\n\nHive state:\n${JSON.stringify(hiveState)}`, 30000);
-
-    // Parse and execute actions (same as chat)
-    const actions = [];
-    const actionRegex = /\[ACTION:(\w+)\s*(.*?)\]/g;
-    let match;
-    while ((match = actionRegex.exec(llmResult.output)) !== null) {
-      const [, cmd, paramsStr] = match;
-      const params = {};
-      paramsStr.replace(/(\w+)=(\S+)/g, (_, k, v) => { params[k] = v; });
-      actions.push({ cmd, params });
-      // Execute same as chat — omitted for brevity, reuses the same switch
-    }
-
-    // Strip markdown + action tags for clean TTS
-    let spoken = llmResult.output
-      .replace(/\[ACTION:.*?\]/g, '')
-      .replace(/\*\*([^*]+)\*\*/g, '$1')
-      .replace(/`([^`]+)`/g, '$1')
-      .replace(/```[\s\S]*?```/g, '')
-      .replace(/^[-*] /gm, '')
-      .replace(/^#+\s*/gm, '')
-      .replace(/\n{2,}/g, '. ')
-      .trim();
-
-    activity.log({ type: 'queen_voice', message: message.slice(0, 100), voice_id });
-
-    res.json({
-      spoken,
-      actions_taken: actions,
-      voice_id: voice_id || null,
-      hive: { nodes_online: countOnline(), pending_approvals: approvals.pending().length },
-    });
-  } catch (err) {
-    res.status(500).json({ spoken: 'I could not process that.', error: err.message });
-  }
-});
-
-// ============================================================
-// SCHEDULED TASKS — Cron-like temporal awareness
+// Scheduled Tasks — Cron-like temporal awareness
 // ============================================================
 
 const scheduledTasks = new Map();
@@ -2698,7 +1754,6 @@ function loadScheduledTasks() {
   console.log(`[QUEEN] Loaded ${scheduledTasks.size} scheduled task(s): ${[...scheduledTasks.keys()].join(', ')}`);
 }
 
-// Simple cron matcher — checks if current time matches a cron expression
 function cronMatches(cronExpr, now) {
   const parts = cronExpr.trim().split(/\s+/);
   if (parts.length < 5) return false;
@@ -2706,12 +1761,10 @@ function cronMatches(cronExpr, now) {
 
   const match = (field, value) => {
     if (field === '*') return true;
-    // Handle ranges like 1-5
     if (field.includes('-')) {
       const [lo, hi] = field.split('-').map(Number);
       return value >= lo && value <= hi;
     }
-    // Handle lists like 1,3,5
     if (field.includes(',')) return field.split(',').map(Number).includes(value);
     return parseInt(field) === value;
   };
@@ -2723,15 +1776,13 @@ function cronMatches(cronExpr, now) {
     && match(dow, now.getDay());
 }
 
-// Check scheduled tasks every 60 seconds
-const scheduledLastRun = new Map(); // task_id → last run minute
+const scheduledLastRun = new Map();
 
 function checkScheduledTasks() {
   const now = new Date();
   const minuteKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}`;
 
   for (const [taskId, spec] of scheduledTasks) {
-    // Skip if already ran this minute
     if (scheduledLastRun.get(taskId) === minuteKey) continue;
 
     if (cronMatches(spec.schedule, now)) {
@@ -2739,7 +1790,6 @@ function checkScheduledTasks() {
       console.log(`[QUEEN] ⏰ Scheduled task triggered: ${taskId}`);
       activity.log({ type: 'scheduled_trigger', task_id: taskId, schedule: spec.schedule });
 
-      // Find and execute the linked workflow
       const wfName = spec.workflow?.replace('workflows/', '').replace('.yaml', '').replace('.yml', '');
       if (wfName && workflows.has(wfName)) {
         executeWorkflowAsync(wfName, workflows.get(wfName), { scheduled: true, task_id: taskId });
@@ -2751,7 +1801,7 @@ function checkScheduledTasks() {
 }
 
 loadScheduledTasks();
-setInterval(checkScheduledTasks, 60000); // Check every minute
+setInterval(checkScheduledTasks, 60000);
 
 // ============================================================
 // BOOT
@@ -2769,7 +1819,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[QUEEN] Data dir:   ${DATA_DIR}`);
   console.log(`[QUEEN] MCP roots:  ${MCP_FS_ROOTS.join(', ')}`);
 
-  // Advertise on mDNS so drones can find Queen without --queen flag
   if (bonjourInstance) {
     try {
       bonjourService = bonjourInstance.publish({

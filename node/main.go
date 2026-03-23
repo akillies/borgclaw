@@ -1,8 +1,4 @@
-// BorgClaw Drone — Node Agent
-//
-// A single-binary agent that turns any machine into a BorgClaw hive node.
-// It detects hardware, connects to Ollama for local LLM inference, registers
-// with the Queen service, and accepts tasks from the hive.
+// BorgClaw Drone -- single-binary agent that turns any machine into a hive node.
 //
 // Usage:
 //
@@ -34,35 +30,30 @@ const banner = `
 `
 
 func main() {
-	// CLI flags
-	queenURL := flag.String("queen", "", "Queen service URL (e.g. http://192.168.1.100:9090)")
-	listen := flag.String("listen", ":9091", "Address to listen on for incoming tasks")
+	queenURL := flag.String("queen", "", "Queen service URL")
+	listen := flag.String("listen", ":9091", "Listen address")
 	ollamaURL := flag.String("ollama", "http://localhost:11434", "Ollama API URL")
-	contribution := flag.Int("contribution", 50, "Contribution dial 0-100 (percentage of resources for hive)")
-	nodeID := flag.String("id", "", "Node ID (defaults to hostname)")
-	configPath := flag.String("config", "", "Path to config file (drone.json)")
-	heartbeatSec := flag.Int("heartbeat", 30, "Heartbeat interval in seconds")
-	maxConcurrent := flag.Int("concurrent", 0, "Max concurrent tasks (0 = auto-detect)")
-	hiveSecret := flag.String("secret", "", "Hive secret for Queen authentication")
+	contribution := flag.Int("contribution", 50, "Contribution dial 0-100")
+	nodeID := flag.String("id", "", "Node ID (defaults to hostname hash)")
+	configPath := flag.String("config", "", "Config file path")
+	heartbeatSec := flag.Int("heartbeat", 30, "Heartbeat interval seconds")
+	maxConcurrent := flag.Int("concurrent", 0, "Max concurrent tasks (0=auto)")
+	hiveSecret := flag.String("secret", "", "Hive secret for auth")
 	printInfo := flag.Bool("info", false, "Print hardware info and exit")
-	noPull := flag.Bool("no-pull", false, "Disable automatic model pulling (for bandwidth-constrained environments)")
+	noPull := flag.Bool("no-pull", false, "Disable automatic model pulling")
 
-	// RPC worker mode flags
-	mode := flag.String("mode", "task", `Drone mode: "task" (default, Ollama-based) or "rpc-worker" (llama.cpp rpc-server for distributed inference)`)
-	rpcPort := flag.Int("rpc-port", 50052, "Port for rpc-server to listen on (rpc-worker mode only)")
-	rpcServerBin := flag.String("rpc-server", "", "Path to llama.cpp rpc-server binary (rpc-worker mode only; defaults to PATH lookup)")
+	mode := flag.String("mode", "task", `"task" (Ollama) or "rpc-worker" (llama.cpp rpc-server)`)
+	rpcPort := flag.Int("rpc-port", 50052, "rpc-server listen port (rpc-worker mode)")
+	rpcServerBin := flag.String("rpc-server", "", "Path to rpc-server binary (rpc-worker mode)")
 
 	flag.Parse()
-
 	fmt.Print(banner)
 
-	// Load config
 	cfg, err := LoadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("config error: %v", err)
 	}
 
-	// CLI flags override config file
 	if *queenURL != "" {
 		cfg.QueenURL = *queenURL
 	}
@@ -87,235 +78,163 @@ func main() {
 	if *hiveSecret != "" {
 		cfg.HiveSecret = *hiveSecret
 	}
-	// Also check HIVE_SECRET env var
 	if cfg.HiveSecret == "" {
 		if envSecret := os.Getenv("HIVE_SECRET"); envSecret != "" {
 			cfg.HiveSecret = envSecret
 		}
 	}
 
-	// Info mode — print hardware and exit
 	if *printInfo {
 		printHardwareInfo(cfg)
 		return
 	}
 
-	// Auto-discover Queen via mDNS if no URL was provided
 	if cfg.QueenURL == "" {
-		log.Println("[init] no --queen flag — scanning LAN for Queen via mDNS (up to 5s)...")
-		discovered := discoverQueenViaMDNS()
-		if discovered != "" {
+		log.Println("[init] no --queen flag -- scanning LAN via mDNS (5s)...")
+		if discovered := discoverQueenViaMDNS(); discovered != "" {
 			cfg.QueenURL = discovered
 		} else {
-			fmt.Fprintln(os.Stderr, "error: Queen not found via mDNS and no --queen flag provided")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "  Option 1 — specify Queen address directly:")
-			fmt.Fprintln(os.Stderr, "    ./drone --queen http://192.168.1.100:9090")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "  Option 2 — make sure the Queen is running on your LAN:")
-			fmt.Fprintln(os.Stderr, "    cd services/queen && npm start")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "  mDNS requires the Queen to have bonjour-service installed.")
-			fmt.Fprintln(os.Stderr, "  On the Queen machine: npm install")
+			fmt.Fprintln(os.Stderr, "error: Queen not found via mDNS and no --queen flag")
+			fmt.Fprintln(os.Stderr, "  ./drone --queen http://192.168.1.100:9090")
 			os.Exit(1)
 		}
 	}
 
-	log.Printf("[init] node_id=%s queen=%s advertise=%s mode=%s contribution=%d%%",
+	log.Printf("[init] node=%s queen=%s advertise=%s mode=%s contribution=%d%%",
 		cfg.NodeID, cfg.QueenURL, cfg.AdvertiseAddr, *mode, cfg.Contribution)
-	log.Printf("[init] hardware: %s/%s, %d cores, %d MB RAM, tier=%s",
+	log.Printf("[init] hw: %s/%s %d cores %dMB tier=%s",
 		cfg.Hardware.OS, cfg.Hardware.Arch, cfg.Hardware.CPUCores, cfg.Hardware.RAMTotal, cfg.Hardware.Tier)
 	if cfg.Hardware.GPUName != "" {
-		log.Printf("[init] gpu: %s (%d MB)", cfg.Hardware.GPUName, cfg.Hardware.GPUVRAM)
+		log.Printf("[init] gpu: %s (%dMB)", cfg.Hardware.GPUName, cfg.Hardware.GPUVRAM)
 	}
 
-	// Initialize shared components (used by both modes)
 	ollama := NewOllamaClient(cfg.OllamaURL)
 	throttle := NewThrottle(cfg.Contribution, cfg.Hardware.CPUCores)
 	metrics := NewMetricsCollector(60)
 
 	configDir := filepath.Join(os.Getenv("HOME"), ".config", "borgclaw")
 	learning := InitLearning(cfg.NodeID, configDir)
-	log.Printf("[init] learning store: %s", filepath.Join(configDir, "DRONE.md"))
+	log.Printf("[init] learning: %s", filepath.Join(configDir, "DRONE.md"))
 
 	worker := NewTaskWorker(cfg.NodeID, ollama, throttle, metrics, learning, 32)
 	heartbeat := NewHeartbeatReporter(cfg, metrics, ollama, throttle, worker)
 	heartbeat.SetLearning(learning)
 	server := NewServer(cfg, metrics, ollama, throttle, worker, learning)
 
-	// Setup graceful shutdown context before branching on mode
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	// ── Mode: rpc-worker ─────────────────────────────────────────────────────
-	// Skip Ollama entirely. Locate and launch llama.cpp rpc-server, then
-	// heartbeat Queen so it knows this drone offers raw compute for sharding.
 	if *mode == "rpc-worker" {
 		rpcW, err := NewRPCWorker(*rpcServerBin, *rpcPort)
 		if err != nil {
 			log.Fatalf("[rpc-worker] %v", err)
 		}
-
 		log.Printf("[rpc-worker] binary=%s port=%d", rpcW.BinaryPath(), rpcW.Port())
-
-		// Inform heartbeats about our mode so Queen can track us as a cluster candidate.
 		heartbeat.SetRPCWorkerMode(rpcW.Port())
 
-		// BBS terminal and /health still serve — useful for operator diagnostics.
-		go func() {
-			if err := server.Start(); err != nil {
-				log.Printf("[server] stopped: %v", err)
-			}
-		}()
-
-		// Heartbeat loop informs Queen we're alive with mode="rpc-worker".
+		go func() { _ = server.Start() }()
 		go heartbeat.Run(ctx)
-
-		// Block on the rpc-server subprocess. This goroutine exits when ctx is cancelled.
 		go func() {
 			if err := rpcW.Start(ctx); err != nil {
-				log.Printf("[rpc-worker] rpc-server exited with error: %v", err)
-				cancel() // propagate failure → graceful shutdown
+				log.Printf("[rpc-worker] exited: %v", err)
+				cancel()
 			}
 		}()
 
-		log.Printf("[init] rpc-worker online on port %d. Ctrl+C to detach from hive.", rpcW.Port())
-
+		log.Printf("[init] rpc-worker online on port %d", rpcW.Port())
 		sig := <-sigCh
-		log.Printf("[shutdown] received %v, gracefully detaching...", sig)
+		log.Printf("[shutdown] received %v", sig)
 		cancel()
-
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer shutdownCancel()
 		server.Shutdown(shutdownCtx)
-
-		log.Println("[shutdown] drone detached from hive.")
+		log.Println("[shutdown] detached")
 		return
 	}
 
-	// ── Mode: task (default) ─────────────────────────────────────────────────
-	// Original Ollama-based task worker path — unchanged.
-
-	// Check Ollama connectivity
 	if ollama.Healthy(context.Background()) {
 		models, _ := ollama.ListModels(context.Background())
-		log.Printf("[init] ollama: connected, %d models available", len(models))
+		log.Printf("[init] ollama: connected, %d models", len(models))
 		for _, m := range models {
-			log.Printf("[init]   - %s (%.0f MB)", m.Name, float64(m.Size)/(1024*1024))
+			log.Printf("[init]   %s (%.0fMB)", m.Name, float64(m.Size)/(1024*1024))
 		}
 	} else {
-		log.Println("[init] ollama: NOT REACHABLE — node will report degraded until Ollama starts")
+		log.Println("[init] ollama: not reachable -- node will report degraded")
 	}
 
-	// Start all components
 	go worker.Run(ctx)
 	go heartbeat.Run(ctx)
+	go func() { _ = server.Start() }()
 
-	go func() {
-		if err := server.Start(); err != nil {
-			log.Printf("[server] stopped: %v", err)
-		}
-	}()
-
-	// Background model updater — runs after the drone has joined the hive.
-	// Checks which models are optimal for this tier and pulls any that are
-	// missing, one at a time. Sends a heartbeat after each pull so Queen can
-	// rebuild its LiteLLM routing table immediately.
 	if !*noPull {
 		go startModelUpdater(ctx, cfg, ollama, heartbeat)
 	} else {
-		log.Println("[models] --no-pull set: skipping automatic model updates")
+		log.Println("[models] --no-pull: skipping model updates")
 	}
 
-	log.Println("[init] drone online. Ctrl+C to detach from hive.")
+	log.Println("[init] drone online. Ctrl+C to detach.")
 
-	// Wait for shutdown signal
 	sig := <-sigCh
-	log.Printf("[shutdown] received %v, gracefully detaching...", sig)
+	log.Printf("[shutdown] received %v", sig)
 	cancel()
-
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 	server.Shutdown(shutdownCtx)
-
-	log.Println("[shutdown] drone detached from hive.")
+	log.Println("[shutdown] detached")
 }
 
-// startModelUpdater runs after the drone has joined the hive. It asks
-// EnsureOptimalModels (modelselect.go) which models are ideal for this
-// hardware tier, then pulls any that are missing — one at a time, sequentially,
-// so we don't saturate the network or overwhelm Ollama. After each successful
-// pull it triggers an immediate heartbeat so Queen can update its routing table.
 func startModelUpdater(ctx context.Context, cfg Config, ollama *OllamaClient, hb *HeartbeatReporter) {
-	// Small delay so the first heartbeat (hive join) goes out first.
 	select {
 	case <-ctx.Done():
 		return
 	case <-time.After(5 * time.Second):
 	}
 
-	// Ask modelselect.go what we should have.
 	toPull := EnsureOptimalModels(ollama, cfg.Hardware)
 	if len(toPull) == 0 {
-		log.Printf("[models] all optimal models already present for tier=%s", cfg.Hardware.Tier)
+		log.Printf("[models] all optimal models present for tier=%s", cfg.Hardware.Tier)
 		return
 	}
 
-	log.Printf("[models] %d model(s) to pull for tier=%s: %v", len(toPull), cfg.Hardware.Tier, toPull)
-
+	log.Printf("[models] %d to pull for tier=%s: %v", len(toPull), cfg.Hardware.Tier, toPull)
 	for _, model := range toPull {
 		select {
 		case <-ctx.Done():
-			log.Println("[models] context cancelled — stopping model pulls")
 			return
 		default:
 		}
-
-		log.Printf("[models] pulling %s ...", model)
+		log.Printf("[models] pulling %s...", model)
 		if err := ollama.Pull(ctx, model); err != nil {
-			// Non-fatal: log and continue to next model.
 			log.Printf("[models] pull %s failed: %v", model, err)
 			continue
 		}
-
-		log.Printf("[models] pull complete: %s", model)
-
-		// Inform Queen immediately — don't wait for the next scheduled heartbeat.
+		log.Printf("[models] pulled %s", model)
 		hb.TriggerNow(ctx)
 	}
-
-	log.Println("[models] model update pass complete")
+	log.Println("[models] update pass complete")
 }
 
 func printHardwareInfo(cfg Config) {
 	hw := cfg.Hardware
-	fmt.Printf("Node ID:      %s\n", cfg.NodeID)
-	fmt.Printf("Advertise:    %s\n", cfg.AdvertiseAddr)
-	fmt.Printf("OS/Arch:      %s/%s\n", hw.OS, hw.Arch)
-	fmt.Printf("Go version:   %s\n", runtime.Version())
-	fmt.Printf("CPU:          %s\n", hw.CPUModel)
-	fmt.Printf("CPU Cores:    %d\n", hw.CPUCores)
-	fmt.Printf("RAM:          %d MB\n", hw.RAMTotal)
+	fmt.Printf("Node ID:      %s\nAdvertise:    %s\nOS/Arch:      %s/%s\nGo:           %s\n",
+		cfg.NodeID, cfg.AdvertiseAddr, hw.OS, hw.Arch, runtime.Version())
+	fmt.Printf("CPU:          %s (%d cores)\nRAM:          %d MB\n", hw.CPUModel, hw.CPUCores, hw.RAMTotal)
 	if hw.GPUName != "" {
-		fmt.Printf("GPU:         %s\n", hw.GPUName)
-		fmt.Printf("GPU VRAM:    %d MB\n", hw.GPUVRAM)
+		fmt.Printf("GPU:          %s (%d MB)\n", hw.GPUName, hw.GPUVRAM)
 	}
-	fmt.Printf("Tier:        %s\n", hw.Tier)
-	fmt.Printf("Contribution: %d%%\n", cfg.Contribution)
+	fmt.Printf("Tier:         %s\nContribution: %d%%\n", hw.Tier, cfg.Contribution)
 
-	// Check Ollama
 	ollama := NewOllamaClient(cfg.OllamaURL)
-	ctx := context.Background()
-	if ollama.Healthy(ctx) {
-		models, _ := ollama.ListModels(ctx)
-		fmt.Printf("Ollama:      connected (%d models)\n", len(models))
+	if ollama.Healthy(context.Background()) {
+		models, _ := ollama.ListModels(context.Background())
+		fmt.Printf("Ollama:       connected (%d models)\n", len(models))
 		for _, m := range models {
 			fmt.Printf("  - %s (%.0f MB)\n", m.Name, float64(m.Size)/(1024*1024))
 		}
 	} else {
-		fmt.Println("Ollama:      not reachable")
+		fmt.Println("Ollama:       not reachable")
 	}
 }

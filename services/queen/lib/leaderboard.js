@@ -9,10 +9,14 @@
 //
 // Used by: autoresearch workflow (scan_models step)
 //          GET /api/models/available route
+//          GET /api/models/search route
 //
 // This runs on a cron. It NEVER throws. Network failures →
 // warn + return empty array. The Queen keeps running.
 // ============================================================
+
+import fs from 'fs/promises';
+import path from 'path';
 
 const OLLAMA_LIBRARY_URL = 'https://ollama.com/library';
 const OLLAMA_SEARCH_URL  = 'https://ollama.com/search';
@@ -297,4 +301,50 @@ export async function scanLeaderboard(currentModels, tiers) {
 
   console.log(`[LEADERBOARD] Scan complete: ${library.length} library models → ${candidates.length} candidates`);
   return candidates;
+}
+
+// --- Routes ---
+
+export function registerRoutes(app, { activity, configDir }) {
+  // GET /api/models/available — scan for upgrade candidates from the Ollama library
+  //   Optional ?tiers= query param limits which tiers to evaluate.
+  app.get('/api/models/available', async (req, res) => {
+    let currentModels = {};
+    try {
+      const raw = await fs.readFile(path.join(configDir, 'models.json'), 'utf-8');
+      currentModels = JSON.parse(raw);
+    } catch (err) {
+      console.warn(`[QUEEN] /api/models/available: could not read models.json: ${err.message}`);
+      // Proceed with empty config — leaderboard will still run, just can't de-dupe
+    }
+
+    const tiersParam = req.query.tiers;
+    const tiers = tiersParam
+      ? tiersParam.split(',').map(t => t.trim()).filter(Boolean)
+      : null;
+
+    activity.log({ type: 'leaderboard_scan_started', tiers: tiers || 'all' });
+
+    const candidates = await scanLeaderboard(currentModels, tiers);
+
+    activity.log({ type: 'leaderboard_scan_complete', candidates_found: candidates.length });
+
+    res.json({
+      scanned_at: new Date().toISOString(),
+      tiers_evaluated: tiers || Object.keys(currentModels.drone_tiers || {}),
+      candidates_found: candidates.length,
+      candidates,
+    });
+  });
+
+  // GET /api/models/search — search the Ollama library by keyword
+  app.get('/api/models/search', async (req, res) => {
+    const q = req.query.q || '';
+    if (!q.trim()) {
+      return res.status(400).json({ error: 'q parameter required (e.g. ?q=vision)' });
+    }
+
+    const results = await checkOllamaLibrary(q);
+    res.json({ query: q, results });
+  });
 }

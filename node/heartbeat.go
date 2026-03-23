@@ -11,27 +11,23 @@ import (
 	"time"
 )
 
-// HeartbeatPayload is what the node sends to Queen every interval.
-// Field names must match what Queen's /api/nodes/:nodeId/heartbeat expects.
 type HeartbeatPayload struct {
 	NodeID           string          `json:"node_id"`
 	Addr             string          `json:"addr"`
-	SentAt           time.Time       `json:"sent_at"` // For Queen RTT calculation
-	Status           string          `json:"status"`  // "online", "busy", "draining"
+	SentAt           time.Time       `json:"sent_at"`
+	Status           string          `json:"status"`
 	Hardware         HardwareProfile `json:"hardware"`
 	Config           map[string]any  `json:"config,omitempty"`
-	Metrics          QueenMetrics    `json:"metrics"` // Field names match Queen's expected format
+	Metrics          QueenMetrics    `json:"metrics"`
 	Contribution     int             `json:"contribution"`
 	Models           []string        `json:"models"`
 	Capacity         TaskCapacity    `json:"capacity"`
-	KnowledgeDomains []string        `json:"knowledge_domains"` // ZIM pack domain names available on this drone
+	KnowledgeDomains []string        `json:"knowledge_domains"`
 
-	// RPC worker fields — only populated when Mode == "rpc-worker"
-	Mode    string `json:"mode,omitempty"`     // "task" (default) or "rpc-worker"
-	RPCPort int    `json:"rpc_port,omitempty"` // port rpc-server is listening on
+	Mode    string `json:"mode,omitempty"`
+	RPCPort int    `json:"rpc_port,omitempty"`
 }
 
-// QueenMetrics uses field names that match Queen's server.js heartbeat handler.
 type QueenMetrics struct {
 	TokensPerSec   float64 `json:"tokens_per_sec"`
 	CPUPct         float64 `json:"cpu_pct"`
@@ -48,14 +44,12 @@ type QueenMetrics struct {
 	GPUTempC       float64 `json:"gpu_temp_c,omitempty"`
 }
 
-// TaskCapacity reports how many tasks the node can handle.
 type TaskCapacity struct {
 	MaxSlots       int `json:"max_slots"`
 	AvailableSlots int `json:"available_slots"`
 	QueueDepth     int `json:"queue_depth"`
 }
 
-// HeartbeatReporter sends periodic heartbeats to Queen.
 type HeartbeatReporter struct {
 	queenURL      string
 	nodeID        string
@@ -69,73 +63,51 @@ type HeartbeatReporter struct {
 	hardware     HardwareProfile
 	worker       *TaskWorker
 	learning     *LearningStore
-	knowledgeDir string // path to scan for .zim files (local)
-	nasPath      string // optional NAS mount to also scan for .zim files
+	knowledgeDir string
+	nasPath      string
 
-	// RPC worker fields — zero values mean "task" mode (normal operation)
-	mode    string // "task" or "rpc-worker"
-	rpcPort int    // non-zero only in rpc-worker mode
+	mode    string
+	rpcPort int
 
 	httpClient *http.Client
 }
 
-// NewHeartbeatReporter creates a reporter targeting the given Queen URL.
 func NewHeartbeatReporter(cfg Config, metrics *MetricsCollector, ollama *OllamaClient, throttle *Throttle, worker *TaskWorker) *HeartbeatReporter {
 	return &HeartbeatReporter{
-		queenURL:      cfg.QueenURL,
-		nodeID:        cfg.NodeID,
-		advertiseAddr: cfg.AdvertiseAddr,
-		hiveSecret:    cfg.HiveSecret,
-		interval:      time.Duration(cfg.HeartbeatSec) * time.Second,
-		metrics:       metrics,
-		ollama:        ollama,
-		throttle:      throttle,
-		hardware:      cfg.Hardware,
-		worker:        worker,
-		knowledgeDir:  cfg.KnowledgeDir,
-		nasPath:       cfg.NASPath,
-		httpClient:    &http.Client{Timeout: 10 * time.Second},
+		queenURL: cfg.QueenURL, nodeID: cfg.NodeID, advertiseAddr: cfg.AdvertiseAddr,
+		hiveSecret: cfg.HiveSecret, interval: time.Duration(cfg.HeartbeatSec) * time.Second,
+		metrics: metrics, ollama: ollama, throttle: throttle,
+		hardware: cfg.Hardware, worker: worker,
+		knowledgeDir: cfg.KnowledgeDir, nasPath: cfg.NASPath,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
-// SetRPCWorkerMode marks this reporter as representing an rpc-worker drone.
-// The mode and port are included in every subsequent heartbeat so Queen can
-// track which drones are available for distributed inference clustering.
 func (hr *HeartbeatReporter) SetRPCWorkerMode(port int) {
 	hr.mode = "rpc-worker"
 	hr.rpcPort = port
 }
 
-// SetLearning attaches the learning store for periodic updates.
-func (hr *HeartbeatReporter) SetLearning(ls *LearningStore) {
-	hr.learning = ls
-}
+func (hr *HeartbeatReporter) SetLearning(ls *LearningStore) { hr.learning = ls }
 
-// TriggerNow sends a single heartbeat immediately, outside the normal interval.
-// Used by the model updater to inform Queen about a newly pulled model without
-// waiting for the next scheduled heartbeat.
 func (hr *HeartbeatReporter) TriggerNow(ctx context.Context) {
 	if err := hr.send(ctx); err != nil {
 		log.Printf("[heartbeat] immediate trigger failed: %v", err)
 	}
 }
 
-// Run starts the heartbeat loop. Blocks until context is cancelled.
-// Uses exponential backoff on failures, resets on success.
 func (hr *HeartbeatReporter) Run(ctx context.Context) {
 	var failures int
 	const maxBackoff = 5 * time.Minute
 
 	for {
-		err := hr.send(ctx)
-		if err != nil {
+		if err := hr.send(ctx); err != nil {
 			failures++
 			backoff := time.Duration(math.Min(
 				float64(hr.interval)*math.Pow(1.5, float64(failures)),
 				float64(maxBackoff),
 			))
-			log.Printf("[heartbeat] queen unreachable (attempt %d): %v — retrying in %v", failures, err, backoff)
-
+			log.Printf("[heartbeat] queen unreachable (attempt %d): %v -- retrying in %v", failures, err, backoff)
 			select {
 			case <-ctx.Done():
 				return
@@ -144,9 +116,8 @@ func (hr *HeartbeatReporter) Run(ctx context.Context) {
 			}
 		}
 
-		// Success — reset backoff
 		if failures > 0 {
-			log.Printf("[heartbeat] queen connection restored after %d failures", failures)
+			log.Printf("[heartbeat] queen restored after %d failures", failures)
 			failures = 0
 		}
 
@@ -158,35 +129,25 @@ func (hr *HeartbeatReporter) Run(ctx context.Context) {
 	}
 }
 
-// send transmits one heartbeat to Queen.
 func (hr *HeartbeatReporter) send(ctx context.Context) error {
 	ollamaUp := hr.ollama.Healthy(ctx)
-
-	// Collect fresh metrics
 	m := hr.metrics.Collect(ollamaUp)
 
-	// Update learning store with latest hardware and metrics snapshot
 	if hr.learning != nil {
 		hr.learning.UpdatePeriodic(hr.hardware, m)
 	}
 
-	// Gather available models
 	var modelNames []string
 	if ollamaUp {
-		models, err := hr.ollama.ListModels(ctx)
-		if err == nil {
+		if models, err := hr.ollama.ListModels(ctx); err == nil {
 			for _, model := range models {
 				modelNames = append(modelNames, model.Name)
 			}
 		}
 	}
 
-	// Scan knowledge packs — lightweight directory read, safe to do every heartbeat.
-	// ScanKnowledgeDomainsAll includes the NAS path when configured; if the mount
-	// is unavailable it degrades silently to local-only.
 	knowledgeDomains := ScanKnowledgeDomainsAll(hr.knowledgeDir, hr.nasPath)
 
-	// Determine status
 	status := "online"
 	if hr.throttle.Level() == 0 {
 		status = "draining"
@@ -194,41 +155,25 @@ func (hr *HeartbeatReporter) send(ctx context.Context) error {
 		status = "busy"
 	}
 
-	// Convert internal metrics to Queen's expected field format
-	_, _, avgTok := hr.ollama.Stats()
-	requests, _, _ := hr.ollama.Stats()
-	queenMetrics := QueenMetrics{
-		TokensPerSec:   avgTok,
-		CPUPct:         m.CPUPercent,
-		RAMUsedGB:      float64(m.RAMUsedMB) / 1024.0,
-		RAMTotalGB:     float64(hr.hardware.RAMTotal) / 1024.0,
-		GPUUtilPct:     m.GPUPercent,
-		GPUVRAMTotalMB: hr.hardware.GPUVRAM,
-		NetRxMbps:      m.NetRecvMB,
-		NetTxMbps:      m.NetSentMB,
-		ActiveModel:    m.ActiveModel,
-		RequestsServed: requests,
-		CPUTempC:       0, // TODO: thermal monitoring
-		GPUTempC:       m.GPUTempC,
-	}
-
+	requests, _, avgTok := hr.ollama.Stats()
 	payload := HeartbeatPayload{
-		NodeID:           hr.nodeID,
-		Addr:             hr.advertiseAddr,
-		SentAt:           time.Now(),
-		Status:           status,
-		Hardware:         hr.hardware,
-		Metrics:          queenMetrics,
-		Contribution:     hr.throttle.Level(),
-		Models:           modelNames,
+		NodeID: hr.nodeID, Addr: hr.advertiseAddr, SentAt: time.Now(),
+		Status: status, Hardware: hr.hardware,
+		Metrics: QueenMetrics{
+			TokensPerSec: avgTok, CPUPct: m.CPUPercent,
+			RAMUsedGB: float64(m.RAMUsedMB) / 1024.0, RAMTotalGB: float64(hr.hardware.RAMTotal) / 1024.0,
+			GPUUtilPct: m.GPUPercent, GPUVRAMTotalMB: hr.hardware.GPUVRAM,
+			NetRxMbps: m.NetRecvMB, NetTxMbps: m.NetSentMB,
+			ActiveModel: m.ActiveModel, RequestsServed: requests,
+			GPUTempC: m.GPUTempC,
+		},
+		Contribution: hr.throttle.Level(), Models: modelNames,
 		KnowledgeDomains: knowledgeDomains,
 		Capacity: TaskCapacity{
-			MaxSlots:       cap(hr.throttle.semaphore),
-			AvailableSlots: hr.throttle.Available(),
-			QueueDepth:     hr.worker.QueueDepth(),
+			MaxSlots: cap(hr.throttle.semaphore), AvailableSlots: hr.throttle.Available(),
+			QueueDepth: hr.worker.QueueDepth(),
 		},
-		Mode:    hr.mode,
-		RPCPort: hr.rpcPort,
+		Mode: hr.mode, RPCPort: hr.rpcPort,
 	}
 
 	body, err := json.Marshal(payload)
@@ -254,6 +199,5 @@ func (hr *HeartbeatReporter) send(ctx context.Context) error {
 	if resp.StatusCode != 200 && resp.StatusCode != 204 {
 		return fmt.Errorf("queen returned %d", resp.StatusCode)
 	}
-
 	return nil
 }
