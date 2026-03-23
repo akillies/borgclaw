@@ -11,7 +11,9 @@
           Resistance is optional. Adaptation is inevitable.
 ```
 
-> Turn any computer into a drone in your personal AI cluster. Plug in a USB drive, run one script, it joins the hive. A Queen orchestrator routes tasks across all drones via LiteLLM. Your files, your models, your infrastructure.
+> Assimilate your hardware. Reclaim your intelligence. Adaptation is inevitable.
+
+Plug in a USB drive, run one script, any device joins the hive. A Queen orchestrator routes tasks across all drones. Ghost workers control browsers on old laptops. Drones learn and evolve. Your machines. Your models. Your rules.
 
 ## Status: Alpha — First Drone Online
 

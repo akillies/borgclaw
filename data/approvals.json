@@ -14,5 +14,24 @@
       "subject": "Quick follow-up",
       "body": "Hi Kate..."
     }
+  },
+  {
+    "id": "appr-1774240336577-l9mc",
+    "status": "approved",
+    "created_at": "2026-03-23T04:32:16.577Z",
+    "approved_at": "2026-03-23T04:34:12.250Z",
+    "rejected_at": null,
+    "executed_at": null,
+    "type": "workflow_step_approval",
+    "summary": "Approve step 'propose' in workflow 'autoresearch'",
+    "source_workflow": "autoresearch/run-1774240312034-k7m1",
+    "source_agent": "comms-drafter",
+    "step_id": "propose",
+    "action": "draft_upgrade_proposal",
+    "description": "Draft a clear upgrade proposal for the operator. Sent to approval queue — nothing is changed until approved.",
+    "outputs": [
+      "proposal_draft",
+      "draft_id"
+    ]
   }
 ]
