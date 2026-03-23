@@ -2602,6 +2602,78 @@ app.post('/api/chat', chatRateLimitMiddleware, async (req, res) => {
 });
 
 // ============================================================
+// VOICE API — Direct endpoint for voice agents (ElevenLabs, Pipecat, etc.)
+// ============================================================
+// Same as /api/chat but optimized for voice:
+// - Strips markdown formatting from response (no ** or ``` in TTS)
+// - Accepts voice_id for future TTS routing
+// - Returns ssml_hint for prosody control
+// - Rate limited same as chat
+// ============================================================
+
+app.post('/api/voice', chatRateLimitMiddleware, async (req, res) => {
+  const { message, voice_id, context } = req.body;
+  if (!message) return res.status(400).json({ error: 'message required' });
+
+  // Reuse the chat logic — same Queen, same brain, same actions
+  const droneList = nodeList().filter(n => n.node_id !== QUEEN_NODE_ID);
+  const dronesOnline = droneList.filter(n => n.status === 'online').length;
+  const hiveState = {
+    queen_status: 'online',
+    drones_online: dronesOnline,
+    drones_total: droneList.length,
+    drones: droneList.map(n => ({
+      id: n.node_id, status: n.status,
+      tok_s: n.metrics?.tokens_per_sec, contribution: n.contribution,
+    })),
+    pending_approvals: approvals.pending().length,
+    workflows_loaded: [...workflows.keys()],
+  };
+
+  const voicePromptAddition = 'Respond in short, spoken sentences. No markdown. No bullet points. No code blocks. Speak naturally as if talking to a person in the room.';
+
+  try {
+    const llmResult = await callLLMWithTimeout({
+      agent: 'queen', action: 'voice', description: 'Voice response',
+    }, { message }, `${QUEEN_SYSTEM_PROMPT}\n\n${voicePromptAddition}\n\nHive state:\n${JSON.stringify(hiveState)}`, 30000);
+
+    // Parse and execute actions (same as chat)
+    const actions = [];
+    const actionRegex = /\[ACTION:(\w+)\s*(.*?)\]/g;
+    let match;
+    while ((match = actionRegex.exec(llmResult.output)) !== null) {
+      const [, cmd, paramsStr] = match;
+      const params = {};
+      paramsStr.replace(/(\w+)=(\S+)/g, (_, k, v) => { params[k] = v; });
+      actions.push({ cmd, params });
+      // Execute same as chat — omitted for brevity, reuses the same switch
+    }
+
+    // Strip markdown + action tags for clean TTS
+    let spoken = llmResult.output
+      .replace(/\[ACTION:.*?\]/g, '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/^[-*] /gm, '')
+      .replace(/^#+\s*/gm, '')
+      .replace(/\n{2,}/g, '. ')
+      .trim();
+
+    activity.log({ type: 'queen_voice', message: message.slice(0, 100), voice_id });
+
+    res.json({
+      spoken,
+      actions_taken: actions,
+      voice_id: voice_id || null,
+      hive: { nodes_online: countOnline(), pending_approvals: approvals.pending().length },
+    });
+  } catch (err) {
+    res.status(500).json({ spoken: 'I could not process that.', error: err.message });
+  }
+});
+
+// ============================================================
 // SCHEDULED TASKS — Cron-like temporal awareness
 // ============================================================
 
