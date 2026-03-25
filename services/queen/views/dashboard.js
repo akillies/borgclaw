@@ -64,8 +64,10 @@ export default function renderDashboard(data) {
   }
 
   // ── Template helpers ──────────────────────────────────
+  const sectionId = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   function section(title, badge, content) {
-    return `<div class="section"><div class="sh"><span class="st">${title}</span><span class="sb">${badge}</span></div><div class="sbody">${content}</div></div>`;
+    const sid = sectionId(title);
+    return `<div class="section" data-section="${sid}"><div class="sh" data-toggle="${sid}"><span class="sh-ind">[−]</span><span class="st">${title}</span><span class="sb">${badge}</span></div><div class="sbody">${content}</div></div>`;
   }
   function table(headers, rows, emptyMsg) {
     const ths = headers.map(h => `<th>${h}</th>`).join('');
@@ -107,7 +109,13 @@ export default function renderDashboard(data) {
     const domainTags = Array.isArray(n.knowledge_domains) && n.knowledge_domains.length > 0
       ? n.knowledge_domains.map(d => `<span class="cap-tag cap-green">${escHtml(d)}</span>`).join(' ')
       : '<span class="dim">—</span>';
-    return `<tr class="data-row"><td>${statusDot(n.status)} <span class="node-id">${escHtml(n.node_id || 'unknown')}</span>${n.hostname ? `<br><span class="dim sub">${escHtml(n.hostname)}</span>` : ''}</td><td>${escHtml(n.role || '—')}</td><td class="dim">${escHtml(n.profile || '—')}</td><td>${statusDot(n.status)} ${escHtml(n.status)}</td><td class="dim sub">${n.ip ? escHtml(n.ip) : '—'}${n.connection_speed ? `<br><span class="c-cyan sub">${escHtml(n.connection_speed)}</span>` : ''}</td><td class="dim">${escHtml(n.age || n.last_heartbeat || 'never')}</td><td class="caps">${Array.isArray(n.capabilities) ? n.capabilities.map(c => `<span class="cap-tag">${escHtml(c)}</span>`).join(' ') : '—'}</td><td class="caps">${domainTags}</td></tr>`;
+    const hist = (n.metrics && n.metrics._history) || [];
+    const cpuHist = hist.slice(-20).map(h => h.cpu_pct || 0);
+    const cpuSpark = cpuHist.length >= 2 ? `<span class="spark">${sparkline(cpuHist, 20)}</span>` : '<span class="spark empty">────</span>';
+    const tokHist = hist.slice(-20).map(h => h.tokens_per_sec || 0);
+    const tokSpark = tokHist.length >= 2 ? `<span class="spark">${sparkline(tokHist, 20)}</span>` : '<span class="spark empty">────</span>';
+    const nid = escHtml(n.node_id || 'unknown');
+    return `<tr class="data-row" id="node-${nid}"><td>${statusDot(n.status)} <span class="node-id">${nid}</span>${n.hostname ? `<br><span class="dim sub">${escHtml(n.hostname)}</span>` : ''}</td><td>${escHtml(n.role || '—')}</td><td class="dim">${escHtml(n.profile || '—')}</td><td class="node-status">${statusDot(n.status)} ${escHtml(n.status)}</td><td class="dim sub">${n.ip ? escHtml(n.ip) : '—'}${n.connection_speed ? `<br><span class="c-cyan sub">${escHtml(n.connection_speed)}</span>` : ''}</td><td class="dim node-hb">${escHtml(n.age || n.last_heartbeat || 'never')}</td><td class="node-sparks">${cpuSpark}<br>${tokSpark}</td><td class="caps">${Array.isArray(n.capabilities) ? n.capabilities.map(c => `<span class="cap-tag">${escHtml(c)}</span>`).join(' ') : '—'}</td><td class="caps">${domainTags}</td></tr>`;
   });
 
   // ── Service tiles ──────────────────────────────────────
@@ -229,7 +237,7 @@ export default function renderDashboard(data) {
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{--green:#00FF88;--cyan:#00CCFF;--red:#FF4444;--amber:#EAAB00;--void:#0A0A0A;--panel:#111;--border:#2A2A2A;--dimmer:#1A1A1A;--muted:#555;--grey:#888;--white:#CCC;--font:'JetBrains Mono','IBM Plex Mono','Fira Code','Cascadia Code','Courier New',monospace}
-html,body{background:var(--void);color:var(--white);font-family:var(--font);font-size:13px;line-height:1.5;min-height:100vh;overflow-x:hidden}
+html,body{background:var(--void);color:var(--white);font-family:var(--font);font-size:13px;line-height:1.5;min-height:100vh;overflow-x:hidden;padding-bottom:2.5rem}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.055;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='52'%3E%3Cg stroke='%2300FF88' stroke-width='0.6' fill='none'%3E%3Cpolygon points='30,2 58,50 2,50'/%3E%3Cpolygon points='0,2 28,50 -28,50'/%3E%3Cpolygon points='60,2 88,50 32,50'/%3E%3Cpolygon points='30,52 58,4 2,4'/%3E%3C/g%3E%3C/svg%3E");background-repeat:repeat}
 body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px)}
 .page-wrap{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:0 1rem 2rem}
@@ -351,6 +359,11 @@ input[type="range"].dial::-moz-range-thumb{width:9px;height:9px;background:var(-
 input[type="range"].dial:disabled{opacity:.3;cursor:not-allowed}
 .spark{font-size:11px;letter-spacing:0;color:var(--amber);white-space:nowrap;font-family:var(--font)}
 .spark.empty{color:var(--muted)}
+.node-sparks{font-size:10px;white-space:nowrap;line-height:1.6}
+.theme-borg{--green:#00FF88;--cyan:#00CCFF;--void:#0A0A0A;--panel:#111;--border:#2A2A2A;--dimmer:#1A1A1A;--amber:#EAAB00}
+.theme-amber{--green:#fbbf24;--cyan:#f59e0b;--void:#0A0A0A;--panel:#111;--border:#2A2A2A;--dimmer:#1A1A1A;--amber:#fbbf24}
+.theme-steel{--green:#00ccff;--cyan:#38bdf8;--void:#0A0A1A;--panel:#0d0d1e;--border:#1e2d3d;--dimmer:#0a0a18;--amber:#60a5fa}
+.theme-select{background:var(--void);color:var(--green);border:1px solid var(--border);font:10px var(--font);padding:2px 4px;cursor:pointer;letter-spacing:1px}
 .topo-pre{font-family:var(--font);font-size:11px;line-height:1.7;padding:1rem 1.5rem;color:var(--grey);white-space:pre;overflow-x:auto}
 .topo-queen{color:var(--green);font-weight:700}
 .topo-on{color:var(--green)}
@@ -374,6 +387,29 @@ input[type="range"].dial:disabled{opacity:.3;cursor:not-allowed}
 .disk-progress.visible{display:block}
 .disk-progress.ok{color:var(--green);border-color:var(--green)}
 .disk-progress.err{color:var(--red);border-color:var(--red)}
+/* ── Collapsible sections ──────────────────────────── */
+.sh{cursor:pointer;user-select:none}
+.sh-ind{color:var(--muted);font-size:11px;margin-right:.4rem;font-weight:700;min-width:1.5ch;display:inline-block}
+.section.collapsed .sbody{max-height:0;overflow:hidden;padding:0;border:none}
+.section.collapsed .sh-ind::after{content:''}
+/* ── Tab Bar ───────────────────────────────────────── */
+.tab-bar{display:flex;gap:0;background:var(--dimmer);border:1px solid var(--border);position:sticky;top:0;z-index:100;margin-top:1rem;overflow-x:auto;scrollbar-width:none}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab-btn{font-family:var(--font);font-size:10px;font-weight:700;letter-spacing:2px;color:var(--grey);background:transparent;border:none;border-bottom:2px solid transparent;padding:.5rem 1rem;cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s}
+.tab-btn:hover{color:var(--cyan)}
+.tab-btn.active{color:var(--green);border-bottom-color:var(--green)}
+/* ── Two-Column Layout ─────────────────────────────── */
+@media(min-width:1401px){
+.page-wrap{max-width:1800px}
+.grid-wrap{display:grid;grid-template-columns:1fr 1fr;gap:0 1.5rem}
+.grid-col{min-width:0}
+}
+/* ── Fixed Status Bar ─────────────────────────────── */
+#hive-status-bar{position:fixed;bottom:0;left:0;right:0;z-index:10000;background:var(--void);border-top:2px solid var(--green);padding:4px 1.5rem;font-family:var(--font);font-size:11px;letter-spacing:1px;color:var(--grey);display:flex;align-items:center;gap:1.5rem;white-space:nowrap}
+#hive-status-bar .sb-live{color:var(--green)}
+#hive-status-bar .sb-dead{color:var(--red)}
+#hive-status-bar .sb-val{color:var(--green);font-weight:700}
+#hive-status-bar .sb-clock{margin-left:auto;color:var(--cyan);font-weight:700}
 </style>
 </head>
 <body>
@@ -393,9 +429,9 @@ input[type="range"].dial:disabled{opacity:.3;cursor:not-allowed}
 </div>
 </div>
 <div class="hdr-stats">
-<div class="stat-item"><span class="stat-label">UPTIME</span><span class="stat-value">${escHtml(uptime)}</span></div>
-<div class="stat-item"><span class="stat-label">NODES</span><span class="stat-value ${nodesOnline < nodesTotal ? 'warn' : ''}">${nodesOnline}/${nodesTotal}</span></div>
-<div class="stat-item"><span class="stat-label">APPROVALS</span><span class="stat-value ${pendingApprovals > 0 ? 'alert' : ''}">${pendingApprovals}</span></div>
+<div class="stat-item"><span class="stat-label">UPTIME</span><span class="stat-value" id="stat-uptime">${escHtml(uptime)}</span></div>
+<div class="stat-item"><span class="stat-label">NODES</span><span class="stat-value ${nodesOnline < nodesTotal ? 'warn' : ''}" id="stat-nodes-online">${nodesOnline}/${nodesTotal}</span></div>
+<div class="stat-item"><span class="stat-label">APPROVALS</span><span class="stat-value ${pendingApprovals > 0 ? 'alert' : ''}" id="stat-approvals">${pendingApprovals}</span></div>
 <div class="stat-item"><span class="stat-label">COST</span><span class="stat-value" id="cost-value" data-cost="0.00">$0.00</span></div>
 <div class="stat-item" id="sse-stat"><span class="sse-indicator" id="sse-dot"></span><span class="stat-label" id="sse-label">STREAM</span><span class="stat-value" id="sse-value" style="color:var(--muted)">CONN…</span></div>
 <div class="stat-item"><button class="snd-btn" id="snd-toggle" onclick="toggleSound()" title="Toggle chiptune sounds">♪ MUTE</button></div>
@@ -403,10 +439,21 @@ input[type="range"].dial:disabled{opacity:.3;cursor:not-allowed}
 </div>
 <span class="box-chrome">╚══════════════════════════════════════════════════════════════════════════════════════════╝</span>
 
+<div class="tab-bar" id="tab-bar">
+<button class="tab-btn active" data-tab="nodes">NODES</button>
+<button class="tab-btn" data-tab="workflows">WORKFLOWS</button>
+<button class="tab-btn" data-tab="approvals">APPROVALS</button>
+<button class="tab-btn" data-tab="queen-chat">CHAT</button>
+<button class="tab-btn" data-tab="security">SECURITY</button>
+<button class="tab-btn" data-tab="services">TOOLS</button>
+</div>
+
+<div class="grid-wrap">
+<div class="grid-col grid-left">
 ${section('QUEEN', 'HIVE COORDINATOR · THIS NODE', `<div class="queen-stats"><div class="qs-line"><span style="color:var(--green);font-size:14px">●</span><span style="color:var(--green);font-weight:700;letter-spacing:2px">ONLINE</span><span style="color:var(--grey);letter-spacing:1px">v${escHtml(version)}</span><span style="color:var(--cyan);letter-spacing:1px">UP: ${escHtml(uptime)}</span><span class="dim" style="font-size:11px;letter-spacing:.5px">SECRET: ${escHtml(hiveSecretPrefix || '(not set)')}${hiveSecretPrefix ? '...' : ''}</span></div><span class="qs-label">WORKFLOWS</span><span class="qs-val">${workflowsLoaded} loaded</span><span class="qs-label">RUNNING</span><span class="qs-val ${runningCount > 0 ? 'alert' : ''}">${runningCount} active</span><span class="qs-label">SCHEDULED</span><span class="qs-val">${(data.scheduledTasks || data.scheduled_tasks || []).length || '—'} tasks</span><span class="qs-label">APPROVALS</span><span class="qs-val ${pendingApprovals > 0 ? 'alert' : ''}">${pendingApprovals} pending</span></div>`)}
 
 ${section('NODES', 'REGISTERED WORKERS IN THE HIVE',
-  tableWithId(['NODE', 'ROLE', 'PROFILE', 'STATUS', 'ADDRESS', 'LAST HB', 'CAPABILITIES', 'KNOWLEDGE'],
+  tableWithId(['NODE', 'ROLE', 'PROFILE', 'STATUS', 'ADDRESS', 'LAST HB', 'CPU/TOK', 'CAPABILITIES', 'KNOWLEDGE'],
     nodeRows, '── NO NODES REGISTERED ── run bootstrap.sh on a machine to join the hive', 'nodes-tbody'))}
 
 ${section('TOPOLOGY', 'HIVE NETWORK MAP', `<div id="topology-panel">${renderTopology(nodes)}</div>`)}
@@ -421,7 +468,8 @@ ${section('TELEMETRY', 'NODE PERFORMANCE MATRIX',
 
 ${section('ACTIONS', 'COMMAND CONSOLE',
   `<div style="display:flex;gap:8px;flex-wrap:wrap;padding:.75rem"><button class="btn btn-approve" onclick="refreshHealth()">⟳ REFRESH HEALTH</button><button class="btn btn-view" onclick="refreshApprovals()">⟳ RELOAD APPROVALS</button><button class="btn btn-view" onclick="fetchModels()">◈ LIST MODELS</button><button class="btn btn-view" onclick="scanAvailableModels()">◈ SCAN MODELS</button><button class="btn btn-view" onclick="showSearch()">◇ QMD SEARCH</button>${wfList.map(wf => `<button class="btn btn-approve" onclick="runWorkflow('${escHtml(wf.name)}')" title="${escHtml(wf.description)}">▶ ${escHtml(wf.name.toUpperCase())}</button>`).join('')}</div>`)}
-
+</div>
+<div class="grid-col grid-right">
 ${section('WORKFLOWS', `${workflowsLoaded} LOADED · ${runningCount} RUNNING`,
   table(['WORKFLOW', 'STEPS', 'TRIGGER', 'DESCRIPTION', 'ACTION'], wfRows, '── NO WORKFLOWS LOADED ── add YAML files to config/workflows/')
   + runsHtml)}
@@ -431,8 +479,10 @@ ${section('APPROVALS', `LAW TWO ENFORCEMENT QUEUE · ${pendingApprovals} PENDING
 
 ${section('ACTIVITY', 'REAL-TIME EVENT STREAM · NEWEST FIRST',
   `<div class="act-feed" id="act-feed">${activityLines}</div>`)}
+</div>
+</div>
 
-${section('QUEEN CHAT', 'NATURAL LANGUAGE GOVERNANCE · TALK TO THE HIVE',
+${section('QUEEN CHAT <a href="/chat" onclick="event.preventDefault();window.open(\'/chat\',\'borgclaw-chat\',\'width=500,height=600\')" style="color:var(--muted);font-size:10px;cursor:pointer;text-decoration:none;letter-spacing:1px" title="Pop out chat window">[POP OUT]</a>', 'NATURAL LANGUAGE GOVERNANCE · TALK TO THE HIVE',
   `<div id="chat-log" style="height:200px;overflow-y:auto;padding:.5rem;font-size:11px;border-bottom:1px solid var(--border)"><div class="dim">── QUEEN READY ── type a command or question below</div></div><div style="display:flex;border-top:1px solid var(--border)"><span style="padding:6px 8px;color:var(--green);font-size:12px">▶</span><input id="chat-input" type="text" placeholder="Talk to the Queen..." style="flex:1;background:transparent;border:none;color:var(--green);font:12px var(--font);padding:6px 8px;outline:none" onkeydown="if(event.key==='Enter')sendChat()"><button onclick="sendChat()" style="background:var(--green);color:var(--void);border:none;padding:6px 12px;font:11px var(--font);cursor:pointer">SEND</button></div>`)}
 
 ${section('CONNECT', 'SNAP YOUR AI INTO THE HIVE',
@@ -450,6 +500,7 @@ ${section('MAKE DISK', 'ASSIMILATE NEW DRONES · WRITE THE CLAW TO USB',
 <span class="footer-item"><a class="footer-link" href="/api/nodes">/api/nodes</a></span>
 <span class="footer-item"><a class="footer-link" href="/api/health">/api/health</a></span>
 <span class="footer-item">v${escHtml(version)}</span>
+<span class="footer-item"><select class="theme-select" id="theme-sel" onchange="setTheme(this.value)"><option value="borg">BORG</option><option value="amber">AMBER</option><option value="steel">BLUE STEEL</option></select></span>
 <span class="footer-item" style="margin-left:auto;border-right:none">BORGCLAW//QUEEN · ${new Date().toISOString().slice(0, 10)}</span>
 </div></div>
 </div>
@@ -457,6 +508,10 @@ ${section('MAKE DISK', 'ASSIMILATE NEW DRONES · WRITE THE CLAW TO USB',
 <div id="modal-overlay"><div id="modal-box"><div id="modal-header"><span>╠══ APPROVAL DETAIL ══╣</span><button id="modal-close" onclick="closeModal()">✕ CLOSE</button></div><div id="modal-body"></div></div></div>
 
 <script>
+// ── Theme Selector ───────────────────────────────────────
+function setTheme(t){document.body.className=document.body.className.replace(/theme-\\S+/g,'').trim()+' theme-'+t;try{localStorage.setItem('bc-theme',t)}catch(e){};var s=document.getElementById('theme-sel');if(s)s.value=t}
+(function(){var t;try{t=localStorage.getItem('bc-theme')}catch(e){}if(t&&['borg','amber','steel'].indexOf(t)!==-1)setTheme(t);else setTheme('borg')})();
+window.setTheme=setTheme;
 // ════════════════════════════════════════════════════════
 // BorgClaw Queen Dashboard — Client JS (main IIFE)
 // Vanilla only. No frameworks. Every byte earned.
@@ -522,8 +577,14 @@ function handleSSEEvent(evt){
     case'approval_created':refreshApprovals();updatePendingBadge(1);showToast('▲ NEW APPROVAL REQUEST: '+(evt.summary||evt.approval_id||''),4000);break;
     case'approval_approved':resolveApprovalRow(evt.approval_id,'approved');updatePendingBadge(-1);break;
     case'approval_rejected':resolveApprovalRow(evt.approval_id,'rejected');updatePendingBadge(-1);break;
+    case'workflow_started':case'workflow_completed':updateWorkflowBadge(evt);break;
+    case'queen_started':var ue=document.getElementById('stat-uptime');if(ue)ue.textContent='0s';break;
   }
 }
+
+// ── Workflow badge ────────────────────────────────────────
+function updateWorkflowBadge(evt){var bs=document.querySelectorAll('.sb');bs.forEach(function(b){if(b.textContent.indexOf('RUNNING')!==-1){var m=b.textContent.match(/(\d+) LOADED/),loaded=m?m[1]:'?',rm=b.textContent.match(/(\d+) RUNNING/),cur=rm?parseInt(rm[1],10):0;if(evt.type==='workflow_started')b.textContent=loaded+' LOADED \xb7 '+(cur+1)+' RUNNING';if(evt.type==='workflow_completed')b.textContent=loaded+' LOADED \xb7 '+Math.max(0,cur-1)+' RUNNING'}})}
+function updateStatusBar(d){if(window._updateStatusBar)window._updateStatusBar(d)}
 
 // ── Activity Feed ───────────────────────────────────────
 var actFeed=document.getElementById('act-feed');
@@ -547,8 +608,9 @@ function refreshNodes(){
       if(!data||!data.nodes)return;
       rebuildNodesTable(data.nodes);rebuildTopology(data.nodes);
       var online=data.nodes.filter(function(n){return n.status==='online'}).length;
-      var el=document.querySelector('.stat-item:nth-child(2) .stat-value');
+      var el=document.getElementById('stat-nodes-online');
       if(el){el.textContent=online+'/'+data.nodes.length;el.className='stat-value'+(online<data.nodes.length?' warn':'')}
+      updateStatusBar({drones:online+'/'+data.nodes.length,approvals:pendingCount})
     }).catch(function(){});
   },300);
 }
@@ -561,11 +623,14 @@ function dotHtml(status){
 
 function rebuildNodesTable(nodeList){
   var tbody=document.getElementById('nodes-tbody');if(!tbody)return;
-  if(!nodeList||nodeList.length===0){tbody.innerHTML='<tr><td colspan="8" class="empty-row">── NO NODES REGISTERED ──</td></tr>';return}
+  if(!nodeList||nodeList.length===0){tbody.innerHTML='<tr><td colspan="9" class="empty-row">── NO NODES REGISTERED ──</td></tr>';return}
+  var bk='\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588';
+  function miniSpark(arr){if(!arr||arr.length<2)return'<span class="spark empty">\u2500\u2500\u2500\u2500</span>';var mn=Math.min.apply(null,arr),mx=Math.max.apply(null,arr),rng=mx-mn||1,s='';for(var i=0;i<arr.length;i++)s+=bk[Math.round(((arr[i]-mn)/rng)*7)];return'<span class="spark">'+s+'</span>'}
   tbody.innerHTML=nodeList.map(function(n){
     var caps=Array.isArray(n.capabilities)?n.capabilities.map(function(c){return'<span class="cap-tag">'+escHtml(c)+'</span>'}).join(' '):'—';
     var hb=n.last_heartbeat?(n.seconds_since_heartbeat!=null?n.seconds_since_heartbeat+'s ago':n.last_heartbeat):'never';
-    return'<tr class="data-row"><td>'+dotHtml(n.status)+' <span class="node-id">'+escHtml(n.node_id||'unknown')+'</span></td><td>'+escHtml(n.role||'—')+'</td><td class="dim">'+escHtml(n.profile||'—')+'</td><td>'+dotHtml(n.status)+' '+escHtml(n.status)+'</td><td class="dim">'+escHtml(n.ip||'—')+'</td><td class="dim">'+escHtml(hb)+'</td><td class="caps">'+caps+'</td><td class="dim">—</td></tr>';
+    var h=(n.metrics&&n.metrics._history)||[];var ch=h.slice(-20).map(function(x){return x.cpu_pct||0});var th=h.slice(-20).map(function(x){return x.tokens_per_sec||0});
+    return'<tr class="data-row" id="node-'+escHtml(n.node_id||'unknown')+'"><td>'+dotHtml(n.status)+' <span class="node-id">'+escHtml(n.node_id||'unknown')+'</span></td><td>'+escHtml(n.role||'—')+'</td><td class="dim">'+escHtml(n.profile||'—')+'</td><td class="node-status">'+dotHtml(n.status)+' '+escHtml(n.status)+'</td><td class="dim">'+escHtml(n.ip||'—')+'</td><td class="dim node-hb">'+escHtml(hb)+'</td><td class="node-sparks">'+miniSpark(ch)+'<br>'+miniSpark(th)+'</td><td class="caps">'+caps+'</td><td class="dim">\u2014</td></tr>';
   }).join('');
 }
 
@@ -597,8 +662,9 @@ var pendingCount=${pendingApprovals};
 function updatePendingBadge(delta){
   pendingCount=Math.max(0,pendingCount+delta);
   document.querySelectorAll('.sb').forEach(function(b){if(b.textContent.indexOf('PENDING')!==-1)b.textContent='LAW TWO ENFORCEMENT QUEUE · '+pendingCount+' PENDING'});
-  var stat=document.querySelector('.stat-item:nth-child(3) .stat-value');
+  var stat=document.getElementById('stat-approvals');
   if(stat){stat.textContent=pendingCount;stat.className='stat-value'+(pendingCount>0?' alert':'')}
+  updateStatusBar({approvals:pendingCount})
 }
 function resolveApprovalRow(id,resolution){
   var row=document.getElementById('appr-'+id);if(!row)return;
@@ -858,6 +924,69 @@ if(nasBadge&&nasDetail){
       else{nasBadge.style.color='var(--amber)';nasBadge.textContent='● NOT MOUNTED';nasDetail.textContent=(d.path||'')+(d.message?'  ('+d.message+')':'')}
     }).catch(function(){});
 }
+
+// ── GUI Phase 1: Collapsible Sections + Tab Bar ─────
+document.querySelectorAll('.sh[data-toggle]').forEach(function(hdr){
+  hdr.addEventListener('click',function(e){
+    if(e.target.closest('a,button,input'))return;
+    var sec=hdr.closest('.section');if(!sec)return;
+    var sid=hdr.getAttribute('data-toggle'),collapsed=sec.classList.toggle('collapsed');
+    var ind=hdr.querySelector('.sh-ind');if(ind)ind.textContent=collapsed?'[+]':'[-]';
+    try{localStorage.setItem('borgclaw_collapsed_'+sid,collapsed?'1':'0')}catch(x){}
+  });
+});
+document.querySelectorAll('.section[data-section]').forEach(function(sec){
+  var sid=sec.getAttribute('data-section');
+  try{if(localStorage.getItem('borgclaw_collapsed_'+sid)==='1'){sec.classList.add('collapsed');var ind=sec.querySelector('.sh-ind');if(ind)ind.textContent='[+]'}}catch(x){}
+});
+var tabBar=document.getElementById('tab-bar');
+if(tabBar){
+  tabBar.addEventListener('click',function(e){
+    var btn=e.target.closest('.tab-btn');if(!btn)return;
+    var target=btn.getAttribute('data-tab');
+    tabBar.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});btn.classList.add('active');
+    var sec=document.querySelector('[data-section="'+target+'"]');
+    if(sec){if(sec.classList.contains('collapsed')){sec.classList.remove('collapsed');var ind=sec.querySelector('.sh-ind');if(ind)ind.textContent='[-]';try{localStorage.setItem('borgclaw_collapsed_'+target,'0')}catch(x){}}sec.scrollIntoView({behavior:'smooth',block:'start'})}
+  });
+  var tabSids=['nodes','workflows','approvals','queen-chat','security','services'],sTimer=null;
+  window.addEventListener('scroll',function(){clearTimeout(sTimer);sTimer=setTimeout(function(){
+    var best=null,bd=Infinity;tabSids.forEach(function(sid){var el=document.querySelector('[data-section="'+sid+'"]');if(!el)return;var d=Math.abs(el.getBoundingClientRect().top-60);if(d<bd){bd=d;best=sid}});
+    if(best)tabBar.querySelectorAll('.tab-btn').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-tab')===best)});
+  },80)},{passive:true});
+}
+})();
+</script>
+
+<div id="hive-status-bar">
+<span>QUEEN v${escHtml(version)}</span>
+<span><span id="sb-drones" class="sb-val">${nodesOnline}/${nodesTotal}</span> DRONES</span>
+<span><span id="sb-approvals" class="sb-val">${pendingApprovals}</span> APPROVALS</span>
+<span>SSE: <span id="sb-sse" class="sb-dead">[DOWN]</span></span>
+<span class="sb-clock" id="sb-clock">--:--:--</span>
+</div>
+
+<script>
+// ── Status Bar — fixed bottom bar, updates via SSE bridge ──
+(function(){
+'use strict';
+var sse=document.getElementById('sb-sse'),clk=document.getElementById('sb-clock');
+var dr=document.getElementById('sb-drones'),ap=document.getElementById('sb-approvals');
+// Clock: tick every second
+setInterval(function(){var d=new Date();clk.textContent=d.toTimeString().slice(0,8)},1000);
+clk.textContent=new Date().toTimeString().slice(0,8);
+// SSE status: hook into main IIFE's setSseStatus via MutationObserver on #sse-value
+var sseVal=document.getElementById('sse-value');
+if(sseVal){new MutationObserver(function(){
+  var t=sseVal.textContent;
+  if(t==='LIVE'){sse.textContent='[LIVE]';sse.className='sb-live'}
+  else if(t==='DEAD'){sse.textContent='[DOWN]';sse.className='sb-dead'}
+  else{sse.textContent='[CONN]';sse.className=''}
+}).observe(sseVal,{childList:true,characterData:true,subtree:true})}
+// Bridge: main IIFE calls updateStatusBar({drones,approvals})
+window._updateStatusBar=function(d){
+  if(d.drones!=null&&dr)dr.textContent=d.drones;
+  if(d.approvals!=null&&ap)ap.textContent=d.approvals;
+};
 })();
 </script>
 </body>
