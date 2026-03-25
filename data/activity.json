@@ -1,0 +1,10 @@
+[
+  {
+    "id": "evt-1774402628572-3cqt",
+    "ts": "2026-03-25T01:37:08.572Z",
+    "type": "queen_started",
+    "version": "0.2.0",
+    "node_id": "queen",
+    "profile": "unknown"
+  }
+]

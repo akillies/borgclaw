@@ -406,7 +406,7 @@ button:hover{background:var(--green);color:var(--void)}
 <body>
 <div class="box">
   <pre class="logo">    ╭━━╮  ╭━━╮
-   ╭╯● ╰╮╭╯ ●╰╮   BORGCLAW
+   ╭╯<span style="color:#ff4444">●</span> ╰╮╭╯ <span style="color:#00ff88">●</span>╰╮   BORGCLAW
    ┃  ╭━╯╰━╮  ┃
    ╰━━╯    ╰━━╯
      ╰══════╯    </pre>
