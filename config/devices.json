@@ -1,18 +1,25 @@
 {
-  "_version": "2026-03-22",
+  "_version": "2026-03-23",
   "_maintained_by": "queen_autoresearch",
   "_note": "Queen reads this to recommend models for hardware. Autoresearch loop updates it.",
   "tiers": {
-    "nano":       { "ram_max_mb": 4096,   "models": ["gemma3:1b"],                           "role": "satellite",    "note": "Pi, thin client. Knowledge + relay only." },
-    "edge":       { "ram_max_mb": 8192,   "models": ["phi4-mini"],                            "role": "ghost",        "note": "Old laptop, Chromebook. Ghost worker + light inference." },
-    "worker":     { "ram_max_mb": 24576,  "models": ["qwen3:8b", "phi4-mini"],                "role": "worker",       "note": "Desktop, gaming PC. Main inference." },
-    "heavy":      { "ram_max_mb": 65536,  "models": ["gemma3:27b", "qwen3:8b", "phi4-mini"],  "role": "worker",       "note": "Workstation, Mac Studio. Deep synthesis." },
-    "beast":      { "ram_max_mb": 131072, "models": ["qwen3:32b", "gemma3:27b", "qwen3:8b"],  "role": "worker",       "note": "Multi-GPU server, 128GB+. Everything." }
+    "nano":       { "ram_max_mb": 4096,   "models": ["qwen2.5:1.5b", "gemma3:1b"],                                         "role": "satellite",    "note": "Pi, thin client. Qwen 2.5 1.5B is current best at this size." },
+    "edge":       { "ram_max_mb": 8192,   "models": ["qwen2.5:3b", "phi4-mini"],                                            "role": "ghost",        "note": "Old laptop, Chromebook. Qwen 2.5 3B beats phi4-mini on most benchmarks." },
+    "worker":     { "ram_max_mb": 24576,  "models": ["qwen2.5:7b", "qwen3:8b", "phi4-mini"],                                "role": "worker",       "note": "Desktop, gaming PC. Qwen 2.5 7B is top tier at this size." },
+    "heavy":      { "ram_max_mb": 65536,  "models": ["qwen2.5:32b", "gemma3:27b", "qwen3:8b", "phi4-mini"],                 "role": "worker",       "note": "Workstation, Mac Studio. Qwen 2.5 32B for deep reasoning." },
+    "beast":      { "ram_max_mb": 131072, "models": ["qwen2.5:72b", "qwen2.5:32b", "gemma3:27b", "qwen3:8b"],               "role": "worker",       "note": "Multi-GPU server, 128GB+. Qwen 2.5 72B is frontier-class local." }
   },
   "gpu_profiles": {
-    "nvidia_cuda":    { "models_add": ["nemotron-mini"], "note": "NVIDIA GPUs get Nemotron for function calling." },
-    "apple_metal":    { "models_add": [],                "note": "MLX backend. Unified memory = larger models fit." },
-    "rockchip_npu":   { "models_add": [],                "note": "Use rkllama for NPU inference. Ollama for CPU fallback." }
+    "nvidia_cuda":    { "models_add": ["nemotron-mini", "qwen2.5-coder:7b"], "note": "NVIDIA GPUs get Nemotron for function calling + Qwen coder. CUDA optimized." },
+    "apple_metal":    { "models_add": [],                                     "note": "MLX backend. Unified memory = larger models fit. Qwen 2.5 runs well on Metal." },
+    "rockchip_npu":   { "models_add": [],                                     "note": "Use rkllama for NPU inference. Qwen 2.5 1.5B confirmed on RK3588 NPU." }
+  },
+  "architecture_notes": {
+    "qwen2.5": "Current best general-purpose family. Tops benchmarks at every size (1.5B, 3B, 7B, 32B, 72B). Strong code, math, multilingual. March 2026.",
+    "nemotron": "NVIDIA-optimized. Best for function calling on CUDA hardware. 4B params.",
+    "gemma3": "Google. Strong instruction following. 27B is the sweet spot for deep synthesis.",
+    "phi4-mini": "Microsoft. 3.8B. Good reasoning per param but being surpassed by Qwen 2.5 3B.",
+    "qwen2.5-coder": "Code-specific variant. 7B and 14B. Top ranked for code gen March 2026."
   },
   "devices": {
     "jetson_orin":    { "tier": "worker",  "gpu": "nvidia_cuda", "tok_s": 21,  "watts": 25,  "price": 249, "note": "Purpose-built inference drone." },

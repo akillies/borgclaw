@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"runtime"
 	"time"
 )
 
@@ -26,6 +27,14 @@ type HeartbeatPayload struct {
 
 	Mode    string `json:"mode,omitempty"`
 	RPCPort int    `json:"rpc_port,omitempty"`
+
+	Security SecurityReport `json:"security,omitempty"`
+}
+
+type SecurityReport struct {
+	GoVersion     string `json:"go_version"`
+	OllamaVersion string `json:"ollama_version,omitempty"`
+	UnusualPorts  []int  `json:"unusual_ports,omitempty"`
 }
 
 type QueenMetrics struct {
@@ -155,6 +164,12 @@ func (hr *HeartbeatReporter) send(ctx context.Context) error {
 		status = "busy"
 	}
 
+	// Build security report
+	secReport := SecurityReport{GoVersion: runtime.Version()}
+	if ollamaUp {
+		secReport.OllamaVersion = hr.ollama.Version(ctx)
+	}
+
 	requests, _, avgTok := hr.ollama.Stats()
 	payload := HeartbeatPayload{
 		NodeID: hr.nodeID, Addr: hr.advertiseAddr, SentAt: time.Now(),
@@ -174,6 +189,7 @@ func (hr *HeartbeatReporter) send(ctx context.Context) error {
 			QueueDepth: hr.worker.QueueDepth(),
 		},
 		Mode: hr.mode, RPCPort: hr.rpcPort,
+		Security: secReport,
 	}
 
 	body, err := json.Marshal(payload)

@@ -76,6 +76,28 @@ func NewOllamaClient(baseURL string) *OllamaClient {
 	}
 }
 
+func (oc *OllamaClient) Version(ctx context.Context) string {
+	req, err := http.NewRequestWithContext(ctx, "GET", oc.baseURL+"/api/version", nil)
+	if err != nil {
+		return ""
+	}
+	resp, err := oc.httpClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return ""
+	}
+	var v struct {
+		Version string `json:"version"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		return ""
+	}
+	return v.Version
+}
+
 func (oc *OllamaClient) Healthy(ctx context.Context) bool {
 	req, err := http.NewRequestWithContext(ctx, "GET", oc.baseURL+"/api/tags", nil)
 	if err != nil {

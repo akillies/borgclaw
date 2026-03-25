@@ -12,11 +12,11 @@ import (
 )
 
 var TierModels = map[string][]string{
-	"nano":   {"gemma3:1b"},
-	"edge":   {"phi4-mini"},
-	"worker": {"phi4-mini", "qwen3:8b"},
-	"heavy":  {"phi4-mini", "qwen3:8b", "gemma3:27b"},
-	"beast":  {"phi4-mini", "qwen3:8b", "gemma3:27b", "qwen2.5-coder:14b"},
+	"nano":   {"qwen2.5:1.5b"},
+	"edge":   {"qwen2.5:3b", "phi4-mini"},
+	"worker": {"qwen2.5:7b", "phi4-mini"},
+	"heavy":  {"qwen2.5:32b", "qwen2.5:7b", "phi4-mini"},
+	"beast":  {"qwen2.5:72b", "qwen2.5:32b", "qwen2.5:7b", "qwen2.5-coder:14b"},
 }
 
 func modelBaseName(name string) string {

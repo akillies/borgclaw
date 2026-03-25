@@ -551,6 +551,55 @@ app.get('/api/health/deep', async (_req, res) => {
 });
 
 // ============================================================
+// ROUTES: Security Status
+// ============================================================
+
+app.get('/api/security/status', async (_req, res) => {
+  const findings = [];
+  let status = 'ok';
+
+  // Check npm lockfile exists
+  const npmLock = path.join(__dirname, 'package-lock.json');
+  if (existsSync(npmLock)) {
+    findings.push({ check: 'npm_lockfile', status: 'ok', detail: 'package-lock.json exists' });
+  } else {
+    findings.push({ check: 'npm_lockfile', status: 'warning', detail: 'package-lock.json missing — npm deps are not locked' });
+    status = 'warning';
+  }
+
+  // Check go.sum exists
+  const goSum = path.join(BORGCLAW_HOME, 'node', 'go.sum');
+  if (existsSync(goSum)) {
+    findings.push({ check: 'go_sum', status: 'ok', detail: 'go.sum exists — Go deps are verified' });
+  } else {
+    findings.push({ check: 'go_sum', status: 'warning', detail: 'go.sum missing — Go deps are not verified' });
+    status = 'warning';
+  }
+
+  // Check LiteLLM Docker image tag
+  const composePath = path.join(BORGCLAW_HOME, 'docker-compose.yml');
+  let litellmTag = 'unknown';
+  try {
+    const composeRaw = readFileSync(composePath, 'utf-8');
+    const tagMatch = composeRaw.match(/berriai\/litellm:([^\s]+)/);
+    if (tagMatch) litellmTag = tagMatch[1];
+  } catch { /* compose file not readable */ }
+
+  const isFloating = litellmTag === 'latest' || litellmTag.endsWith('-latest');
+  if (isFloating) {
+    findings.push({ check: 'litellm_image', status: 'critical', detail: `LiteLLM image tag is floating: ${litellmTag}` });
+    status = 'critical';
+  } else if (litellmTag === 'unknown') {
+    findings.push({ check: 'litellm_image', status: 'warning', detail: 'Could not determine LiteLLM image tag' });
+    if (status !== 'critical') status = 'warning';
+  } else {
+    findings.push({ check: 'litellm_image', status: 'ok', detail: `LiteLLM image pinned: ${litellmTag}` });
+  }
+
+  res.json({ status, findings, checked_at: new Date().toISOString() });
+});
+
+// ============================================================
 // ROUTES: Hive Control (Kill Switch)
 // ============================================================
 

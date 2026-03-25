@@ -65,7 +65,9 @@ services:
   # NadirClaw sits IN FRONT of this (on host), classifies simple/complex first.
   # ============================================================
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    # Pinned to avoid supply chain attacks. Update manually after verifying release.
+    # See: docs/SECURITY.md "Supply Chain Security" for context on the litellm PyPI incident.
+    image: ghcr.io/berriai/litellm:main-v1.63.14.dev1
     container_name: borgclaw-litellm
     ports:
       - "4000:4000"

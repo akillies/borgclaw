@@ -132,6 +132,68 @@ Approving it does not automatically whitelist the domain — it is a human-reada
 
 ---
 
+## Supply Chain Security
+
+BorgClaw depends on upstream packages (npm, Go modules, PyPI, Docker images). A compromised upstream dependency can inject malicious code into the hive. This section documents what we do about it.
+
+### LiteLLM image is pinned
+
+The LiteLLM Docker image in `docker-compose.yml` is pinned to a specific version tag (`main-v1.63.14.dev1`), not `main-latest`. This prevents a compromised or broken upstream push from automatically entering your hive on the next `docker compose pull`.
+
+**Why this matters:** In late 2024, a malicious package named `litellm` appeared on PyPI (distinct from the legitimate `litellm` project on GitHub). It contained credential-harvesting code. While BorgClaw runs LiteLLM via Docker (not pip), the incident demonstrates that the LiteLLM ecosystem is a target. Pinning the Docker image to a verified tag is a direct mitigation against supply chain compromise of the container image.
+
+**To update:** Check the [LiteLLM releases page](https://github.com/BerriAI/litellm/releases), verify the release notes, then manually update the tag in `docker-compose.yml`. Never use `main-latest` in production.
+
+### Autoresearch security scan
+
+The weekly autoresearch workflow (`config/workflows/autoresearch.yaml`) includes a `scan_security` step that runs in parallel with the model, tool, device, and fork scans. It checks:
+
+- **npm:** `services/queen/package.json` + `package-lock.json` against `npm audit`
+- **Go:** `node/go.mod` + `go.sum` against `go vuln check`
+- **Python:** `scripts/browser-worker/requirements.txt` against PyPI safety databases
+- **Docker:** `docker-compose.yml` image tags for floating/unpinned versions
+
+Security findings are fed into the evaluate step alongside upgrade candidates, so the weekly proposal includes both opportunities and vulnerabilities.
+
+### Checking dependency status
+
+Two ways to check the current security posture:
+
+1. **API:** `GET /api/security/status` on Queen (port 9090). Returns a JSON object:
+   ```json
+   {
+     "status": "ok",
+     "findings": [
+       { "check": "npm_lockfile", "status": "ok", "detail": "package-lock.json exists" },
+       { "check": "go_sum", "status": "ok", "detail": "go.sum exists — Go deps are verified" },
+       { "check": "litellm_image", "status": "ok", "detail": "LiteLLM image pinned: main-v1.63.14.dev1" }
+     ],
+     "checked_at": "2026-03-24T..."
+   }
+   ```
+
+2. **CLI:** `./borgclaw security` (planned — not yet implemented)
+
+Status values: `ok` (all checks pass), `warning` (non-critical issues), `critical` (immediate action needed).
+
+### Drone security reporting
+
+Each drone includes a `security` field in its heartbeat payload:
+
+```json
+{
+  "security": {
+    "go_version": "go1.25.0",
+    "ollama_version": "0.6.2",
+    "unusual_ports": []
+  }
+}
+```
+
+`go_version` comes from `runtime.Version()`. `ollama_version` is fetched from the Ollama API (`/api/version`). `unusual_ports` is a placeholder for future network monitoring — detecting unexpected listeners on the drone host.
+
+---
+
 ## What's Planned
 
 ### Agent Sandboxing — OS-level isolation (in progress)

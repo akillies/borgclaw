@@ -120,6 +120,30 @@ steps:
     timeout: 5m
     requires_approval: false
 
+  - id: scan_security
+    agent: sentinel
+    action: security_audit
+    description: "Check all dependencies for known vulnerabilities. Compare installed versions against CVE databases."
+    inputs:
+      check_targets:
+        - "npm: services/queen/package.json + package-lock.json"
+        - "go: node/go.mod + go.sum"
+        - "pip: scripts/browser-worker/requirements.txt"
+        - "docker: docker-compose.yml image tags"
+      sources:
+        - "GitHub Advisory Database"
+        - "npm audit"
+        - "go vuln check"
+        - "PyPI safety check"
+      alert_on:
+        - "Any CVE with severity HIGH or CRITICAL"
+        - "Any package with known supply chain compromise"
+        - "Any dependency with floating/unpinned version tag"
+    outputs:
+      - security_findings
+    timeout: 5m
+    requires_approval: false
+
   - id: scan_forks
     agent: cerebro-analyst
     action: research_forks
@@ -146,13 +170,14 @@ steps:
     agent: cerebro-analyst
     action: score_and_rank
     description: "Score every flagged item. Rank by composite score. Select top 3 upgrade recommendations."
-    depends_on: [scan_models, scan_tools, scan_devices, scan_forks]
+    depends_on: [scan_models, scan_tools, scan_devices, scan_forks, scan_security]
     inputs:
       candidates:
         models: "{{scan_models.model_candidates}}"
         tools: "{{scan_tools.tool_candidates}}"
         devices: "{{scan_devices.device_updates}}"
         forks: "{{scan_forks.fork_candidates}}"
+      security_findings: "{{scan_security.security_findings}}"
       scoring_rubric:
         quality:
           description: "How much better is this than what we have? (benchmark delta, capability gain)"
