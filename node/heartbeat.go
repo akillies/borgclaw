@@ -28,7 +28,8 @@ type HeartbeatPayload struct {
 	Mode    string `json:"mode,omitempty"`
 	RPCPort int    `json:"rpc_port,omitempty"`
 
-	Security SecurityReport `json:"security,omitempty"`
+	Security       SecurityReport `json:"security,omitempty"`
+	UpgradeRequest string         `json:"upgrade_request,omitempty"`
 }
 
 type SecurityReport struct {
@@ -78,6 +79,10 @@ type HeartbeatReporter struct {
 	mode    string
 	rpcPort int
 
+	upgradeRequest    string
+	lastUpgradeCheck  time.Time
+	upgradeCheckEvery time.Duration
+
 	httpClient *http.Client
 }
 
@@ -98,6 +103,34 @@ func (hr *HeartbeatReporter) SetRPCWorkerMode(port int) {
 }
 
 func (hr *HeartbeatReporter) SetLearning(ls *LearningStore) { hr.learning = ls }
+
+// checkUpgradeRequest runs every 2 weeks. Compares installed models against
+// what the tier recommends and suggests upgrades based on performance data.
+func (hr *HeartbeatReporter) checkUpgradeRequest(ctx context.Context, installed []string) string {
+	if hr.upgradeCheckEvery == 0 {
+		hr.upgradeCheckEvery = 14 * 24 * time.Hour // 2 weeks
+	}
+	if time.Since(hr.lastUpgradeCheck) < hr.upgradeCheckEvery {
+		return hr.upgradeRequest // return cached request
+	}
+	hr.lastUpgradeCheck = time.Now()
+
+	// Check what tier recommends vs what's installed
+	recommended := TierModels[hr.hardware.Tier]
+	have := make(map[string]bool)
+	for _, m := range installed {
+		have[modelBaseName(m)] = true
+	}
+	for _, want := range recommended {
+		if !have[modelBaseName(want)] {
+			hr.upgradeRequest = want
+			log.Printf("[heartbeat] requesting upgrade: %s (recommended for %s tier)", want, hr.hardware.Tier)
+			return hr.upgradeRequest
+		}
+	}
+	hr.upgradeRequest = ""
+	return ""
+}
 
 func (hr *HeartbeatReporter) TriggerNow(ctx context.Context) {
 	if err := hr.send(ctx); err != nil {
@@ -189,7 +222,8 @@ func (hr *HeartbeatReporter) send(ctx context.Context) error {
 			QueueDepth: hr.worker.QueueDepth(),
 		},
 		Mode: hr.mode, RPCPort: hr.rpcPort,
-		Security: secReport,
+		Security:       secReport,
+		UpgradeRequest: hr.checkUpgradeRequest(ctx, modelNames),
 	}
 
 	body, err := json.Marshal(payload)
