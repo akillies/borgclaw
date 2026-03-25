@@ -320,6 +320,47 @@ cmd_connect() {
   echo ""
 }
 
+cmd_secret() {
+  local IDENTITY="$BORGCLAW_HOME/data/hive-identity.json"
+  if [[ ! -f "$IDENTITY" ]]; then
+    err "No hive-identity.json found. Start Queen first: ./borgclaw start"
+    return 1
+  fi
+
+  if [[ "${1:-}" == "--reset" ]]; then
+    local NEW_SECRET
+    NEW_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+    python3 -c "
+import json
+with open('$IDENTITY', 'r+') as f:
+    data = json.load(f)
+    data['secret'] = '$NEW_SECRET'
+    f.seek(0); json.dump(data, f, indent=2); f.truncate()
+"
+    echo ""
+    echo -e "  ${GREEN}NEW HIVE SECRET GENERATED${NC}"
+    echo ""
+    echo "  $NEW_SECRET"
+    echo ""
+    warn "All drones need the new secret to reconnect."
+    warn "Re-prep USB drives or update drone configs."
+    return 0
+  fi
+
+  local SECRET
+  SECRET=$(python3 -c "import json; print(json.load(open('$IDENTITY'))['secret'])")
+  echo ""
+  echo -e "  ${CYAN}HIVE SECRET${NC}"
+  echo ""
+  echo "  $SECRET"
+  echo ""
+  echo "  Paste this into the dashboard login at http://localhost:${QUEEN_PORT}/dashboard"
+  echo "  Or pass to drones: ./drone --secret $SECRET"
+  echo ""
+  echo "  Reset:  ./borgclaw secret --reset"
+  echo ""
+}
+
 cmd_halt() {
   warn "⚠️  HIVE HALT — stopping all nodes and cancelling all work"
   local SECRET
@@ -456,6 +497,7 @@ case "${1:-help}" in
   halt)      cmd_halt ;;
   resume)    cmd_resume ;;
   deploy)    shift; cmd_deploy "$@" ;;
+  secret)    shift; cmd_secret "$@" ;;
   status)    cmd_status ;;
   dashboard) cmd_dashboard ;;
   nodes)     cmd_nodes ;;
