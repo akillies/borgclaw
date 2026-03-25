@@ -11,6 +11,8 @@
 // Extracted from server.js — no side effects on import.
 // ============================================================
 
+let _setAnnounceInterval = null; // injected by registerRoutes
+
 // --- Rate limiter (in-memory sliding window) ---
 
 const chatRateLimits = new Map(); // token -> { count, resetAt }
@@ -99,6 +101,7 @@ You can both RESPOND and ACT. Include action commands in your response:
 [ACTION:mcp_fetch url=URL]
 [ACTION:scan_models]
 [ACTION:make_disk target_path=PATH profile=PROFILE]
+[ACTION:set_announce_interval ms=MILLISECONDS]
 
 Chain multiple actions. Always explain what you are doing. Law One.
 
@@ -146,6 +149,14 @@ function executeActions(actions, { nodes, workflows, approvals, executeWorkflowA
         case 'reject':
           approvals.reject(params.id, 'Queen rejected via chat');
           break;
+        case 'set_announce_interval': {
+          const ms = parseInt(params.ms);
+          if (ms >= 60000 && _setAnnounceInterval) {
+            _setAnnounceInterval(ms);
+            activity.log({ type: 'announce_interval_changed', ms });
+          }
+          break;
+        }
       }
     } catch (err) {
       console.warn(`[QUEEN] Action ${cmd} failed: ${err.message}`);
@@ -167,7 +178,9 @@ export function registerRoutes(app, {
   persistNodes,
   parseCookies,
   queenNodeId,
+  setAnnounceInterval,
 }) {
+  _setAnnounceInterval = setAnnounceInterval;
   const rateLimiter = chatRateLimitMiddleware(parseCookies);
 
   // POST /api/chat — text chat with action execution
