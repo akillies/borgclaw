@@ -1878,7 +1878,36 @@ function checkScheduledTasks() {
 }
 
 loadScheduledTasks();
-setInterval(checkScheduledTasks, 60000);
+setInterval(checkScheduledTasks, 60000); // cron needs 60s resolution — don't change
+
+// Queen proactive announcements — surfaces notable events to the operator
+const ANNOUNCE_INTERVAL_MS = parseInt(process.env.QUEEN_ANNOUNCE_INTERVAL_MS || String(60 * 60 * 1000)); // default: 1 hour
+let lastAnnounceCheck = Date.now();
+
+setInterval(() => {
+  const recent = activity.get(50).filter(e => new Date(e.ts).getTime() > lastAnnounceCheck);
+  lastAnnounceCheck = Date.now();
+  if (recent.length === 0) return;
+
+  const notable = recent.filter(e =>
+    e.type === 'model_pull_complete' ||
+    e.type === 'node_registered' ||
+    e.type === 'node_offline' ||
+    e.type === 'security_block' ||
+    e.type === 'governance_block' ||
+    e.type === 'scheduled_trigger' ||
+    e.type === 'upgrade_request'
+  );
+  if (notable.length === 0) return;
+
+  const summaries = notable.map(e => `${e.type}: ${e.summary || e.message || e.node_id || e.model || ''}`);
+  activity.log({
+    type: 'queen_announcement',
+    summary: `${notable.length} notable event(s) in the last hour`,
+    events: summaries,
+  });
+  console.log(`[QUEEN] Announcement: ${summaries.join('; ')}`);
+}, ANNOUNCE_INTERVAL_MS);
 
 // ============================================================
 // BOOT
