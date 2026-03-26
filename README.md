@@ -293,6 +293,10 @@ borgclaw/
 │   ├── lib/setup.js             ← Hardware detection + profile mapping
 │   └── views/dashboard.js       ← Retro BBS dashboard (SSE, sparklines, topology)
 │
+├── mcp-server/                  ← MCP server for Claude Desktop integration
+│   ├── index.js                 ← Stdio MCP server — proxies to Queen API
+│   └── package.json
+│
 ├── scripts/
 │   ├── prepare-usb.sh           ← Package drones onto a USB drive
 │   ├── bootstrap.sh             ← Full node setup (macOS/Linux)
@@ -301,6 +305,7 @@ borgclaw/
 ├── agents/                      ← Agent definitions (JSON config + system prompts)
 ├── config/                      ← Workflows, models, scheduled tasks, LiteLLM
 ├── docs/
+│   ├── CLAUDE-DESKTOP.md        ← Connect Claude Desktop to the hive via MCP
 │   ├── SECURITY.md              ← Governance model + security plans
 │   ├── INTEGRATION.md           ← Wire BorgClaw to your personal AI OS
 │   ├── OPENCLAW.md              ← Use BorgClaw as the compute backend for OpenClaw/NanoClaw
@@ -365,6 +370,33 @@ BORGCLAW/              2.4GB total — fits on a 4GB drive
 ```
 
 `bash setup.sh` → detects platform → installs Ollama → loads cached model → starts drone → joins hive. Under 60 seconds. `bash setup.sh --uninstall` → removes everything cleanly.
+
+### Claude Desktop Integration
+
+Connect Claude Desktop to the hive via MCP. Claude gets 10 tools: chat with the Queen, dispatch tasks, trigger workflows, approve governance items, halt/resume the hive, read files, fetch URLs. Full control from a conversation.
+
+```bash
+cd borgclaw/mcp-server && npm install
+```
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "borgclaw": {
+      "command": "node",
+      "args": ["/path/to/borgclaw/mcp-server/index.js"],
+      "env": {
+        "QUEEN_URL": "http://localhost:9090",
+        "HIVE_SECRET": "your-hive-secret-here"
+      }
+    }
+  }
+}
+```
+
+See [docs/CLAUDE-DESKTOP.md](docs/CLAUDE-DESKTOP.md) for full setup, usage examples, and troubleshooting.
 
 ### Connect Any App
 
