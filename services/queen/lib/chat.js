@@ -102,11 +102,17 @@ You can both RESPOND and ACT. Include action commands in your response:
 [ACTION:scan_models]
 [ACTION:make_disk target_path=PATH profile=PROFILE]
 [ACTION:set_announce_interval ms=MILLISECONDS]
+[ACTION:dispatch_sop tasks=TASK1|||TASK2|||TASK3 persona=PERSONA model=MODEL]
 
-Chain multiple actions. Always explain what you are doing. Law One.
+dispatch_sop splits work across available drones in parallel. Separate tasks with |||.
+Example: "Research 5 competitors" becomes:
+[ACTION:dispatch_sop tasks=Research company A|||Research company B|||Research company C persona=researcher model=qwen2.5:7b]
 
-You can chain multiple actions. Always explain what you are doing.
-Always respond honestly. If something is broken, say so. Law One.`;
+You decide HOW to decompose the operator's request. Break complex SOPs into
+parallel subtasks. Assign the right persona (researcher/planner/worker).
+Pick the right model. The hive handles distribution — you handle strategy.
+
+Chain multiple actions. Always explain your plan. Law One.`;
 
 // --- Action parser + executor ---
 
@@ -155,6 +161,47 @@ function executeActions(actions, { nodes, workflows, approvals, executeWorkflowA
             _setAnnounceInterval(ms);
             activity.log({ type: 'announce_interval_changed', ms });
           }
+          break;
+        }
+        case 'dispatch_sop': {
+          const taskList = (params.tasks || '').split('|||').map(t => t.trim()).filter(Boolean);
+          const persona = params.persona || 'worker';
+          const model = params.model || 'auto';
+          if (taskList.length === 0) break;
+
+          // Find available drones
+          const onlineNodes = nodeList().filter(n => n.status === 'online' && n.node_id !== queenNodeId);
+          if (onlineNodes.length === 0) {
+            activity.log({ type: 'sop_dispatch_failed', reason: 'no drones online', tasks: taskList.length });
+            break;
+          }
+
+          // Distribute tasks round-robin across drones
+          const dispatched = [];
+          for (let i = 0; i < taskList.length; i++) {
+            const drone = onlineNodes[i % onlineNodes.length];
+            const taskId = `sop-${Date.now()}-${i}`;
+            const addr = drone.addr;
+            if (!addr) continue;
+
+            // Fire and forget — dispatch to drone's task endpoint
+            fetch(`http://${addr}/task`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${drone.hive_secret || ''}` },
+              body: JSON.stringify({ id: taskId, type: 'chat', model, persona, payload: { messages: [{ role: 'user', content: taskList[i] }] } }),
+              signal: AbortSignal.timeout(10000),
+            }).catch(() => {});
+
+            dispatched.push({ task_id: taskId, drone: drone.node_id, task: taskList[i] });
+          }
+
+          activity.log({
+            type: 'sop_dispatched',
+            total_tasks: taskList.length,
+            drones_used: [...new Set(dispatched.map(d => d.drone))].length,
+            persona,
+            model,
+          });
           break;
         }
       }
