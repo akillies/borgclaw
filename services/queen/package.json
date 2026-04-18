@@ -5,10 +5,10 @@
   "type": "module",
   "license": "MIT",
   "author": "Alexander Kline <alexanderkline13@gmail.com> (https://alexanderkline.com)",
-  "homepage": "https://github.com/alexanderkline/borgclaw",
+  "homepage": "https://github.com/akillies/borgclaw",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alexanderkline/borgclaw"
+    "url": "https://github.com/akillies/borgclaw"
   },
   "main": "server.js",
   "scripts": {
@@ -16,8 +16,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/server-fetch": "latest",
-    "@modelcontextprotocol/server-filesystem": "latest",
+    "mcp-fetch-server": "^1.1.2",
     "bonjour-service": "^1.2.1",
     "express": "^4.21.0",
     "js-yaml": "^4.1.0",

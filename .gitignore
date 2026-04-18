@@ -21,6 +21,7 @@ hive/*.json
 config/hive.json
 
 # Runtime state
+data/
 nodes.json
 *.pid
 

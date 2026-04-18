@@ -1264,10 +1264,10 @@ app.post('/api/search', async (req, res) => {
   if (!query) return res.status(400).json({ error: 'query required' });
 
   try {
-    const { execSync } = await import('child_process');
-    const args = [`search`, `"${query.replace(/"/g, '\\"')}"`, `-n`, `${limit || 5}`];
-    if (collection) args.push(`-c`, collection);
-    const result = execSync(`qmd ${args.join(' ')}`, { encoding: 'utf-8', timeout: 15000 });
+    const { execFileSync } = await import('child_process');
+    const args = ['search', query, '-n', String(limit || 5)];
+    if (collection) args.push('-c', collection);
+    const result = execFileSync('qmd', args, { encoding: 'utf-8', timeout: 15000 });
     res.json({ ok: true, results: result });
   } catch (err) {
     res.json({ ok: false, error: err.message });
