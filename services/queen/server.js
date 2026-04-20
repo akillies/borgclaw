@@ -338,17 +338,18 @@ app.use((req, res, next) => {
   // Static assets skip auth
   if (req.path.startsWith('/views/') || req.path.endsWith('.css') || req.path.endsWith('.js')) return next();
 
-  // Check bearer token
+  // Check bearer token — accept raw hive secret OR HMAC session token
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith('Bearer ')) {
-    // Check query param fallback (for dashboard SSE)
-    const token = req.query.token;
-    if (token === HIVE_SECRET) return next();
     return res.status(401).json({ error: 'Unauthorized — include Authorization: Bearer <hive-secret>' });
   }
 
   const token = auth.slice(7);
-  if (token !== HIVE_SECRET) {
+  const sessionToken = crypto
+    .createHmac('sha256', HIVE_SECRET)
+    .update('borgclaw-session')
+    .digest('hex');
+  if (token !== HIVE_SECRET && token !== sessionToken) {
     return res.status(403).json({ error: 'Invalid hive secret' });
   }
 
@@ -372,7 +373,9 @@ app.post('/auth/login', (req, res) => {
       .digest('hex');
     res.setHeader('Set-Cookie', [
       `${SESSION_COOKIE}=${encodeURIComponent(sessionToken)}; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MAXAGE}; Path=/`,
-      `bc_api_token=${encodeURIComponent(HIVE_SECRET)}; SameSite=Strict; Max-Age=${SESSION_MAXAGE}; Path=/`,
+      // bc_api_token carries the HMAC-derived session token (not the raw hive secret).
+      // Dashboard JS reads this for API auth — it's safe for JS to see the derived token.
+      `bc_api_token=${encodeURIComponent(sessionToken)}; SameSite=Strict; Max-Age=${SESSION_MAXAGE}; Path=/`,
     ]);
     return res.redirect(redirectTo);
   }
@@ -432,6 +435,7 @@ function escHtmlAttr(str) {
 // Standalone chat page — no refresh, resizable, draggable in browser
 app.get('/chat', (req, res) => {
   if (!hasValidSession(req)) return res.redirect('/auth/login?next=/chat');
+  // bc_api_token now carries the HMAC session token (not the raw hive secret)
   const secret = parseCookies(req.headers.cookie).bc_api_token || '';
   res.type('html').send(`<!DOCTYPE html><html><head><title>Queen Chat</title>
 <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0a0a0a;color:#00ff88;font:13px monospace;height:100vh;display:flex;flex-direction:column}
@@ -1289,6 +1293,12 @@ app.get('/api/activity', (req, res) => {
 // ============================================================
 
 app.get('/api/events', (req, res) => {
+  // SSE auth: require valid session cookie (same check as /dashboard).
+  // EventSource always sends same-origin cookies automatically — no query token needed.
+  if (!hasValidSession(req)) {
+    res.status(401).end('Unauthorized');
+    return;
+  }
   activity.addSSEListener(res);
 });
 

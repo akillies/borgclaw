@@ -41,6 +41,36 @@ All LLM requests route through LiteLLM — agents never call Ollama or cloud API
 
 ---
 
+## Drone Endpoint Authentication
+
+Each drone (PicoClaw node) runs an HTTP server, by default on port 9091. Most endpoints require the hive secret in the `Authorization: Bearer` header. Two endpoints are **intentionally public** (unauthenticated):
+
+### `POST /chat`
+
+The BBS terminal interface. This is how a human sitting at a drone machine talks to the hive — a simple terminal in the browser, no credentials required. The design intent is approachability: the drone should feel like a friendly terminal on your desk, not a locked-down appliance. Requiring a secret to reach it would create friction for the most human-facing surface of the system.
+
+**Threat model:** `/chat` is a LAN-only endpoint. It's not exposed to the internet (see "The Operator's Responsibilities" below). If you're on the LAN, you're on a trusted network by the BorgClaw threat model.
+
+**If you want it authenticated:** Set `HIVE_SECRET` in the drone's environment or `drone.json`. When a hive secret is configured on the drone, the auth middleware still exempts `/chat` by design — but you can fork `node/server.go` and remove `/chat` from the exemption list if your threat model requires it.
+
+### `GET /metrics/prom`
+
+The Prometheus scrape endpoint. Prometheus needs to poll this on a schedule (default: every 15s) without a session — it runs as a background service with no interactive login flow. Prometheus supports bearer token auth, but that requires additional configuration overhead. For a personal hive on a trusted LAN, public metrics exposure is an acceptable tradeoff.
+
+**What's exposed:** CPU load, memory, task counts, model inference timing, contribution dial. No secrets, no personal content, no API keys.
+
+**If you want it authenticated:** Configure Prometheus with `bearer_token` in `prometheus.yml` and add the `/metrics/prom` check to the drone auth middleware. See the [Prometheus bearer token docs](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#scrape_config).
+
+### Summary
+
+| Endpoint | Auth | Reason |
+|----------|------|--------|
+| `POST /chat` | None | BBS terminal — approachable, LAN-only |
+| `GET /metrics/prom` | None | Prometheus scraping — background service, no secrets exposed |
+| All others | `Authorization: Bearer <hive-secret>` | Standard API auth |
+
+---
+
 ## SANDBOX
 
 Agent sandboxing is the application-level enforcement layer that constrains what files agents can read/write and which network destinations they can reach. It runs before any MCP server process is spawned, so violations are blocked without touching the OS.

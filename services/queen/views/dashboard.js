@@ -560,7 +560,9 @@ function connectSSE(){
   if(sseSource){try{sseSource.close()}catch(e){}}
   setSseStatus('connecting');
   try{
-    sseSource=new EventSource('/api/events?token='+encodeURIComponent(HIVE_SECRET));
+    // Session cookie (bc_session) is sent automatically on same-origin requests.
+    // No token query parameter needed — and doing so would expose it to logs.
+    sseSource=new EventSource('/api/events');
     sseSource.onopen=function(){setSseStatus('live');sseRetryDelay=2000;showToast('▲ SSE STREAM CONNECTED',2000)};
     sseSource.onmessage=function(e){var evt;try{evt=JSON.parse(e.data)}catch(err){return}handleSSEEvent(evt)};
     sseSource.onerror=function(){setSseStatus('error');sseSource.close();sseSource=null;showToast('▼ SSE LOST — RETRYING IN '+Math.round(sseRetryDelay/1000)+'s',sseRetryDelay);setTimeout(connectSSE,sseRetryDelay);sseRetryDelay=Math.min(sseRetryDelay*2,sseMaxRetry)};
